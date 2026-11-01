@@ -1,0 +1,22 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors / IDEs
+.idea/
+.vscode/
+*.swp
+*~
+
+# Environment variables (keep the example file tracked)
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+
+# Claude Code local settings
+.claude/settings.local.json

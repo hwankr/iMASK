@@ -17,6 +17,11 @@ export interface BannerAction {
   label: string;
   onClick: () => void;
   disabled?: boolean;
+  /**
+   * 버튼의 `data-slot` 값(선택). 띠가 다시 그려져 버튼이 새로 생겨도 같은 자리를 찾을 수 있게 한다
+   * (예: 상세 화면 '실패 문서 다시 분석' 뒤 포커스 되돌리기). 주지 않으면 속성을 붙이지 않는다.
+   */
+  dataSlot?: string;
 }
 
 export interface BannerProps {
@@ -70,7 +75,7 @@ export function Banner({ variant, title, description, icon, actions, actionSlot,
         <div className={styles.actions}>
           {actionSlot ??
             actions?.map((a) => (
-              <button key={a.label} type="button" className={styles.action} onClick={a.onClick} disabled={a.disabled}>
+              <button key={a.label} type="button" className={styles.action} onClick={a.onClick} disabled={a.disabled} data-slot={a.dataSlot}>
                 {a.label}
               </button>
             ))}

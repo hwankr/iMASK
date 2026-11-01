@@ -1,0 +1,206 @@
+/* ==========================================================================
+   상세 검토 모달 본문 — Main 713–747 (창 · 머리 · 바닥 버튼은 공통 Modal)
+   ========================================================================== */
+
+/* 대상 카드(713) — flex column; gap:6px; padding:14px 16px; border-radius:16px; background:var(--band) */
+.target {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-14) var(--space-16);
+  border-radius: var(--radius-16);
+  background: var(--band);
+}
+.targetRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-6) var(--space-8);
+}
+.targetTitle {
+  font-size: var(--fs-15);
+  font-weight: var(--fw-heavy);
+}
+.targetId {
+  font-family: var(--mono);
+  font-size: var(--fs-12);
+  color: var(--ink-3);
+}
+.targetValue {
+  font-family: var(--mono);
+  font-size: var(--fs-15);
+  font-weight: var(--fw-semibold);
+}
+.targetMeta {
+  font-size: var(--fs-13);
+  line-height: var(--lh-150);
+  color: var(--ink-3);
+}
+
+/* 분류 수정(717–724) — 데스크톱 · 태블릿 3칸, 휴대폰 1칸, gap:12px */
+.editGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-12);
+}
+.editField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+}
+.editLabel {
+  font-size: var(--fs-13-5);
+  font-weight: var(--fw-heavy);
+}
+.aiText {
+  font-size: var(--fs-13-5);
+  line-height: var(--lh-155);
+  color: var(--ink-2);
+}
+.aiStrong {
+  font-weight: var(--fw-heavy);
+  color: var(--ink);
+}
+
+/* 검토 완료 — 남은 항목(726) */
+.pendingBox {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+  padding: var(--space-16);
+  border-radius: var(--radius-16);
+  background: var(--warn-bg);
+}
+.pendingTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-7);
+  font-size: var(--fs-15);
+  font-weight: var(--fw-heavy);
+  color: var(--warn);
+}
+.pendingLines {
+  margin: 0;
+  padding-left: var(--space-20);
+  font-size: var(--fs-14);
+  line-height: var(--lh-160);
+  color: var(--ink);
+}
+.pendingItems {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.pendingItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-10);
+  width: 100%;
+  min-height: var(--size-44);
+  padding: var(--space-8) var(--space-12);
+  border: 0;
+  border-radius: var(--radius-12);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    box-shadow var(--dur-color) var(--ease),
+    transform var(--dur-press) var(--ease);
+}
+@media (hover: hover) {
+  .pendingItem:hover {
+    box-shadow: 0 0 0 1px var(--warn-line), var(--shadow-lift-2);
+  }
+}
+.pendingItem:active {
+  transform: scale(.98);
+}
+.pendingId {
+  font-family: var(--mono);
+  font-size: var(--fs-12);
+  color: var(--ink-3);
+}
+.pendingLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--fs-13-5);
+  font-weight: var(--fw-semibold);
+}
+.pendingGo {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  font-size: var(--fs-13);
+  font-weight: var(--fw-heavy);
+  color: var(--warn);
+  white-space: nowrap;
+}
+.pendingNote {
+  margin: 0;
+  font-size: var(--fs-13-5);
+  line-height: var(--lh-160);
+  color: var(--ink-2);
+}
+
+/* 검토 완료 — 남은 항목 없음(727) */
+.allDone {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-14) var(--space-16);
+  border-radius: var(--radius-16);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-size: var(--fs-14-5);
+  font-weight: var(--fw-heavy);
+}
+
+/* 위험등급 유지 안내(728) */
+.keepRisk {
+  display: flex;
+  gap: var(--space-8);
+  align-items: flex-start;
+  font-size: var(--fs-13-5);
+  line-height: var(--lh-160);
+  color: var(--ink-2);
+}
+.keepIcon {
+  display: inline-flex;
+  flex: none;
+  margin-top: 2px;
+  color: var(--ink-3);
+}
+
+/* 메모 · 사유(745) — 공통 TextField md */
+.note {
+  gap: var(--space-6);
+}
+
+/* 안내(746) — 13px · 1.6 · ink-3 */
+.info {
+  margin: 0;
+  font-size: var(--fs-13);
+  line-height: var(--lh-160);
+  color: var(--ink-3);
+}
+
+/* 오류(747) — role="alert", 붉은 글자, 살짝 튀어나옴 */
+.error {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  font-size: var(--fs-13-5);
+  font-weight: var(--fw-bold);
+  color: var(--err);
+  --dg-anim: dg-pop; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-260) var(--ease) both;
+}
+
+@media (max-width: 767.98px) {
+  .editGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -68,7 +68,7 @@ export function FailedBody({ fail, locked, memo, memoPreview, memoBtn, actions }
           </ol>
         </div>
         <div className={styles.btns}>
-          <button type="button" className={cx(styles.btn, styles.primary)} disabled={fail.retrying} onClick={() => actions.retry()}>
+          <button type="button" className={cx(styles.btn, styles.primary)} disabled={fail.retrying} onClick={() => actions.retry()} data-slot="retry-all">
             <Icon name="dg-i-refresh" size={17} strokeWidth={2.2} />
             {fail.retryLabel}
           </button>

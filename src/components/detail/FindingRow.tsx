@@ -88,12 +88,12 @@ export function FindingRow({ f, locked, onToggle, onReveal, actions }: FindingRo
           </dl>
           <div className={styles.actions}>
             {f.canConfirm ? (
-              <Button size="item" variant="primary" icon="dg-i-check" disabled={locked} onClick={() => actions.confirmFinding(f.id)}>
+              <Button size="item" variant="primary" icon="dg-i-check" disabled={locked} onClick={() => actions.confirmFinding(f.id)} data-slot="confirm">
                 탐지 내용 확인
               </Button>
             ) : null}
             {f.canUnconfirm ? (
-              <Button size="item" variant="outline" disabled={locked} onClick={() => actions.unconfirmFinding(f.id)}>
+              <Button size="item" variant="outline" disabled={locked} onClick={() => actions.unconfirmFinding(f.id)} data-slot="confirm">
                 확인 취소
               </Button>
             ) : null}
@@ -101,12 +101,12 @@ export function FindingRow({ f, locked, onToggle, onReveal, actions }: FindingRo
               원문 확인
             </Button>
             {f.canFp ? (
-              <Button size="item" variant="outline" icon="dg-i-ban" disabled={locked} onClick={() => actions.markFalsePositive(f.id)}>
+              <Button size="item" variant="outline" icon="dg-i-ban" disabled={locked} onClick={() => actions.markFalsePositive(f.id)} data-slot="fp">
                 오탐으로 표시
               </Button>
             ) : null}
             {f.canRestore ? (
-              <Button size="item" variant="outline" icon="dg-i-refresh" disabled={locked} onClick={() => actions.restoreFinding(f.id)}>
+              <Button size="item" variant="outline" icon="dg-i-refresh" disabled={locked} onClick={() => actions.restoreFinding(f.id)} data-slot="fp">
                 오탐 취소
               </Button>
             ) : null}

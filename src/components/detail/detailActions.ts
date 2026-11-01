@@ -1,16 +1,23 @@
 'use client';
 
 /* ==========================================================================
-   상세 검토 동작 — T7 이 붙이는 자리.
-   T6 은 버튼을 디자인대로 그 자리에 그리고, 누르면 아래 처리기를 부른다.
-   - 모달을 여는 동작은 모달 자리(DetailUiState.modal)에 프로토타입 openModal 과 같은 값을 넣는다.
-     모달을 그리고 제출하는 것(서비스 변경 메서드 호출 · 토스트)은 T7 이 한다.
-   - 데이터를 바로 바꾸는 동작(확인 · 확인 취소 · 다시 열기 · 다시 분석)은 지금은 아무 일도 하지 않는다(TODO(T7)).
-   T6 은 서비스의 변경 메서드를 부르지 않는다(조회와 구독만).
+   상세 검토 동작 — 원본 Main.dc.html 상세 동작(1801–1807: retry · confirmFinding · unconfirmFinding · reopenItem)과
+   화면 모델의 행동 부분(findingVM fp · restore · edit · memoAct, itemVM resolve · reopen · retry, linkVM yes · no,
+   detailVM complete · reopen · editMemo · retryAll).
+   - 모달을 여는 동작은 모달 자리(DetailUiState.modal)에 원본 openModal 과 같은 값을 넣는다.
+     모달을 그리고 저장하는 것은 ReviewModal(src/components/modals) 이 한다.
+   - 바로 바꾸는 동작(확인 · 확인 취소 · 검토사항 다시 열기 · 다시 분석)은 서비스를 부르고 토스트를 띄운다.
+   - 화면은 서비스 변경 알림으로 새 데이터를 받아 다시 그려진다(헤더 · 목록 숫자도 같은 서비스에서 온다).
+   - 위험등급 · 최초 탐지 결과는 화면에서 바꾸거나 계산하지 않는다(서비스가 지킨다).
    ========================================================================== */
 
 import { FP_REASONS } from '@/display/rules';
+import { useToast } from '@/components/ui';
+import { SAVE_FAILED, confirmedText, itemReopenedText, retryFailedText, unconfirmedText } from '@/components/modals/reviewModalModel';
+import type { AnalysisService } from '@/services/analysis-service';
+import { useService } from '@/services/react';
 import type { Analysis, LinkDecision } from '@/services/types';
+import { rememberFocus, rescueFocus } from './focusRescue';
 import type { DetailUi } from './useDetailUi';
 
 export interface DetailActions {
@@ -38,20 +45,35 @@ export interface DetailActions {
   completeReview: () => void;
   /** 머리글 '검토 다시 열기' — 모달 reopen */
   reopenReview: () => void;
-  /** '다시 분석' · '실패 문서 다시 분석' · '이 문서 다시 분석' · '다시 시도' — 원본 retry(aid, docId): service.retry + 실패 토스트 */
+  /**
+   * '다시 분석' · '실패 문서 다시 분석' · '이 문서 다시 분석' · '다시 시도' — 원본 retry(aid, docId).
+   * 서비스가 곧바로 '다시 분석하는 중'(retrying)으로 바꾸고, 끝나면 실패 이유를 돌려준다 → 오류 토스트.
+   */
   retry: (docId?: string) => void;
 }
 
-/** 상세 검토 동작 처리기 — T7 이 서비스 호출 · 모달 · 토스트를 붙인다 */
+/** 상세 검토 동작 처리기 */
 export function useDetailActions(a: Analysis, ui: DetailUi): DetailActions {
+  const service = useService();
+  const toast = useToast();
   const findFinding = (fid: string) => a.findings.find((f) => f.id === fid);
+
+  /** 바로 바꾸는 동작 — 서비스 호출 뒤 토스트. 누른 버튼이 바뀌어 없어지면 같은 자리의 새 버튼으로 포커스 */
+  const direct = (call: (svc: AnalysisService) => Promise<unknown>, text: string) => {
+    if (!service) return;
+    const spot = rememberFocus();
+    void call(service).then(
+      () => {
+        toast(text);
+        rescueFocus(spot);
+      },
+      () => toast(SAVE_FAILED, { kind: 'error' }),
+    );
+  };
+
   return {
-    confirmFinding: () => {
-      // TODO(T7): service.setStatus(a.id, fid, 'confirmed') → 토스트
-    },
-    unconfirmFinding: () => {
-      // TODO(T7): service.setStatus(a.id, fid, 'open') → 토스트
-    },
+    confirmFinding: (fid) => direct((svc) => svc.setStatus(a.id, fid, 'confirmed'), confirmedText(fid)),
+    unconfirmFinding: (fid) => direct((svc) => svc.setStatus(a.id, fid, 'open'), unconfirmedText(fid)),
     markFalsePositive: (fid) => ui.openModal({ type: 'fp', fid, reason: FP_REASONS[0], note: '', error: '' }),
     restoreFinding: (fid) => ui.openModal({ type: 'restore', fid, note: '', error: '' }),
     reclassify: (fid) => {
@@ -60,15 +82,20 @@ export function useDetailActions(a: Analysis, ui: DetailUi): DetailActions {
     },
     editFindingMemo: (fid) => ui.openModal({ type: 'fmemo', fid, note: findFinding(fid)?.memo || '', error: '' }),
     resolveItem: (rid) => ui.openModal({ type: 'resolve', rid, note: '', error: '' }),
-    reopenItem: () => {
-      // TODO(T7): service.reopenItem(a.id, rid) → 토스트 '검토사항을 다시 열었습니다 · R-xx'
-    },
+    reopenItem: (rid) => direct((svc) => svc.reopenItem(a.id, rid), itemReopenedText(rid)),
     decideLink: (lid, decision) => ui.openModal({ type: 'link', lid, decision, note: '', error: '' }),
     editMemo: () => ui.openModal({ type: 'memo', note: a.memo || '', error: '' }),
     completeReview: () => ui.openModal({ type: 'complete', note: '', error: '' }),
     reopenReview: () => ui.openModal({ type: 'reopen', note: '', error: '' }),
-    retry: () => {
-      // TODO(T7): service.retry(a.id, docId) → 실패 메시지면 토스트 '다시 분석했지만 실패했습니다 · …'(error)
+    retry: (docId) => {
+      if (!service) return;
+      /* 원본: svc.retry(aid, docId).then(r => r.message 이면 오류 토스트) — 화면을 떠나도 토스트는 뜬다.
+         다시 분석하는 동안 누른 버튼은 막히므로(포커스가 빠질 수 있음) 끝나면 그 버튼으로 포커스를 돌려준다. */
+      const spot = rememberFocus();
+      void service.retry(a.id, docId).then((r) => {
+        if (r && r.message) toast(retryFailedText(r.message), { kind: 'error' });
+        rescueFocus(spot);
+      });
     },
   };
 }

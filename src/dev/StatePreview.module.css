@@ -33,3 +33,15 @@
   line-height: var(--lh-165);
   color: var(--ink-2);
 }
+
+/* 상세 상태 — 상세 화면은 화면 높이에 맞춰 안에서 스크롤한다(원문 · 결과 패널 · 떠 있는 도구 줄).
+   개발용 상태 막대 아래 남은 높이만 쓰도록 틀을 화면 높이에 고정한다(막대 때문에 아래가 잘리지 않게). */
+.fill {
+  height: 100%;
+}
+.fillBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}

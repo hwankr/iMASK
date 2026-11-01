@@ -49,7 +49,7 @@ function Placeholder({ ph, docId, onRetryDoc }: { ph: PlaceholderModel; docId: s
         </Link>
       ) : null}
       {action && action.key === 'retryDoc' ? (
-        <button type="button" className={cx(styles.bigBtn, styles.phBtn)} disabled={action.disabled} onClick={() => onRetryDoc(docId)}>
+        <button type="button" className={cx(styles.bigBtn, styles.phBtn)} disabled={action.disabled} onClick={() => onRetryDoc(docId)} data-slot="retry-doc">
           <Icon name={action.icon} size={17} strokeWidth={2.2} />
           {action.label}
         </button>

@@ -92,16 +92,17 @@ export function ResultsPanel({
 }: ResultsPanelProps) {
   const tabPanel = rs.hasTabs ? tabPanelProps(RESULT_TABS_ID, rs.tab) : null;
   return (
-    <section aria-label="탐지 결과와 검토 항목" className={cx(styles.panel, mobile && styles.mobile)} {...panel}>
+    /* data-focus-region · data-focus-home: 동작 뒤 행이 목록에서 빠지면 포커스를 이어 줄 구역과 기준 자리(focusRescue) */
+    <section aria-label="탐지 결과와 검토 항목" className={cx(styles.panel, mobile && styles.mobile)} data-focus-region="results" {...panel}>
       {rs.hasTabs ? (
-        <div className={styles.tabs}>
+        <div className={styles.tabs} data-focus-home="2">
           <SegmentedTabs tabs={rs.tabs} value={rs.tab} onChange={onTab} ariaLabel="결과 구분" idPrefix={RESULT_TABS_ID} />
         </div>
       ) : null}
       <div ref={scrollRef} className={styles.scroll} {...(tabPanel ?? {})}>
         {rs.hasTabs && rs.tab === 'findings' ? (
           <div key="findings" className={styles.fade}>
-            <div data-sticky="1" className={styles.sticky}>
+            <div data-sticky="1" data-focus-home="1" className={styles.sticky}>
               <FilterChips chips={rs.chips} value={fFilter} onChange={onFilter} ariaLabel="탐지 항목 필터" />
               <div className={styles.stickyRow}>
                 <Switch checked={onlyDoc} onChange={(on) => onOnlyDoc(on)} label="현재 문서만 보기" />

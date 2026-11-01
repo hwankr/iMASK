@@ -33,6 +33,7 @@ import {
   SCROLL_TOP,
   type DetailAction,
   type DetailModal,
+  type DetailModalPatch,
   type DetailPlan,
   type DetailTab,
   type DetailUiState,
@@ -109,7 +110,7 @@ export interface DetailUi {
   goPending: () => void;
   /* 모달 자리(T7) */
   openModal: (modal: DetailModal) => void;
-  patchModal: (patch: Partial<Omit<DetailModal, 'type'>>) => void;
+  patchModal: (patch: DetailModalPatch) => void;
   closeModal: () => void;
 }
 

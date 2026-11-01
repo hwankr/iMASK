@@ -58,6 +58,10 @@ export type DetailModal =
 
 export type DetailModalType = DetailModal['type'];
 
+/** 열린 모달의 입력값 바꾸기 — 종류(type)별로 그 모달에 있는 값만(예: fp 의 reason, edit 의 cat) */
+type PatchOf<M> = M extends { type: string } ? Partial<Omit<M, 'type'>> : never;
+export type DetailModalPatch = PatchOf<DetailModal>;
+
 /** 상세 화면 상태 — 원본 baseState · detailState 의 상세 화면 부분 */
 export interface DetailUiState {
   /** 결과 패널 탭 */
@@ -111,7 +115,7 @@ export type DetailAction =
   /** 모달을 연다(T7). 열린 모달이 있으면 바꾼다. */
   | { type: 'openModal'; modal: DetailModal }
   /** 열린 모달의 입력값을 바꾼다(T7). 종류는 바꾸지 않는다. */
-  | { type: 'patchModal'; patch: Partial<Omit<DetailModal, 'type'>> }
+  | { type: 'patchModal'; patch: DetailModalPatch }
   /** 모달을 닫는다(T7). */
   | { type: 'closeModal' };
 

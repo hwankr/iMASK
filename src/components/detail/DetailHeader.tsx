@@ -63,12 +63,13 @@ export function DetailHeader({ model: m, analysisId, mobile, actions }: DetailHe
               title={m.completeTitle}
               onClick={actions.completeReview}
               className={cx(styles.btn, styles.state, styles.complete)}
+              data-slot="review-state"
             >
               검토 완료
             </Button>
           ) : null}
           {m.showReopen ? (
-            <Button variant="secondary" icon="dg-i-history" iconStrokeWidth={2} onClick={actions.reopenReview} className={cx(styles.btn, styles.state)}>
+            <Button variant="secondary" icon="dg-i-history" iconStrokeWidth={2} onClick={actions.reopenReview} className={cx(styles.btn, styles.state)} data-slot="review-state">
               {mobile ? '다시 열기' : '검토 다시 열기'}
             </Button>
           ) : null}

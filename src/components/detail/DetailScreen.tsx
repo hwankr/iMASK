@@ -4,7 +4,7 @@
    상세 검토 화면(/analyses/[id]) — 원본 Main.dc.html 328–602 · detailVM.
    - 데이터는 useAnalysis(id) 로만 받는다. 불러오는 중에는 뼈대, 없는 ID 면 목록(/)으로 돌려보낸다(replace).
    - 서비스 변경 알림이 오면 훅이 다시 불러와 진행(대기 → 분석 중 → 문서별 완료 → 완료)이 그대로 반영된다.
-   - 화면 상태는 useDetailUi(리듀서 하나), 검토 동작은 useDetailActions(T7 이 붙임).
+   - 화면 상태는 useDetailUi(리듀서 하나), 검토 동작은 useDetailActions, 모달은 ReviewModal.
    ========================================================================== */
 
 import { useRouter } from 'next/navigation';
@@ -12,6 +12,7 @@ import { useEffect } from 'react';
 import { Banner, Button, SegmentedTabs, cx, type BannerAction } from '@/components/ui';
 import { useAnalysis } from '@/services/react';
 import type { Analysis } from '@/services/types';
+import { ReviewModal } from '@/components/modals/ReviewModal';
 import { useDetailActions } from './detailActions';
 import {
   bannerModel,
@@ -47,7 +48,7 @@ export interface DetailScreenProps {
   id: string;
   /**
    * /dev/states 용 시작 조건(탭 · 고른 항목 · 검토사항 · 연결 · 문서 · 휴대폰 탭 · 모달).
-   * 주면 원본 initScenario 처럼 저절로 고르지 않는다(createDetailState 참고). 연결은 T7.
+   * 주면 원본 initScenario 처럼 저절로 고르지 않는다(createDetailState 참고). /dev/states 의 상세 상태가 넘긴다.
    */
   initial?: Partial<DetailUiState>;
 }
@@ -107,6 +108,8 @@ function DetailView({ analysis: a, initial }: { analysis: Analysis; initial?: Pa
   const bannerActions: BannerAction[] = (banner?.actions ?? []).map((b) => ({
     label: b.label,
     disabled: b.disabled,
+    /* 다시 분석하는 동안 띠의 버튼이 사라졌다가 다시 생긴다 — 끝난 뒤 포커스를 돌려줄 자리(focusRescue) */
+    dataSlot: b.key === 'retryFailed' ? 'retry-failed' : undefined,
     onClick: () => {
       if (b.key === 'trySample') router.push(TRY_SAMPLE_HREF);
       else if (b.key === 'showFailedDoc') {
@@ -171,7 +174,8 @@ function DetailView({ analysis: a, initial }: { analysis: Analysis; initial?: Pa
           ) : null}
         </div>
       )}
-      {/* TODO(T7): 모달 자리 — ui.state.modal 을 그리는 <DetailModals ui={ui} analysis={a} /> 를 여기에 둔다 */}
+      {/* 모달 자리 — 오탐 표시 · 분류 수정 · 메모 · 해결 · 연결 판단 · 검토 완료 · 다시 열기(원본 703–755) */}
+      <ReviewModal analysis={a} ui={ui} />
     </div>
   );
 }

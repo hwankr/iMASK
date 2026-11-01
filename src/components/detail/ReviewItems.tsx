@@ -79,17 +79,17 @@ export function ReviewItems({ keep, nOpen, nDone, items, locked, onEvidence, onO
               </Button>
             ) : null}
             {it.canRetry ? (
-              <Button size="item" variant="outline" icon="dg-i-refresh" disabled={it.retrying} onClick={() => actions.retry(it.retryDoc ?? undefined)} className={styles.retry}>
+              <Button size="item" variant="outline" icon="dg-i-refresh" disabled={it.retrying} onClick={() => actions.retry(it.retryDoc ?? undefined)} className={styles.retry} data-slot="retry">
                 {it.retryLabel}
               </Button>
             ) : null}
             {it.canResolve ? (
-              <Button size="item" variant="primary" icon="dg-i-check" disabled={locked} onClick={() => actions.resolveItem(it.id)}>
+              <Button size="item" variant="primary" icon="dg-i-check" disabled={locked} onClick={() => actions.resolveItem(it.id)} data-slot="resolve">
                 해결로 표시
               </Button>
             ) : null}
             {it.canReopen ? (
-              <Button size="item" variant="ghost" disabled={locked} onClick={() => actions.reopenItem(it.id)}>
+              <Button size="item" variant="ghost" disabled={locked} onClick={() => actions.reopenItem(it.id)} data-slot="resolve">
                 다시 열기
               </Button>
             ) : null}

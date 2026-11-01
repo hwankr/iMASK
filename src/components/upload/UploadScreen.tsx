@@ -11,6 +11,7 @@ import {
   type DragEvent,
   type FormEvent,
 } from 'react';
+import { listReturnHref, useRememberedListQuery } from '@/components/list/listReturn';
 import { Icon, TextField, useToast } from '@/components/ui';
 import { CONFIG } from '@/config/app';
 import type { AnalysisService } from '@/services/analysis-service';
@@ -67,6 +68,7 @@ type PendingFocus = { kind: 'row'; index: number } | { kind: 'remove'; id: strin
  */
 export function UploadScreen({ initial, sampleFromQuery = false }: UploadScreenProps) {
   const router = useRouter();
+  const listQuery = useRememberedListQuery();
   const service = useService();
   const toast = useToast();
   const [up, setUp] = useState<UploadState>(() => initUpload(initial));
@@ -183,7 +185,8 @@ export function UploadScreen({ initial, sampleFromQuery = false }: UploadScreenP
 
   /* ---------- 이동 · 시작(원본 cancel · startAnalysis) ---------- */
   const cancel = () => {
-    if (!busy) router.push('/');
+    // 원본 cancel(2033): 목록으로 — 마지막 목록의 검색·필터·정렬을 그대로 둔다
+    if (!busy) router.push(listReturnHref(listQuery));
   };
 
   const onSubmit = (e: FormEvent<HTMLFormElement>) => {

@@ -3,11 +3,17 @@
 import { Icon, Modal } from '@/components/ui';
 import { fmtDT } from '@/lib/format';
 import type { Analysis } from '@/services/types';
+import { findListReturn, type ListAnchor } from './listFocus';
 import styles from './ErrorModal.module.css';
 
 export interface ErrorModalProps {
   /** 오류를 볼 분석 건. null 이면 닫혀 있다. */
   analysis: Analysis | null;
+  /**
+   * 열 때 기억한 목록 조작 기준점(`captureListAnchor`) — 닫을 때 돌아갈 자리를 고른다.
+   * 없으면 같은 행의 '오류 확인' · '상세 보기'만 찾는다.
+   */
+  anchor?: ListAnchor | null;
   onClose: () => void;
   onOpenDetail: (id: string) => void;
   onRetry: (id: string) => void;
@@ -18,7 +24,7 @@ export interface ErrorModalProps {
  * 실패한(다시 분석 중인) 문서마다 이름과 오류, 안내 문단. 버튼: 닫기 · 상세 보기 · 다시 시도(열릴 때 포커스).
  * 다시 시도하는 동안은 돌림 표시 + '다시 시도하는 중…'(누를 수 없음, 포커스는 남는다).
  */
-export function ErrorModal({ analysis: a, onClose, onOpenDetail, onRetry }: ErrorModalProps) {
+export function ErrorModal({ analysis: a, anchor, onClose, onOpenDetail, onRetry }: ErrorModalProps) {
   const files = a
     ? a.docs
         .filter((d) => d.status === 'failed' || d.status === 'running')
@@ -31,6 +37,8 @@ export function ErrorModal({ analysis: a, onClose, onOpenDetail, onRetry }: Erro
       title="분석 오류 내용"
       subtitle={a ? a.name + ' · 접수 ' + fmtDT(a.submittedAt) : undefined}
       width="sm"
+      // 닫을 때 연 버튼('오류 확인')이 '다시 시도'하는 동안 사라졌으면 — 기준점의 같은 행 → 앞뒤 행 → 필터 트리거 · 검색칸(listFocus)
+      returnFocus={a ? () => findListReturn(anchor ?? { id: a.id, after: [], before: [], controls: [] }) : undefined}
       buttons={
         a
           ? [

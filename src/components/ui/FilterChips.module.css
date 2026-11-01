@@ -46,3 +46,19 @@
   opacity: .72;
   font-variant-numeric: tabular-nums;
 }
+
+/* 휴대폰: 보이는 높이(36)는 그대로 두고 투명 ::after 로 누름 영역만 44px 로 넓힌다(위아래 4씩, 가로는 이미 44 보다 넓다).
+   위·아래 이웃과 간격이 좁은 곳은 감싼 요소가 --filter-chip-hit-top · --filter-chip-hit-bottom(음수 길이)으로 나눠 준다. */
+@media (max-width: 767.98px) {
+  .chip {
+    position: relative;
+  }
+  .chip::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: var(--filter-chip-hit-top, min(0%, calc((100% - var(--touch-min)) / 2)));
+    bottom: var(--filter-chip-hit-bottom, min(0%, calc((100% - var(--touch-min)) / 2)));
+  }
+}

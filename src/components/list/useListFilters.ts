@@ -1,8 +1,9 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { DEFAULT_FILTERS, filtersToQuery, parseFilters, type ListFilters } from './listModel';
+import { rememberListQuery } from './listReturn';
 
 /** 필터 바꾸기 — 바꿀 값만 넘긴다 */
 export type SetListFilters = (patch: Partial<ListFilters>) => void;
@@ -32,6 +33,8 @@ interface UrlFilterState {
  * - URL 이 이 화면이 쓴 값이 아닌 값으로 바뀌면(헤더 '검토 필요' 링크, 로고 → `/`, 뒤로 가기) URL 을 따른다.
  *   쓴 값이 늦게 돌아오는 것은 pending 목록으로 알아본다.
  * - `initial` 은 처음 그릴 때 URL 에 없는 값의 기본값이다(URL 값이 이긴다). URL 에는 사용자가 바꿀 때 함께 들어간다.
+ * - 지금 필터를 listReturn 에 기억해 두어, 다른 화면의 '목록으로' 이동(상세 뒤로 · 헤더 메뉴 · 새 분석 취소)이
+ *   프로토타입처럼 목록 상태를 이어 가게 한다.
  */
 export function useUrlListFilters(initial?: Partial<ListFilters>): [ListFilters, SetListFilters] {
   const params = useSearchParams();
@@ -55,6 +58,11 @@ export function useUrlListFilters(initial?: Partial<ListFilters>): [ListFilters,
     current = { ...state, pending: [] }; // URL 과 화면이 같아졌다 — 남은 기록은 필요 없다
     setState(current);
   }
+
+  const shownQuery = filtersToQuery(current.filters);
+  useEffect(() => {
+    rememberListQuery(shownQuery);
+  }, [shownQuery]);
 
   const update: SetListFilters = (patch) => {
     const next = { ...current.filters, ...patch };

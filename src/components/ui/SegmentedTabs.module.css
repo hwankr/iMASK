@@ -68,3 +68,17 @@
 .countWarn {
   color: var(--warn);
 }
+
+/* 휴대폰: 보이는 높이(md 38 · lg 40)는 그대로 두고 투명 ::after 로 누름 영역만 44px 로 넓힌다.
+   탭 줄 안쪽 여백(4) 안에서 위아래로만 넓어지고(md 3 · lg 2), 가로는 탭끼리 붙어 있어 넓히지 않는다. */
+@media (max-width: 767.98px) {
+  .tab::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: max(100%, var(--touch-min));
+    transform: translateY(-50%);
+  }
+}

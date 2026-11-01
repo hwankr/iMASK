@@ -149,6 +149,14 @@
   flex-wrap: wrap;
   gap: var(--space-6);
 }
+/* 휴대폰: 행동 버튼(공통 Button item 36)은 투명 ::after 로 위아래 4씩 넓혀 누름 영역이 44 다.
+   줄이 바뀌면 줄 간격 6 에서 위 · 아래 줄의 넓힌 영역이 겹치므로 휴대폰에서만 줄 간격을 8 로 둔다(44 = 36 + 8).
+   버튼 크기 · 가로 간격 · 한 줄일 때의 화면은 그대로다(T9, 코디네이터 결정 — T6-fix2 도구 줄과 같은 방식). */
+@media (max-width: 767.98px) {
+  .actions {
+    row-gap: var(--space-8);
+  }
+}
 .locked {
   margin: 0;
   font-size: var(--fs-13);

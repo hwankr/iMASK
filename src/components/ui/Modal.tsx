@@ -42,6 +42,11 @@ export interface ModalProps {
   /** 열릴 때 포커스할 요소. 없으면 autoFocus 가 걸린 요소, 그것도 없으면 창 자체 */
   initialFocus?: RefObject<HTMLElement | null>;
   /**
+   * 닫힐 때 열기 전 자리(여는 버튼)가 화면에서 사라졌으면 대신 포커스할 요소를 찾는다(선택).
+   * 예: 목록 오류 모달 — '다시 시도'하는 동안 행의 '오류 확인' 버튼이 없어졌다가 새로 생긴다.
+   */
+  returnFocus?: () => HTMLElement | null;
+  /**
    * 견본용 — 포털·포커스 가둠·inert·스크롤 잠금 없이 놓인 자리에 흐린 판과 함께 그린다(보드 06, 상태 미리보기).
    * 이때는 대화상자가 아니라 이름 붙은 묶음(role="group")이다.
    */
@@ -65,6 +70,7 @@ export function Modal({
   buttons,
   dismissible = true,
   initialFocus,
+  returnFocus,
   inline = false,
   className,
 }: ModalProps) {
@@ -75,7 +81,7 @@ export function Modal({
   const subId = useId();
   const active = open && isClient && !inline;
 
-  useFocusReturn(dialogRef, active);
+  useFocusReturn(dialogRef, active, returnFocus);
   useFocusTrap(dialogRef, active);
   useInertBackground(active);
   useScrollLock(active);

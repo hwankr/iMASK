@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { StateId } from '@/services/analysis-service';
-import { DEV_STATES, LISTED_STATES, STATE_GROUPS, findState, isStateId, statePosition } from './states';
+import { DEV_STATES, LISTED_STATES, STATE_GROUPS, findGroup, findState, isStateId, statePosition } from './states';
 
 /** Tweaks '시작 상태' 순서(Main.dc.html 761줄) */
 const PROTOTYPE_ORDER: StateId[] = [
@@ -24,6 +24,12 @@ describe('DEV_STATES', () => {
   it('모든 그룹이 정의되어 있다', () => {
     const groups = new Set(STATE_GROUPS.map((g) => g.id));
     for (const s of DEV_STATES) expect(groups.has(s.group)).toBe(true);
+  });
+
+  it('그룹마다 여는 화면 경로(목록 23개 = 3 · 6 · 11 · 3)', () => {
+    expect(STATE_GROUPS.map((g) => g.path)).toEqual(['/', '/analyses/new', '/analyses/[id]', '/analyses/[id]/report']);
+    expect(STATE_GROUPS.map((g) => LISTED_STATES.filter((s) => s.group === g.id).length)).toEqual([3, 6, 11, 3]);
+    expect(findGroup('detail').title).toBe('상세 검토');
   });
 
   it('findState · isStateId', () => {

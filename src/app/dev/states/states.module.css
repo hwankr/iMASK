@@ -14,6 +14,13 @@
   gap: var(--space-10);
 }
 
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -40,6 +47,33 @@
   font-size: var(--fs-lead);
   line-height: var(--lh-165);
   color: var(--ink-2);
+}
+
+.note {
+  margin: 0;
+  max-width: var(--text-max);
+  font-size: var(--fs-13-5);
+  line-height: var(--lh-165);
+  color: var(--ink-3);
+}
+
+.kbd,
+.code {
+  font-family: var(--mono);
+  font-size: var(--fs-12);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-2);
+}
+
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--size-20);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-6);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line-2);
 }
 
 .group {
@@ -72,6 +106,15 @@
   font-weight: var(--fw-heavy);
 }
 
+.groupPath {
+  margin-left: var(--space-4);
+  font-family: var(--mono);
+  font-size: var(--fs-12-5);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0;
+  color: var(--ink-3);
+}
+
 .list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--menu-w)), 1fr));
@@ -84,7 +127,7 @@
 .link {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  grid-template-areas: 'num name' 'num id';
+  grid-template-areas: 'num name' 'num meta';
   column-gap: var(--space-12);
   align-items: center;
   min-height: var(--size-64);
@@ -128,9 +171,28 @@
   line-height: var(--lh-140);
 }
 
-.id {
-  grid-area: id;
+.meta {
+  grid-area: meta;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  /* 줄이 바뀌면 화면 경로가 다음 줄로 간다(구분 점 없이 간격만) */
+  column-gap: var(--space-12);
+  min-width: 0;
   font-family: var(--mono);
   font-size: var(--fs-12);
   color: var(--ink-3);
+}
+
+.id {
+  overflow-wrap: anywhere;
+}
+
+.path {
+  overflow-wrap: anywhere;
+}
+
+.pathLabel {
+  font-family: var(--sans);
+  font-weight: var(--fw-bold);
 }

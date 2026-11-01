@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
+import { listHomeHref, listNavHref, reviewNeededHref, useRememberedListQuery } from '@/components/list/listReturn';
 import { cx } from '@/components/ui/cx';
 import { Icon } from '@/components/ui/Icon';
 import { DemoBadge } from './DemoBadge';
@@ -28,14 +29,19 @@ export function activeNav(pathname: string | null, review: string | null): NavKe
   return pathname === '/' && review === 'needed' ? 'review' : 'analyses';
 }
 
+/**
+ * 메뉴 이동 주소는 마지막으로 본 목록(listReturn)에서 만든다 — 프로토타입 nav:
+ * '문서 분석'은 '검토 필요' 필터만 풀고, '검토 필요'는 검색·위험·상태를 풀고 검토 필요만 건다(정렬은 둘 다 유지).
+ */
 function NavItems({ active, count }: { active: NavKey; count: number | null }) {
+  const query = useRememberedListQuery();
   return (
     <>
-      <Link href="/" aria-current={active === 'analyses' ? 'page' : undefined} className={cx(styles.navItem, active === 'analyses' && styles.navOn)}>
+      <Link href={listNavHref(query)} aria-current={active === 'analyses' ? 'page' : undefined} className={cx(styles.navItem, active === 'analyses' && styles.navOn)}>
         문서 분석
         <span aria-hidden="true" className={styles.bar} />
       </Link>
-      <Link href="/?review=needed" aria-current={active === 'review' ? 'page' : undefined} className={cx(styles.navItem, active === 'review' && styles.navOn)}>
+      <Link href={reviewNeededHref(query)} aria-current={active === 'review' ? 'page' : undefined} className={cx(styles.navItem, active === 'review' && styles.navOn)}>
         검토 필요
         {count === null ? (
           <span aria-hidden="true" className={cx(styles.count, styles.countPending)} />
@@ -67,9 +73,11 @@ function NavFallback({ count }: { count: number | null }) {
  */
 export function AppHeader({ brandName, user, reviewNeededCount }: AppHeaderProps) {
   const count = reviewNeededCount === null ? null : Math.max(0, Math.floor(reviewNeededCount));
+  // 로고 = 프로토타입 goHome: 검색·필터를 모두 풀고 정렬만 둔다
+  const homeHref = listHomeHref(useRememberedListQuery());
   return (
     <header className={styles.header}>
-      <Link href="/" aria-label={`${brandName} 첫 화면으로 이동`} className={styles.home}>
+      <Link href={homeHref} aria-label={`${brandName} 첫 화면으로 이동`} className={styles.home}>
         <Icon name="dg-logo" size={28} className={styles.logo} />
         <span className={styles.brand}>{brandName}</span>
       </Link>

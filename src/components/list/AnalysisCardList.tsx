@@ -68,11 +68,11 @@ export function AnalysisCardList({
               </dl>
               <div className={styles.actions}>
                 {r.failed ? (
-                  <button type="button" className={cx(styles.btn, styles.btnError)} onClick={() => onShowError(r.id)}>
+                  <button type="button" className={cx(styles.btn, styles.btnError)} data-row-action="error" onClick={() => onShowError(r.id)}>
                     오류 확인
                   </button>
                 ) : null}
-                <Link href={`/analyses/${encodeURIComponent(r.id)}`} aria-label={r.name + ' 상세 보기'} className={cx(styles.btn, styles.btnOpen)}>
+                <Link href={`/analyses/${encodeURIComponent(r.id)}`} aria-label={r.name + ' 상세 보기'} className={cx(styles.btn, styles.btnOpen)} data-row-action="open">
                   상세 보기
                   <Icon name="dg-i-chev-right" size={16} strokeWidth={2.2} />
                 </Link>

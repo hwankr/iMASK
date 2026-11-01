@@ -136,7 +136,7 @@ function TableRow({
         <div className={styles.actions}>
           {r.failed ? (
             <>
-              <button type="button" className={cx(styles.act, styles.actError)} onClick={stop(() => onShowError(r.id))}>
+              <button type="button" className={cx(styles.act, styles.actError)} data-row-action="error" onClick={stop(() => onShowError(r.id))}>
                 오류 확인
               </button>
               <button type="button" className={cx(styles.act, styles.actRetry)} onClick={stop(() => onRetry(r.id))} disabled={r.retrying}>
@@ -149,6 +149,7 @@ function TableRow({
             href={`/analyses/${encodeURIComponent(r.id)}`}
             aria-label={r.name + ' 상세 보기'}
             className={cx(styles.act, styles.actOpen)}
+            data-row-action="open"
             onClick={(e) => e.stopPropagation()}
           >
             상세 보기

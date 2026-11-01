@@ -10,6 +10,8 @@ export type StateGroupId = 'list' | 'upload' | 'detail' | 'report';
 export interface StateGroup {
   id: StateGroupId;
   title: string;
+  /** 이 그룹의 상태가 여는 실제 화면 경로(상세·보고서의 [id] 는 prepare 가 고른 분석 건) */
+  path: string;
 }
 
 export interface DevState {
@@ -21,10 +23,10 @@ export interface DevState {
 }
 
 export const STATE_GROUPS: readonly StateGroup[] = [
-  { id: 'list', title: '분석 목록' },
-  { id: 'upload', title: '새 분석' },
-  { id: 'detail', title: '상세 검토' },
-  { id: 'report', title: '보고서' },
+  { id: 'list', title: '분석 목록', path: '/' },
+  { id: 'upload', title: '새 분석', path: '/analyses/new' },
+  { id: 'detail', title: '상세 검토', path: '/analyses/[id]' },
+  { id: 'report', title: '보고서', path: '/analyses/[id]/report' },
 ];
 
 export const DEV_STATES: readonly DevState[] = [
@@ -57,6 +59,12 @@ export const DEV_STATES: readonly DevState[] = [
 
 /** /dev/states 목록에 보이는 상태(휴대폰 전용 제외, 23개) */
 export const LISTED_STATES: readonly DevState[] = DEV_STATES.filter((s) => !s.phoneOnly);
+
+export function findGroup(id: StateGroupId): StateGroup {
+  const group = STATE_GROUPS.find((g) => g.id === id);
+  if (!group) throw new Error('알 수 없는 상태 그룹: ' + id);
+  return group;
+}
 
 export function findState(id: string): DevState | undefined {
   return DEV_STATES.find((s) => s.id === id);

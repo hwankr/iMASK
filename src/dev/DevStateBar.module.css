@@ -1,5 +1,7 @@
 /* 개발용 상태 막대 — 화면 디자인 밖의 도구라 단순하게 둔다. */
 .bar {
+  /* 상세 상태는 틀이 화면 높이에 고정된 세로 flex 라(StatePreview .fill) 줄지 않게 한다 — 휴대폰에서 두 줄이 되어도 다 보이게 */
+  flex: none;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -60,9 +62,28 @@
   margin-left: auto;
 }
 
+.key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--size-18);
+  height: var(--size-18);
+  margin-left: var(--space-6);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-4);
+  background: var(--tint-060);
+  font-family: var(--mono);
+  font-size: var(--fs-11-5);
+  font-weight: var(--fw-semibold);
+}
+
 @media (max-width: 767.98px) {
   .back,
   .move {
     min-height: var(--touch-min);
+  }
+  /* 휴대폰에는 키보드가 없으므로 단축키 표시를 숨긴다 */
+  .key {
+    display: none;
   }
 }

@@ -10,6 +10,7 @@ import { useAnalyses, useDemoControls, useService } from '@/services/react';
 import { AnalysisCardList } from './AnalysisCardList';
 import { AnalysisTable } from './AnalysisTable';
 import { ErrorModal } from './ErrorModal';
+import { captureListAnchor, type ListAnchor } from './listFocus';
 import { ListEmpty } from './ListEmpty';
 import { ListSkeleton } from './ListSkeleton';
 import { ListToolbar } from './ListToolbar';
@@ -61,7 +62,8 @@ function ListView({ filters, setFilters }: { filters: ListFilters; setFilters: S
   const mobile = useIsMobile();
   const { data, loading, error, refresh } = useAnalyses();
   const replay = useReplayToggle(replaySignature(filters));
-  const [errorId, setErrorId] = useState<string | null>(null);
+  // 오류 모달 — 연 분석 건과, 여는 순간의 목록 조작 기준점(행 순서 · 걸린 필터; 닫을 때 돌아갈 자리)
+  const [errorOpen, setErrorOpen] = useState<{ id: string; anchor: ListAnchor } | null>(null);
 
   if (loading || !data) {
     if (error && !loading) return <ListFrame failed onRetry={() => void refresh()} />;
@@ -86,7 +88,8 @@ function ListView({ filters, setFilters }: { filters: ListFilters; setFilters: S
     toast('샘플 분석 건 ' + list.length + '개를 불러왔습니다.');
   };
 
-  const errorAnalysis = errorId ? data.find((a) => a.id === errorId) ?? null : null;
+  const showError = (id: string) => setErrorOpen({ id, anchor: captureListAnchor(id, filters) });
+  const errorAnalysis = errorOpen ? data.find((a) => a.id === errorOpen.id) ?? null : null;
 
   return (
     <ListFrame lead={m.hasData ? { lead: m.heroLead, strong: m.heroStrong, tail: m.heroTail } : 'empty'}>
@@ -104,9 +107,9 @@ function ListView({ filters, setFilters }: { filters: ListFilters; setFilters: S
             <ListToolbar all={data} filters={filters} setFilters={setFilters} mobile={mobile} />
             <ResultBar model={m} onReset={resetFilters} />
             {mobile ? (
-              <AnalysisCardList model={m} replay={replay} onShowError={setErrorId} onReset={resetFilters} />
+              <AnalysisCardList model={m} replay={replay} onShowError={showError} onReset={resetFilters} />
             ) : (
-              <AnalysisTable model={m} replay={replay} onOpen={openDetail} onShowError={setErrorId} onRetry={retry} onReset={resetFilters} />
+              <AnalysisTable model={m} replay={replay} onOpen={openDetail} onShowError={showError} onRetry={retry} onReset={resetFilters} />
             )}
           </section>
         </>
@@ -115,9 +118,10 @@ function ListView({ filters, setFilters }: { filters: ListFilters; setFilters: S
       )}
       <ErrorModal
         analysis={errorAnalysis}
-        onClose={() => setErrorId(null)}
+        anchor={errorOpen?.anchor}
+        onClose={() => setErrorOpen(null)}
         onOpenDetail={(id) => {
-          setErrorId(null);
+          setErrorOpen(null);
           openDetail(id);
         }}
         onRetry={retry}

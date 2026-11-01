@@ -1,6 +1,7 @@
 'use client';
 
 import type { CSSProperties } from 'react';
+import { listReturnHref, useRememberedListQuery } from '@/components/list/listReturn';
 import { AnalysisStatusLabel, Button, IconButton, ReviewStatusPill, RiskBadge, cx } from '@/components/ui';
 import type { DetailActions } from './detailActions';
 import type { HeaderModel } from './detailModel';
@@ -20,11 +21,13 @@ export interface DetailHeaderProps {
  */
 export function DetailHeader({ model: m, analysisId, mobile, actions }: DetailHeaderProps) {
   const reportHref = `/analyses/${encodeURIComponent(analysisId)}/report`;
+  // 목록으로 = 프로토타입 goList: 마지막 목록의 검색·필터·정렬을 그대로 둔다
+  const listHref = listReturnHref(useRememberedListQuery());
   const pct = { '--pct': m.progress.pct + '%' } as CSSProperties;
   return (
     <div className={styles.head}>
       <div className={styles.top}>
-        <IconButton href="/" label="문서 분석 목록으로 돌아가기" icon="dg-i-arrow-left" size={40} iconSize={20} strokeWidth={2.2} className={styles.back} />
+        <IconButton href={listHref} label="문서 분석 목록으로 돌아가기" icon="dg-i-arrow-left" size={40} iconSize={20} strokeWidth={2.2} className={styles.back} />
         <div className={styles.titles}>
           <h1 className={styles.title}>{m.name}</h1>
           <div className={styles.meta}>

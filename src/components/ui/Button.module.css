@@ -227,3 +227,19 @@
 .outline:disabled {
   color: var(--disabled-ghost);
 }
+
+/* ---------- 휴대폰 누름 영역 ----------
+   작은 버튼(sm 40 · item 36)은 보이는 크기를 그대로 두고 투명 ::after 로 누름 영역만 44px 로 넓힌다(가운데 기준,
+   폭이 44 보다 좁으면 가로도). 버튼 줄이 바뀌는 곳은 감싼 요소가 줄 간격을 넓힌 영역이 겹치지 않을 만큼 둔다
+   (예: 상세 항목 행동 줄은 휴대폰에서 줄 간격 8 = 44 − 36). */
+@media (max-width: 767.98px) {
+  .sm::after,
+  .item::after {
+    content: '';
+    position: absolute;
+    top: min(0%, calc((100% - var(--touch-min)) / 2));
+    bottom: min(0%, calc((100% - var(--touch-min)) / 2));
+    left: min(0%, calc((100% - var(--touch-min)) / 2));
+    right: min(0%, calc((100% - var(--touch-min)) / 2));
+  }
+}

@@ -1,0 +1,67 @@
+/* ==========================================================================
+   경고 상자 — Main.dc.html 278–286
+   display:flex; gap:12px; align-items:flex-start; padding:16px 16px 16px 18px; border-radius:18px;
+   animation:dg-pop .34s var(--ease) both. 바탕·아이콘 색: type = err · limit = warn (uploadVM 2025)
+   ========================================================================== */
+.alert {
+  display: flex;
+  gap: var(--space-12);
+  align-items: flex-start;
+  padding: var(--space-16) var(--space-16) var(--space-16) var(--space-18);
+  border-radius: var(--radius-18);
+  --dg-anim: dg-pop; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-340) var(--ease) both;
+}
+.type {
+  background: var(--err-bg);
+  --alert-fg: var(--err);
+}
+.limit {
+  background: var(--warn-bg);
+  --alert-fg: var(--warn);
+}
+
+/* 34 · 둥글기 11 · 흰 바탕 */
+.tile {
+  width: var(--size-34);
+  height: var(--size-34);
+  flex: none;
+  border-radius: var(--radius-11);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  color: var(--alert-fg);
+}
+
+.body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+.title {
+  font-size: var(--fs-15);
+  font-weight: var(--fw-heavy);
+  color: var(--ink);
+}
+.items {
+  margin: 0;
+  padding-left: var(--space-18);
+  font-size: var(--fs-13-5);
+  line-height: var(--lh-160);
+  color: var(--ink-2);
+}
+.hint {
+  font-size: var(--fs-13);
+  color: var(--ink-3);
+}
+
+/* 닫기 — 공통 아이콘 버튼(34 · ghost). 원본 마우스 올림은 rgba(20,27,45,.06) 덧칠, 글자색 그대로 */
+@media (hover: hover) {
+  .close.close:hover:not(:disabled) {
+    background: var(--tint-060);
+    color: var(--ink-2);
+  }
+}

@@ -1,0 +1,193 @@
+/* ==========================================================================
+   선택한 파일 — Main.dc.html 289–312, uploadVM files(2027)
+   ========================================================================== */
+
+/* gap:6px; animation:dg-in .35s var(--ease) both (290) */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  --dg-anim: dg-in; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-350) var(--ease) both;
+}
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+.count {
+  font-size: var(--fs-15);
+  font-weight: var(--fw-heavy);
+}
+.total {
+  font-size: var(--fs-13);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 행 (294): gap 12 · padding 12 · margin 0 -12 · 위 선(sep) · 실패면 err-bg + 둥글기 14
+   animation:dg-in .32s var(--ease) both — 지연은 행마다 인라인 style(0.04초 × 묶음 안 순번) */
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-12);
+  margin: 0 calc(var(--space-12) * -1);
+  border-top: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  --dg-anim: dg-in; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-320) var(--ease) both;
+  transition: background-color var(--dur-color-2) var(--ease);
+}
+.separated {
+  border-top-color: var(--line);
+}
+.failed {
+  border-radius: var(--radius-14);
+  background: var(--err-bg);
+}
+
+/* 형식 타일 42 · 둥글기 12 · 11px 800 · 자간 .02em */
+.tile {
+  width: var(--size-42);
+  height: var(--size-42);
+  flex: none;
+  border-radius: var(--radius-12);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--fill);
+  color: var(--ink-2);
+  font-size: var(--fs-11);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--ls-wide-1);
+}
+.failed .tile {
+  background: var(--surface);
+  color: var(--err);
+}
+
+.info {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.nameLine {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-width: 0;
+}
+.name {
+  font-size: var(--fs-15);
+  font-weight: var(--fw-bold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* '샘플' 알약 — 높이 20 · 0 7 · 11.5px 800 */
+.sample {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: var(--size-20);
+  padding: 0 var(--space-7);
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft-2);
+  color: var(--accent-ink);
+  font-size: var(--fs-11-5);
+  font-weight: var(--fw-heavy);
+}
+.meta {
+  font-size: var(--fs-13);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.error {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-5);
+  font-size: var(--fs-13);
+  font-weight: var(--fw-semibold);
+  color: var(--err);
+}
+
+/* 올리는 중 (301): 세로 · 오른쪽 맞춤 · gap 5 · 13px 600 · 흐르는 막대 64×4 */
+.uploading {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-5);
+  font-size: var(--fs-13);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+/* 준비됨 (302): 13px 700 --accent-ink · dg-fade .3s */
+.ready {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-5);
+  font-size: var(--fs-13);
+  font-weight: var(--fw-bold);
+  color: var(--accent-ink);
+  white-space: nowrap;
+  --dg-anim: dg-fade; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-300) var(--ease) both;
+}
+
+/* 다시 올리기 (303): 34 · 0 12 · 둥글기 10 · 흰 바탕 · 13.5px 700 · 안쪽 1px --err-line · 누름 .96 */
+.retry {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-5);
+  height: var(--size-34);
+  padding: 0 var(--space-12);
+  border: 0;
+  margin: 0;
+  border-radius: var(--radius-10);
+  background: var(--surface);
+  color: var(--err);
+  font-size: var(--fs-13-5);
+  font-weight: var(--fw-bold);
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px var(--err-line);
+  transition: transform var(--dur-press) var(--ease);
+}
+.retry:active {
+  transform: scale(.96);
+}
+
+/* 제거 — 공통 아이콘 버튼(36 · muted). 원본 비활성은 불투명도 .4(글자색 그대로) */
+.remove.remove:disabled {
+  color: var(--ink-3);
+  opacity: .4;
+}
+
+/* 휴대폰: 누르는 영역 44px 이상(보이는 크기는 그대로) */
+@media (max-width: 767.98px) {
+  .retry::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, var(--touch-min));
+    height: max(100%, var(--touch-min));
+    transform: translate(-50%, -50%);
+  }
+}

@@ -1,0 +1,169 @@
+/* ==========================================================================
+   문서 파일 — 머리 줄 · 끌어다 놓는 상자 · 묶음 안내 (Main.dc.html 266–275, uploadVM dz* 값 2019–2021)
+   ========================================================================== */
+
+/* display:flex; flex-direction:column; gap:10px (266) */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+}
+
+/* align-items:baseline; justify-content:space-between; gap:4px 12px; flex-wrap:wrap (267) */
+.labelRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4) var(--space-12);
+  flex-wrap: wrap;
+}
+.label {
+  font-size: var(--fs-15);
+  font-weight: var(--fw-heavy);
+}
+.req {
+  color: var(--hi);
+}
+.limits {
+  font-size: var(--fs-13);
+  color: var(--ink-3);
+}
+
+/* ---------- 상자 (268) ----------
+   파일 선택 전: 세로 · 가운데 · gap 12 · 여백 L.dzPad · 둥글기 22 · 아이콘 60/20 · 제목 16.5
+   파일이 있으면(compact): 가로 · 왼쪽 · gap 14 · 여백 16 18(휴대폰 14) · 둥글기 18 · 아이콘 44/14 · 제목 15 */
+.zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-12);
+  text-align: center;
+  padding: var(--dropzone-pad);
+  border-radius: var(--radius-22);
+  border: 2px dashed var(--dropzone-line);
+  background: var(--band);
+  transform: none;
+  transition:
+    border-color var(--dur-color-2) var(--ease),
+    background-color var(--dur-color-2) var(--ease),
+    transform var(--dur-300) var(--ease);
+}
+.compact {
+  flex-direction: row;
+  gap: var(--space-14);
+  text-align: left;
+  padding: var(--space-16) var(--space-18);
+  border-radius: var(--radius-18);
+}
+@media (max-width: 767.98px) {
+  .compact {
+    padding: var(--space-14);
+  }
+}
+
+/* 파일 없이 시작을 눌렀다(showFileErr) */
+.error {
+  border-color: var(--err);
+  background: var(--err-bg);
+}
+
+/* 끌어다 놓는 중 — 강조색 점선 · 옅은 초록 · scale(1.012) */
+.drag {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  transform: scale(1.012);
+}
+
+/* 아이콘 (269) */
+.icon {
+  width: var(--size-60);
+  height: var(--size-60);
+  flex: none;
+  border-radius: var(--radius-20);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  color: var(--accent);
+  transition:
+    background-color var(--dur-color-2) var(--ease),
+    color var(--dur-color-2) var(--ease);
+}
+.compact .icon {
+  width: var(--size-44);
+  height: var(--size-44);
+  border-radius: var(--radius-14);
+}
+/* 들썩임 — dg-bob 1s var(--ease-io) infinite */
+.drag .icon {
+  background: var(--accent);
+  color: var(--on-solid);
+  --dg-anim: dg-bob; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-1000) var(--ease-io) infinite;
+}
+
+/* 제목 (270) */
+.title {
+  flex: 0 0 auto;
+  font-size: var(--fs-16-5);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--ls-tight-1);
+}
+.compact .title {
+  flex: 1 1 auto;
+  font-size: var(--fs-15);
+}
+
+/* '파일 선택' (271) — 공통 버튼 dark·lg 모양 + 원본 여백 0 18 0 14 · gap 8
+   (.zone 안에서 두 번 쓴 선택자로 공통 버튼의 크기 규칙보다 앞선다) */
+.zone .pick.pick {
+  position: relative;
+  overflow: hidden;
+  gap: var(--space-8);
+  padding: 0 var(--space-18) 0 var(--space-14);
+}
+/* style-focus-within: 0 0 0 3px var(--accent-line) */
+.zone .pick:focus-within {
+  box-shadow: 0 0 0 var(--bw-3) var(--accent-line);
+}
+/* 입력은 보이지 않으므로 키보드 포커스 윤곽은 라벨에 그린다(디자인 기준: 강조색 2px · 간격 2px) */
+.zone .pick:has(:focus-visible) {
+  outline: var(--focus-w) solid var(--accent);
+  outline-offset: var(--focus-offset);
+}
+/* position:absolute; inset:0; opacity:0 — 라벨 전체가 누르는 곳 */
+.input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.input:disabled {
+  cursor: not-allowed;
+}
+
+/* 지원 형식 안내 — 파일이 있으면 화면 낭독기 전용(272) */
+.hint {
+  font-size: var(--fs-13);
+  color: var(--ink-3);
+}
+
+/* 문서 묶음 안내 (274) */
+.note {
+  margin: 0;
+  display: flex;
+  gap: var(--space-8);
+  align-items: flex-start;
+  font-size: var(--fs-13-5);
+  line-height: var(--lh-155);
+  color: var(--ink-2);
+}
+.noteIcon {
+  display: inline-flex;
+  margin-top: var(--space-2);
+  color: var(--accent);
+}

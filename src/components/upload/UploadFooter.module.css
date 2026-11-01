@@ -1,0 +1,80 @@
+/* ==========================================================================
+   하단 버튼 줄 — Main.dc.html 316–324, L.footPad · footBtns · footBtn · footBtn2
+   ========================================================================== */
+
+/* position:sticky; bottom:0; z-index:5; rgba(255,255,255,.92) + saturate(1.6) blur(12px); 위 선
+   -webkit- 접두어는 직접 쓰지 않는다 — Lightning CSS 가 둘을 합쳐 접두어 쪽만 남기면 Chrome 계산값이 none 이 된다
+   (Safari 용 접두어는 처리기가 붙인다) */
+.bar {
+  position: sticky;
+  bottom: 0;
+  z-index: var(--z-sticky);
+  background: var(--frost);
+  backdrop-filter: saturate(1.6) blur(var(--space-12));
+  border-top: 1px solid var(--line);
+}
+
+/* max-width:760px; padding:L.footPad; space-between; gap:10px 16px; flex-wrap:wrap */
+.inner {
+  max-width: var(--text-max);
+  margin: 0 auto;
+  padding: var(--upload-foot-pad);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-10) var(--space-16);
+  flex-wrap: wrap;
+}
+
+/* flex:1 1 240px; 14px 600; color:footFg; transition:color .2s */
+.text {
+  flex: 1 1 calc(var(--size-60) * 4);
+  font-size: var(--fs-14);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-2);
+  transition: color var(--dur-color-2) var(--ease);
+}
+.textError {
+  color: var(--err);
+}
+
+/* gap:8px; flex:L.footBtns */
+.buttons {
+  display: flex;
+  gap: var(--space-8);
+  flex: 0 0 auto;
+}
+
+/* 취소 — 공통 버튼 secondary·xl(52 · 0 22 · 둥글기 14 · 16px 700). 원본 비활성은 불투명도 .5 */
+.buttons .cancel.cancel {
+  flex: 0 0 auto;
+}
+.buttons .cancel.cancel:disabled {
+  color: var(--ink);
+  opacity: .5;
+}
+
+/* 분석 시작 — 공통 버튼 primary·xl + 원본 min-width:176px; padding:0 24px; 0 6px 16px 강조색 24% 그림자
+   (요청 중 돌림 표시가 있어도 여백 0 24 그대로) */
+.buttons .start.start {
+  flex: 0 0 auto;
+  min-width: calc(var(--size-44) * 4);
+  padding: 0 var(--space-24);
+  box-shadow: var(--shadow-accent-md);
+}
+.buttons .start.start:disabled {
+  box-shadow: none;
+}
+
+/* 휴대폰: 버튼 줄이 한 줄을 채우고 취소 1 : 시작 2 */
+@media (max-width: 767.98px) {
+  .buttons {
+    flex: 1 1 100%;
+  }
+  .buttons .cancel.cancel {
+    flex: 1 1 0;
+  }
+  .buttons .start.start {
+    flex: 2 1 0;
+  }
+}

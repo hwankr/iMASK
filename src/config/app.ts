@@ -30,6 +30,8 @@ export interface AppConfig {
     readonly retryMs: number;
     /** 파일 1개 업로드(선택 후 준비 완료)까지 */
     readonly uploadMs: number;
+    /** 업로드 실패 파일 '다시 올리기' 뒤 준비 완료까지(프로토타입 retryUpload) — 분석 재시도 retryMs 와 다르다 */
+    readonly uploadRetryMs: number;
   };
 }
 
@@ -38,7 +40,7 @@ export const CONFIG = {
   accent: '#00845C',
   user: { name: '이지은', team: '여신관리팀' },
   upload: { maxFiles: 10, maxFileMB: 20, accept: ['pdf', 'png', 'jpg', 'jpeg'] },
-  sim: { requestMs: 1300, startMs: 800, docMs: 1900, retryMs: 2400, uploadMs: 700 },
+  sim: { requestMs: 1300, startMs: 800, docMs: 1900, retryMs: 2400, uploadMs: 700, uploadRetryMs: 900 },
 } as const satisfies AppConfig;
 
 export type Config = typeof CONFIG;

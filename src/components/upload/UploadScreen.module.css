@@ -1,0 +1,140 @@
+/* ==========================================================================
+   새 분석 — 화면 틀 · 머리말 · 데모 환경 안내 (Main.dc.html 240–253, 313–315)
+   ========================================================================== */
+
+/* min-height:100%; display:flex; flex-direction:column; animation:dg-in .45s var(--ease) both (241)
+   overflow-x:clip — 오른쪽 끝 아이콘 버튼 툴팁이 좁은 화면에서 가로 스크롤을 만들지 않게(스크롤 영역은 만들지 않음)
+   flex:1 0 auto — /dev/states 미리보기(StatePreview .wrap: min-height:100% 인 flex 세로 부모)에서는 부모 높이가
+   정해지지 않아 min-height:100% 가 풀리지 않는다. flex 부모 안이면 남은 높이를 채워 하단 줄이 화면 바닥에 붙게 한다.
+   /analyses/new(부모 <main> 은 flex 가 아님)에서는 효과가 없고 min-height:100% 가 그대로 일한다. */
+.screen {
+  flex: 1 0 auto;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow-x: clip;
+  --dg-anim: dg-in; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-enter) var(--ease) both;
+}
+
+/* <form> flex:1 1 auto; column (242) */
+.form {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* flex:1 1 auto; width:100%; max-width:760px; margin:0 auto; padding:L.upPad; gap:28px (243) */
+.content {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: var(--text-max);
+  margin: 0 auto;
+  padding: var(--upload-pad);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-28);
+}
+
+/* ---------- 머리말 (245–252) ---------- */
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-14);
+}
+
+/* 뒤로 가기 '문서 분석': 36 · 0 12 0 8 · margin-left -8 · 둥글기 10 · --ink-2 · 14px 700 · gap 6 */
+.back {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  height: var(--size-36);
+  padding: 0 var(--space-12) 0 var(--space-8);
+  margin: 0 0 0 calc(var(--space-8) * -1);
+  border: 0;
+  border-radius: var(--radius-10);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: var(--fs-14);
+  font-weight: var(--fw-bold);
+  cursor: pointer;
+  transition: background-color var(--dur-color) var(--ease);
+}
+@media (hover: hover) {
+  .back:hover:not(:disabled) {
+    background: var(--fill);
+  }
+}
+.back:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.titles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.eyebrow {
+  font-size: var(--fs-14);
+  font-weight: var(--fw-heavy);
+  color: var(--accent-ink);
+}
+.title {
+  margin: 0;
+  font-size: var(--fs-h1);
+  line-height: var(--lh-130);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--ls-tight-4);
+}
+.lead {
+  margin: 0;
+  font-size: var(--fs-lead);
+  line-height: var(--lh-160);
+  color: var(--ink-2);
+}
+
+/* ---------- 데모 환경 안내 (314) ----------
+   gap:10px; padding:14px 16px; border-radius:16px; --band; 13.5px / 1.6 --ink-2; animation:dg-in .35s */
+.notice {
+  display: flex;
+  gap: var(--space-10);
+  align-items: flex-start;
+  padding: var(--space-14) var(--space-16);
+  border-radius: var(--radius-16);
+  background: var(--band);
+  font-size: var(--fs-13-5);
+  line-height: var(--lh-160);
+  color: var(--ink-2);
+  --dg-anim: dg-in; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-350) var(--ease) both;
+}
+.noticeIcon {
+  display: inline-flex;
+  margin-top: var(--space-2);
+  color: var(--ink-3);
+}
+.noticeStrong {
+  color: var(--ink);
+}
+
+/* ---------- 분석명 (262) ----------
+   원본 입력에는 disabled 글자색 규칙이 없어 요청 중에도 --ink 를 유지한다.
+   공통 TextField 의 .field:disabled(--ink-3)를 이 화면에서만 덮는다(잠금 · not-allowed 커서는 그대로). */
+.name input:disabled {
+  color: var(--ink);
+}
+
+/* 휴대폰: 뒤로 가기 누르는 영역 44px 이상(보이는 크기는 그대로) */
+@media (max-width: 767.98px) {
+  .back::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, var(--touch-min));
+    height: max(100%, var(--touch-min));
+    transform: translate(-50%, -50%);
+  }
+}

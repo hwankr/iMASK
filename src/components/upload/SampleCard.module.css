@@ -1,0 +1,93 @@
+/* ==========================================================================
+   샘플 체험 카드 — Main.dc.html 254–258
+   ========================================================================== */
+
+/* align-items:center; gap:14px; flex-wrap:wrap; padding:16px 18px; border-radius:20px; background:var(--accent-soft) */
+.card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-14);
+  flex-wrap: wrap;
+  padding: var(--space-16) var(--space-18);
+  border-radius: var(--radius-20);
+  background: var(--accent-soft);
+}
+
+/* 44 · 둥글기 14 · 흰 바탕 · 강조색 · shadow-1 */
+.tile {
+  width: var(--size-44);
+  height: var(--size-44);
+  flex: none;
+  border-radius: var(--radius-14);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: var(--shadow-1);
+}
+
+/* flex:1 1 280px; min-width:0; gap:2px */
+.text {
+  flex: 1 1 var(--sample-banner-basis);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.title {
+  font-size: var(--fs-15-5);
+  font-weight: var(--fw-heavy);
+}
+.desc {
+  font-size: var(--fs-13-5);
+  line-height: var(--lh-155);
+  color: var(--ink-2);
+}
+
+/* height:42px; padding:0 16px; border-radius:12px; 흰 바탕 · --accent-ink · 14.5px 800 · shadow-1 */
+.button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: var(--size-42);
+  padding: 0 var(--space-16);
+  border: 0;
+  margin: 0;
+  border-radius: var(--radius-12);
+  background: var(--surface);
+  color: var(--accent-ink);
+  font-size: var(--fs-14-5);
+  font-weight: var(--fw-heavy);
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: var(--shadow-1);
+  transition:
+    transform var(--dur-press) var(--ease),
+    box-shadow var(--dur-color) var(--ease);
+}
+@media (hover: hover) {
+  .button:hover:not(:disabled) {
+    box-shadow: 0 0 0 var(--bw-1-5) var(--accent-line), var(--shadow-lift);
+  }
+}
+.button:active:not(:disabled) {
+  transform: scale(.97);
+}
+.button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+/* 휴대폰: 누르는 영역 44px 이상(보이는 크기는 그대로) */
+@media (max-width: 767.98px) {
+  .button::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, var(--touch-min));
+    height: max(100%, var(--touch-min));
+    transform: translate(-50%, -50%);
+  }
+}

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 0 32 32" width="32" height="32">
+  <!-- 프로토타입 dg-logo 심볼(Main.dc.html 아이콘 스프라이트), 바탕은 강조색 #00845C(① 설정값 accent) -->
+  <path d="M7 2H18L25 9V17C25 23.2 20.6 27.6 14 30C7.4 27.6 3 23.2 3 17V6C3 3.8 4.8 2 7 2Z" fill="#00845C"/>
+  <path d="M18 2V6.6C18 7.9 19.1 9 20.4 9H25Z" fill="#fff" fill-opacity=".45"/>
+  <rect x="7.5" y="11.6" width="9" height="2.4" rx="1.2" fill="#fff" fill-opacity=".62"/>
+  <rect x="7.5" y="15.9" width="13" height="4.2" rx="2.1" fill="#fff"/>
+  <rect x="7.5" y="22" width="6" height="2.4" rx="1.2" fill="#fff" fill-opacity=".62"/>
+</svg>

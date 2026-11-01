@@ -1,0 +1,662 @@
+/* ==========================================================================
+   문서가드 디자인 토큰
+   - 원본: Main.dc.html 44줄 루트 style 속성(이름·값 그대로) + 마크업·스크립트·
+     Components.dc.html에서 찾은 모든 색 리터럴과 크기 값.
+   - 색·크기·간격·둥글기·그림자·글자 크기·줄 간격·자간·z-index·시간·곡선은
+     이 파일의 변수로만 쓴다(`npm run check:tokens` 가 검사).
+   - 이 파일만 리터럴 값을 가진다. 다른 CSS·TS 파일은 var(--토큰)만 쓴다.
+   - 이름 규칙
+     · 색: 역할 이름(--ink, --fill, --hi-soft …). 원본 44줄 이름은 바꾸지 않는다.
+     · 숫자 단계(--space-12, --fs-13-5, --radius-14 …): 끝 숫자 = px 값(소수점은 -).
+     · 의미 별칭(--fs-body, --radius-ctl …): 단계 토큰을 가리킨다.
+     · 반응형 토큰(--ctl, --gutter, --head-h …): 맨 아래 @media 에서 값만 바뀐다.
+   - 중단점: 휴대폰 < 768px, 태블릿 768–1199px, 데스크톱 ≥ 1200px(≥ 1400px 넓은 패널).
+     기본값은 데스크톱 값이다.
+   ========================================================================== */
+
+:root {
+  /* ------------------------------------------------------------------------
+     1. 기본 색 — Main.dc.html 44줄 그대로
+     ------------------------------------------------------------------------ */
+  --ink: #141B2D;          /* 본문 남색 */
+  --ink-2: #4B5565;        /* 진한 보조 글자 */
+  --ink-3: #636B7A;        /* 보조 글자 */
+  --ink-4: #A0A7B3;        /* 흐린 글자·아이콘 */
+  --bg: #FFFFFF;           /* 바탕 */
+  --canvas: #EEF0F3;       /* 원문 뷰어 바탕 */
+  --band: #F6F7F9;         /* 띠·구역 바탕 */
+  --fill: #F2F4F6;         /* 채움 회색(입력·칩) */
+  --fill-2: #E6E9EE;       /* 진한 채움(눌림·사용 불가 버튼) */
+  --hover: #F7F8FA;        /* 행 호버 바탕 */
+  --line: #EEF0F3;         /* 구분선 */
+  --line-2: #E1E4E9;       /* 진한 구분선·테두리 */
+
+  /* 강조색 — 실제 값은 <html style="--accent: CONFIG.accent"> 로 들어온다(① 설정값).
+     아래는 기본값이며, 파생 색은 var(--accent)에서 color-mix로 만든다. */
+  --accent: #00845C;
+  --accent-ink: color-mix(in srgb, var(--accent) 80%, #000);       /* 강조 글자 */
+  --accent-soft: color-mix(in srgb, var(--accent) 8%, #fff);       /* 옅은 강조 바탕 */
+  --accent-soft-2: color-mix(in srgb, var(--accent) 15%, #fff);    /* 선택·완료 바탕 */
+  --accent-line: color-mix(in srgb, var(--accent) 34%, #fff);      /* 강조 테두리 */
+  --accent-bright: color-mix(in srgb, var(--accent) 70%, #2EE6A6); /* 밝은 강조(진행 막대) */
+
+  /* 위험 등급 — hi 높음 / md 보통 / lo 낮음 / na 미평가 */
+  --hi: #C9271C;
+  --hi-bg: #FFF0EF;
+  --hi-line: #FFD4D0;
+  --hi-solid: #F04438;
+  --md: #A84D00;
+  --md-bg: #FFF4E6;
+  --md-line: #FFDDB3;
+  --md-solid: #F08C1A;
+  --lo: #2457C5;
+  --lo-bg: #EEF4FF;
+  --lo-line: #CFDFFF;
+  --lo-solid: #3D7BEF;
+  --na: #56606F;
+  --na-bg: #F2F4F6;
+  --na-line: #DDE1E7;
+  --na-solid: #A3ABB8;
+
+  /* 알림 상태 — warn 주의 / err 오류 / run 진행 */
+  --warn: #A84D00;
+  --warn-bg: #FFF4E6;
+  --warn-line: #FFDDB3;
+  --warn-solid: #F08C1A;
+  --err: #C9271C;
+  --err-bg: #FFF0EF;
+  --err-line: #FFD4D0;
+  --run: #2457C5;
+  --run-bg: #EEF4FF;
+  --run-line: #CFDFFF;
+
+  /* 곡선 — 빨리 시작해 부드럽게 멈추는 곡선 하나(디자인 기준 07) */
+  --ease: cubic-bezier(.2,.8,.2,1);
+  --ease-io: cubic-bezier(.65,0,.35,1);  /* 무한 반복 진행 막대 전용 */
+  --ease-linear: linear;                 /* 회전·반짝임 전용 */
+
+  /* 그림자 — 44줄 그대로 */
+  --shadow-1: 0 1px 2px rgba(20,27,45,.06);
+  --shadow-2: 0 1px 2px rgba(20,27,45,.06), 0 8px 24px rgba(20,27,45,.10);
+  --shadow-3: 0 24px 64px rgba(20,27,45,.24), 0 4px 12px rgba(20,27,45,.08);
+
+  /* 글꼴 — Pretendard는 next/font 변수(--font-pretendard)를 앞에 둔다 */
+  --mono: var(--font-plex-mono, 'IBM Plex Mono'), 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: var(--font-pretendard, Pretendard), Pretendard, 'Pretendard Variable', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, sans-serif;
+
+  /* ------------------------------------------------------------------------
+     2. 위험 등급 표기 색 — ② 표시 규칙 RISK 의 solid·tag·soft·focus·halo
+        solid: 원문 밑줄·막대 / tag: 원문 위 이름표 바탕 / soft: 하이라이트 바탕
+        focus: 선택한 하이라이트 바탕 / halo: 선택 신호 테두리 퍼짐
+     ------------------------------------------------------------------------ */
+  --hi-tag: var(--hi);                     /* #C9271C */
+  --hi-soft: rgba(240,68,56,.10);
+  --hi-focus: rgba(240,68,56,.20);
+  --hi-halo: rgba(240,68,56,.45);
+  --md-tag: var(--md);                     /* #A84D00 */
+  --md-soft: rgba(240,140,26,.14);
+  --md-focus: rgba(240,140,26,.26);
+  --md-halo: rgba(240,140,26,.5);
+  --lo-tag: var(--lo);                     /* #2457C5 */
+  --lo-soft: rgba(61,123,239,.11);
+  --lo-focus: rgba(61,123,239,.22);
+  --lo-halo: rgba(61,123,239,.45);
+  --na-tag: var(--na);                     /* #56606F */
+  --na-soft: rgba(163,171,184,.16);
+  --na-focus: rgba(163,171,184,.28);
+  --na-halo: rgba(163,171,184,.5);
+
+  /* 검토사항(item)을 원문에서 가리킬 때 — fColor·fSoft·fTagBg·fHalo, 선택 행 바탕 */
+  --warn-focus: rgba(240,140,26,.16);
+  --warn-halo: var(--md-halo);             /* rgba(240,140,26,.5) */
+  --warn-tint: rgba(240,140,26,.07);       /* 선택한 검토사항 행 바탕 */
+
+  /* 강조색 반투명 — 그림자·선택 신호 */
+  --accent-halo: color-mix(in srgb, var(--accent) 45%, transparent);   /* 연결·기본 선택 신호 */
+  --accent-shadow: color-mix(in srgb, var(--accent) 24%, transparent); /* 주요 버튼 그림자 */
+  --accent-shadow-lg: color-mix(in srgb, var(--accent) 26%, transparent); /* 큰 주요 버튼 그림자 */
+  --selection: color-mix(in srgb, var(--accent) 18%, transparent);     /* ::selection, rgba(0,132,92,.18) */
+
+  /* ------------------------------------------------------------------------
+     3. 분석 상태 표기 색 — ② ASTATUS 의 fg·dot
+     ------------------------------------------------------------------------ */
+  --status-queued-fg: var(--ink-3);        /* #636B7A */
+  --status-queued-dot: var(--na-solid);    /* #A3ABB8 */
+  --status-running-fg: var(--run);
+  --status-running-dot: var(--lo-solid);   /* #3D7BEF */
+  --status-done-fg: var(--ink-2);
+  --status-done-dot: var(--ink-3);         /* #636B7A */
+  --status-partial-fg: var(--warn);
+  --status-partial-dot: var(--warn-solid); /* #F08C1A */
+  --status-failed-fg: var(--err);
+  --status-failed-dot: var(--hi-solid);    /* #F04438 */
+
+  /* ------------------------------------------------------------------------
+     4. 화면 공통 색
+     ------------------------------------------------------------------------ */
+  --on-solid: #FFFFFF;          /* 채운 바탕(강조·남색·위험 이름표·토스트) 위 흰 글자·아이콘 — 검토 필요 알약 포함 */
+  --surface: var(--bg);         /* 흰 판(메뉴·모달·카드·탭 선택 판) */
+  --ink-hover: #2A3347;         /* 남색 버튼 호버 */
+  --placeholder: #7A8290;       /* 입력 안내 글자 */
+  --disabled-bg: var(--fill-2); /* 사용할 수 없는 채운 버튼 바탕 #E6E9EE */
+  --disabled-fg: #7A8290;       /* 사용할 수 없는 큰 버튼 글자 */
+  --disabled-fg-2: #8B93A1;     /* 사용할 수 없는 작은 행동 버튼 글자 */
+  --disabled-ghost: #9AA1AD;    /* 사용할 수 없는 글자형·아이콘 버튼 */
+  --disabled-icon: #C6CBD3;     /* 사용할 수 없는 뷰어 도구 아이콘 */
+  --switch-off: #CDD2DA;        /* 스위치 꺼짐 바탕 */
+  --dropzone-line: #D5DAE1;     /* 파일 놓는 곳 점선 */
+  --count-bg: #EEF1F5;          /* 탭 숫자 알약(선택 전) */
+  --row-ai-bg: #FAFBFD;         /* 이력 표의 '최초 AI 결과' 행 */
+  --fp-underline: #8792A5;      /* 오탐 하이라이트 점선 밑줄 */
+  --strike: rgba(99,107,122,.5);/* 보고서 '최초 AI 값' 취소선 */
+  --skeleton-base: var(--line); /* 불러오는 중 막대 #EEF0F3 */
+  --skeleton-hi: #F8F9FB;       /* 불러오는 중 반짝임 */
+
+  /* 데모 데이터 표시(헤더 알약) — 디자인 기준 08 '데모 표시' */
+  --demo-bg: #FFF5D6;
+  --demo-fg: #6E4E00;
+  --demo-dot: #E0A800;
+
+  /* 토스트 */
+  --toast-bg: rgba(20,27,45,.95);
+  --toast-fg: var(--on-solid);
+  --toast-action-bg: rgba(255,255,255,.14);
+  --toast-action-hover: rgba(255,255,255,.24);
+  --toast-icon-error: #FFB4A9;
+  --toast-icon-success: #5EE6B0;
+
+  /* 모달 뒷배경 */
+  --scrim: rgba(20,27,45,.44);
+
+  /* 반투명 흰 판(뒤가 흐리게 비치는 고정 막대) */
+  --frost: rgba(255,255,255,.92);         /* 업로드 하단 막대·보고서 상단 막대 */
+  --frost-toolbar: rgba(255,255,255,.94); /* 원문 뷰어 떠 있는 도구 막대 */
+  --frost-sticky: rgba(255,255,255,.95);  /* 휴대폰 결과 패널 고정 머리 */
+
+  /* 호버 덧칠 — 남색(20,27,45) 반투명. 끝 숫자 = 불투명도(천분율) */
+  --tint-025: rgba(20,27,45,.025);
+  --tint-030: rgba(20,27,45,.03);
+  --tint-035: rgba(20,27,45,.035);
+  --tint-040: rgba(20,27,45,.04);
+  --tint-050: rgba(20,27,45,.05);
+  --tint-060: rgba(20,27,45,.06);
+
+  /* ------------------------------------------------------------------------
+     5. 샘플 문서(원문 종이) 색 — 가상 서식 화면 전용
+     ------------------------------------------------------------------------ */
+  --paper: #FFFFFF;             /* 종이 */
+  --paper-scan: #FBFBF7;        /* 스캔 문서 종이 */
+  --doc-ink: #1B2433;           /* 본문 글자·머리 막대 선·체크 상자 */
+  --doc-title: #111827;         /* 문서 제목·구역 제목 */
+  --doc-ink-2: #4A5568;         /* 작은 글자·머리 막대 글자·부제 */
+  --doc-label: #3B4860;         /* 항목 이름·표 머리 글자 */
+  --doc-label-bg: #F1F3F6;      /* 항목 이름·표 머리 바탕 */
+  --doc-rule: #8E99AB;          /* 항목 표·표 바깥선 */
+  --doc-rule-2: #C3CBD6;        /* 항목 이름 오른쪽 선·바닥글 윗선 */
+  --doc-cell-line: #B3BCC9;     /* 표 칸 선 */
+  --doc-foot: #5B6577;          /* 바닥글 글자 */
+  --doc-stamp-line: #B33A3A;    /* 접수 도장 테두리 */
+  --doc-stamp-ink: #A32F2F;     /* 접수 도장 글자 */
+  --doc-stamp-bg: rgba(255,255,255,.7);
+  --doc-blur-ink: #2A3342;      /* 판독 불가 영역의 흐린 글자 */
+  --doc-blur-stripe: rgba(194,102,10,.08); /* 판독 불가 빗금(다른 줄은 transparent) */
+  --doc-blur-line: #C98A3B;     /* 판독 불가 점선 테두리 */
+  --doc-flag-bg: #FFF7EC;       /* 판독 불가·잘림 안내 이름표 */
+  --doc-flag-fg: #8A4300;
+  --doc-flag-line: #F0C48A;
+  --doc-cut-1: #D3D9E2;         /* 잘린 부분 빗금 1·찢김 모양 */
+  --doc-cut-2: #C9D0DA;         /* 잘린 부분 빗금 2 */
+
+  /* ------------------------------------------------------------------------
+     6. 그림자(복합) — 마크업에 쓰인 그대로
+     ------------------------------------------------------------------------ */
+  --shadow-menu: 0 18px 44px rgba(20,27,45,.16), 0 2px 8px rgba(20,27,45,.06), 0 0 0 1px rgba(20,27,45,.05); /* 드롭다운·메뉴 */
+  --shadow-float: 0 10px 30px rgba(20,27,45,.16), 0 1px 3px rgba(20,27,45,.08), 0 0 0 1px rgba(20,27,45,.05); /* 뷰어 도구 막대 */
+  --shadow-paper: 0 1px 2px rgba(20,27,45,.08), 0 14px 36px rgba(20,27,45,.10); /* 원문 종이 */
+  --shadow-toast: 0 14px 36px rgba(20,27,45,.30);
+  --shadow-lift: 0 2px 6px rgba(20,27,45,.08);   /* 카드 호버 들림(테두리 링과 함께) */
+  --shadow-lift-2: 0 2px 8px rgba(20,27,45,.06); /* 주의 카드 호버 들림 */
+  --shadow-pick: 0 1px 3px rgba(20,27,45,.08);   /* 선택한 선택지 판 */
+  --shadow-knob: 0 1px 3px rgba(20,27,45,.12);   /* 탭·세그먼트 흰 판 */
+  --shadow-knob-2: 0 1px 3px rgba(20,27,45,.12), 0 1px 1px rgba(20,27,45,.04);
+  --shadow-switch: 0 1px 3px rgba(20,27,45,.3);  /* 스위치 손잡이 */
+  --shadow-tag: 0 2px 6px rgba(15,29,53,.25);    /* 원문 하이라이트 이름표 */
+  --shadow-accent: 0 4px 12px var(--accent-shadow);       /* 주요 버튼(중간) */
+  --shadow-accent-md: 0 6px 16px var(--accent-shadow);    /* 분석 시작 버튼 */
+  --shadow-accent-lg: 0 6px 16px var(--accent-shadow-lg); /* 큰 주요 버튼 */
+
+  /* ------------------------------------------------------------------------
+     7. 글자 크기 — 디자인 기준 08(34·30·20·15·13) + 마크업·L 값 전부
+     ------------------------------------------------------------------------ */
+  --fs-10-5: 10.5px;
+  --fs-11: 11px;
+  --fs-11-5: 11.5px;
+  --fs-12: 12px;
+  --fs-12-5: 12.5px;
+  --fs-13: 13px;
+  --fs-13-5: 13.5px;
+  --fs-14: 14px;
+  --fs-14-5: 14.5px;
+  --fs-15: 15px;
+  --fs-15-5: 15.5px;
+  --fs-16: 16px;
+  --fs-16-5: 16.5px;
+  --fs-17: 17px;
+  --fs-18: 18px;
+  --fs-19: 19px;
+  --fs-20: 20px;
+  --fs-22: 22px;
+  --fs-24: 24px;
+  --fs-26: 26px;
+  --fs-28: 28px;
+  --fs-30: 30px;
+  --fs-34: 34px;
+  --fs-36: 36px;
+  --fs-44: 44px;
+  /* 의미 별칭(디자인 기준 08) */
+  --fs-num: var(--fs-34);      /* 숫자 34 · 800 */
+  --fs-title: var(--fs-30);    /* 화면 제목 30 · 800 */
+  --fs-section: var(--fs-20);  /* 구역 20 · 800 */
+  --fs-body: var(--fs-15);     /* 본문 15 · 400 (루트 글자 크기) */
+  --fs-sub: var(--fs-13);      /* 보조 13 · 400 */
+  --fs-mono: var(--fs-13);     /* 고정폭 13 */
+
+  /* 굵기 */
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+  --fw-heavy: 800;
+
+  /* 줄 간격 — 끝 숫자 = 배수×100 */
+  --lh-100: 1;
+  --lh-115: 1.15;
+  --lh-120: 1.2;
+  --lh-125: 1.25;
+  --lh-130: 1.3;
+  --lh-135: 1.35;
+  --lh-140: 1.4;
+  --lh-145: 1.45;
+  --lh-150: 1.5;
+  --lh-155: 1.55;
+  --lh-160: 1.6;
+  --lh-165: 1.65;
+  --lh-170: 1.7;
+  --lh-190: 1.9;
+  --lh-270: 2.7;      /* 하이라이트 보기 보드 전용 */
+  --lh-20px: 20px;
+  --lh-body: var(--lh-155);
+
+  /* 자간 */
+  --ls-none: 0;
+  --ls-body: -0.005em;    /* 루트 */
+  --ls-tight-1: -0.015em;
+  --ls-tight-2: -0.02em;
+  --ls-tight-3: -0.025em;
+  --ls-tight-4: -0.03em;  /* 화면 제목 */
+  --ls-tight-5: -0.035em;
+  --ls-tight-6: -0.04em;  /* 큰 숫자 */
+  --ls-tight-7: -0.045em;
+  --ls-wide-1: .02em;
+  --ls-wide-2: .04em;     /* 문서 머리 막대 */
+  --ls-wide-3: .08em;     /* 문서 제목 */
+
+  /* ------------------------------------------------------------------------
+     8. 간격 단계 — 마크업의 gap·padding·margin 값. 끝 숫자 = px
+     ------------------------------------------------------------------------ */
+  --space-1: 1px;
+  --space-2: 2px;
+  --space-3: 3px;
+  --space-4: 4px;
+  --space-5: 5px;
+  --space-6: 6px;
+  --space-7: 7px;
+  --space-8: 8px;
+  --space-9: 9px;
+  --space-10: 10px;
+  --space-11: 11px;
+  --space-12: 12px;
+  --space-13: 13px;
+  --space-14: 14px;
+  --space-15: 15px;
+  --space-16: 16px;
+  --space-18: 18px;
+  --space-20: 20px;
+  --space-22: 22px;
+  --space-24: 24px;
+  --space-26: 26px;
+  --space-28: 28px;
+  --space-30: 30px;
+  --space-32: 32px;
+  --space-36: 36px;
+  --space-40: 40px;
+  --space-42: 42px;
+  --space-44: 44px;
+  --space-48: 48px;
+  --space-52: 52px;
+  --space-56: 56px;
+  --space-58: 58px;
+  --space-64: 64px;
+  --space-72: 72px;
+
+  /* 요소 크기 단계 — 아이콘·점·상자·버튼의 width/height. 끝 숫자 = px */
+  --size-2-5: 2.5px;
+  --size-4: 4px;
+  --size-5: 5px;
+  --size-6: 6px;
+  --size-7: 7px;
+  --size-8: 8px;
+  --size-9: 9px;
+  --size-10: 10px;
+  --size-11: 11px;   /* 작은 아이콘(위험 막대·체크) */
+  --size-12: 12px;
+  --size-13: 13px;
+  --size-14: 14px;
+  --size-15: 15px;
+  --size-16: 16px;
+  --size-17: 17px;
+  --size-18: 18px;
+  --size-19: 19px;
+  --size-20: 20px;
+  --size-21: 21px;
+  --size-22: 22px;
+  --size-24: 24px;
+  --size-26: 26px;
+  --size-28: 28px;
+  --size-30: 30px;
+  --size-32: 32px;
+  --size-34: 34px;
+  --size-36: 36px;
+  --size-38: 38px;
+  --size-40: 40px;
+  --size-42: 42px;
+  --size-44: 44px;
+  --size-46: 46px;
+  --size-48: 48px;
+  --size-50: 50px;
+  --size-52: 52px;
+  --size-54: 54px;
+  --size-56: 56px;
+  --size-60: 60px;
+  --size-64: 64px;
+
+  /* 선 두께 — 1px·2px 는 리터럴 허용, 나머지는 토큰 */
+  --bw-1-4: 1.4px;   /* 문서 체크 상자 */
+  --bw-1-5: 1.5px;   /* 안쪽 선택 링(inset 0 0 0 1.5px) */
+  --bw-2-2: 2.2px;   /* 돌림 표시(스피너) */
+  --bw-2-5: 2.5px;
+  --bw-3: 3px;       /* 입력 포커스 퍼짐 링 */
+  --bw-3-5: 3.5px;   /* 이력 점 */
+  --focus-w: 2px;
+  --focus-offset: 2px;
+
+  /* 둥글기 */
+  --radius-2: 2px;
+  --radius-3: 3px;
+  --radius-4: 4px;
+  --radius-6: 6px;
+  --radius-7: 7px;
+  --radius-8: 8px;
+  --radius-9: 9px;
+  --radius-10: 10px;
+  --radius-11: 11px;
+  --radius-12: 12px;
+  --radius-14: 14px;
+  --radius-16: 16px;
+  --radius-18: 18px;
+  --radius-20: 20px;
+  --radius-22: 22px;
+  --radius-24: 24px;
+  --radius-pill: 999px;
+  --radius-round: 50%;
+  --radius-paper: var(--radius-4);  /* 원문 종이 */
+  --radius-ctl: var(--radius-12);   /* 버튼·입력 */
+  --radius-card: var(--radius-16);  /* 카드·알림 */
+  --radius-menu: var(--radius-18);  /* 드롭다운 */
+
+  /* ------------------------------------------------------------------------
+     9. 컨트롤 높이 (반응형 — 아래 @media)
+     ------------------------------------------------------------------------ */
+  --ctl: 40px;        /* 기본 버튼·입력 (휴대폰 44) */
+  --ctl-sm: 34px;     /* 작은 버튼 (휴대폰 40) */
+  --chip-h: 30px;     /* 필터 칩 (휴대폰 36) */
+  --item-action-h: 36px; /* 탐지 항목 행동 버튼 */
+  --touch-min: 44px;  /* 휴대폰 최소 누름 영역 */
+
+  /* ------------------------------------------------------------------------
+     10. 레이아웃 폭·높이
+     ------------------------------------------------------------------------ */
+  --head-h: 64px;          /* 헤더 (태블릿·휴대폰 56) */
+  --left-w: 236px;         /* 상세 왼쪽 문서 패널 (≥1400: 256, 태블릿 248) */
+  --right-w: 376px;        /* 상세 오른쪽 결과 패널 (≥1400: 408, 태블릿 352) */
+  --rail-w: 56px;          /* 접힌 왼쪽 레일 */
+  --paper-w: 760px;        /* 원문 종이 폭(PAGE_W) */
+  --paper-min-h: 1075px;   /* 원문 종이 최소 높이 */
+  --content-max: 1200px;   /* 목록 화면 최대 폭 */
+  --report-max: 1040px;    /* 보고서·업로드 최대 폭 */
+  --text-max: 760px;       /* 안내 문단 최대 폭 */
+  --narrow-max: 520px;
+  --alert-max: 440px;
+  --tip-max: 300px;
+  --modal-w-sm: 540px;     /* 확인 모달 */
+  --modal-w: 600px;        /* 보통 모달 */
+  --modal-w-lg: 640px;     /* 분류 수정·내보내기 모달 */
+  --menu-w: 248px;         /* 드롭다운 기본 폭 */
+  --menu-min-w: 176px;
+  --kv-label-w: 112px;     /* 원문 항목표 이름 칸(2열) */
+  --kv-label-w-3: 84px;    /* 원문 항목표 이름 칸(3열) */
+
+  /* 표 최소 폭 — 원본의 900/720/620 은 각각 다른 표다(가로 스크롤 기준) */
+  --list-table-min-w: 900px;                         /* 분석 목록 표 (Main 172) */
+  --table-min-w: 720px;                              /* 보고서의 넓은 표 */
+  --report-doc-table-min-w: var(--table-min-w);      /* 보고서 문서별 처리 상태 표 (649) */
+  --report-change-table-min-w: var(--table-min-w);   /* 보고서 변경 이력 표 (679) */
+  --report-cat-table-min-w: 620px;                   /* 보고서 정보 종류별 표 (654) */
+
+  /* 화면별 고정 크기 — Main.dc.html 마크업 값 그대로(괄호 = 원본 줄) */
+  --list-search-basis: 260px;      /* 목록 검색 영역 flex 기준 `flex:1 1 260px` (143) */
+  --list-menu-min-w: 232px;        /* 목록 정렬·필터 드롭다운 메뉴 최소 폭 (152) */
+  --empty-art-w: 184px;            /* 빈 목록 그림 (207) */
+  --empty-art-h: 132px;
+  --sample-banner-basis: 280px;    /* 새 분석: 샘플 체험 안내 글 flex 기준 (256) */
+  --status-banner-basis: 320px;    /* 상세: 분석 상태 띠 글 flex 기준 (361) */
+  --doc-sign-name-min-w: 130px;    /* 원문 서명 이름 칸 최소 폭 (417) */
+  --doc-blur-radius: 2.6px;        /* 원문 판독 불가 글자 흐림 `blur(2.6px)` (419) */
+  --doc-cut-min-h: 170px;          /* 원문 잘린 영역 최소 높이 (420) */
+  --finding-label-w: 78px;         /* 탐지 정보 이름 열 `78px minmax(0, 1fr)` (488) */
+  --link-line-left: 29px;          /* 연결 카드 세로선 위치 (551) */
+  --fail-desc-basis: 200px;        /* 실패 문서 설명 flex 기준 `flex:1 1 200px` (591) */
+  --select-menu-min-w: 200px;      /* 선택 메뉴 최소 폭 `min-width:max(100%, 200px)` (720) */
+  --select-menu-max-w: 300px;      /* 선택 메뉴 최대 폭 (720) */
+  --select-menu-max-h: 264px;      /* 선택 메뉴 최대 높이 (720) */
+  --export-preview-max-h: 180px;   /* 내보내기 모달 파일 미리보기 최대 높이 (742) */
+
+  /* ------------------------------------------------------------------------
+     11. 반응형 간격 (L 값) — 데스크톱 기본값
+     ------------------------------------------------------------------------ */
+  --gutter: 24px;
+  --head-gap: 12px;
+  --nav-gap: 28px;
+  --nav-ml: 28px;
+  --fs-h1: 30px;                    /* 목록·업로드 화면 제목 */
+  --fs-lead: 17px;                  /* 화면 제목 아래 안내 */
+  --page-pad: 40px 40px 56px;
+  --list-gap: 32px;
+  --sum-pad: 18px 20px;             /* 요약 칸 안쪽 여백 */
+  --fs-sum-num: 34px;               /* 요약 숫자 */
+  --search-max: 380px;
+  --empty-pad: 56px 24px 72px;
+  --step-line-w: 28px;              /* 단계 연결선 */
+  --step-line-h: 2px;
+  --upload-pad: 28px 32px 40px;
+  --dropzone-pad: 40px 24px;
+  --upload-foot-pad: 14px 32px;
+  --detail-head-pad: 12px 24px 14px;
+  --detail-head-gap: 10px;
+  --fs-detail-title: 22px;          /* 상세 제목 (태블릿 20, 휴대폰 18) */
+  --pager-w: 160px;
+  --detail-btn-pad-l: 12px;
+  --detail-btn-pad-r: 16px;
+  --viewer-bar-bottom: 16px;
+  --viewer-btn: 34px;
+  --viewer-label-w: 50px;
+  --viewer-label-w-2: 46px;
+  --viewer-div-m: 4px;
+  --viewer-name-max: 240px;         /* 좁은 뷰어(700px 미만)에서는 120px — 화면이 계산 */
+  --viewer-name-max-compact: 120px;
+  --stat-pr: 16px;
+  --stat-mr: 16px;
+  --fail-pad: 36px 32px 56px;
+  --modal-pad: 24px;
+  --modal-max-h: calc(100vh - 48px);
+  --modal-radius: 22px;
+  --modal-head-pad: 22px 24px 6px;
+  --modal-body-pad: 12px 24px 20px;
+  --modal-foot-pad: 4px 24px 22px;
+  --toast-bottom: 28px;
+  --report-pad: 40px 40px 72px;
+  --report-gap: 36px;
+  --fs-report-title: 34px;
+  --fs-kpi-num: 36px;
+  --report-sec-pad: 32px;
+  --report-cell3-pl: 16px;
+  --timeline-label-w: 132px;        /* 보고서 이력 시각 칸 */
+
+  /* ------------------------------------------------------------------------
+     12. z-index 단계
+     ------------------------------------------------------------------------ */
+  --z-raise: 1;        /* 탭 선택 판 위 글자, 도장 */
+  --z-tag: 2;          /* 원문 하이라이트 이름표·고정 머리 */
+  --z-float: 3;        /* 뷰어 떠 있는 도구 막대 */
+  --z-sticky: 5;       /* 하단·상단 고정 막대 */
+  --z-header: 10;      /* 헤더 */
+  --z-dropdown: 40;    /* 드롭다운 메뉴 */
+  --z-modal: 50;       /* 모달 */
+  --z-toast: 60;       /* 토스트 */
+
+  /* ------------------------------------------------------------------------
+     13. 시간 — 디자인 기준 07: 누름 .12s · 색 .15–.25s · 등장 .3–.45s · 숫자 .7–1.1s
+         끝 숫자 = 밀리초
+     ------------------------------------------------------------------------ */
+  --dur-40: 40ms;      /* 목록 행 차례 등장 간격 */
+  --dur-100: .1s;
+  --dur-120: .12s;
+  --dur-150: .15s;
+  --dur-200: .2s;
+  --dur-220: .22s;
+  --dur-250: .25s;
+  --dur-260: .26s;
+  --dur-280: .28s;
+  --dur-300: .3s;
+  --dur-320: .32s;
+  --dur-340: .34s;
+  --dur-350: .35s;
+  --dur-400: .4s;
+  --dur-420: .42s;
+  --dur-450: .45s;
+  --dur-550: .55s;
+  --dur-600: .6s;
+  --dur-700: .7s;
+  --dur-750: .75s;
+  --dur-800: .8s;
+  --dur-900: .9s;
+  --dur-1000: 1s;
+  --dur-1100: 1.1s;
+  --dur-1500: 1.5s;
+  --dur-none: 0s;
+  --dur-reduced: .01ms; /* 동작 줄이기: 움직임을 즉시 끝냄 */
+  /* 의미 별칭 */
+  --dur-press: var(--dur-120);   /* 누름 */
+  --dur-color: var(--dur-150);   /* 색 변화(짧게) */
+  --dur-color-2: var(--dur-200);
+  --dur-color-3: var(--dur-250);
+  --dur-enter: var(--dur-450);   /* 화면 등장 */
+  --dur-drop: var(--dur-220);    /* 드롭다운 열림 */
+  --dur-pop: var(--dur-320);     /* 모달 떠오름 */
+  --dur-sheet: var(--dur-400);   /* 휴대폰 시트 올라옴 */
+  --dur-toast: var(--dur-400);
+  --dur-page: var(--dur-420);    /* 쪽 바뀜 */
+  --dur-slide: var(--dur-340);   /* 탭 흰 판 미끄러짐 */
+  --dur-count: var(--dur-1100);  /* 숫자 세어 올라감 */
+  --dur-count-change: var(--dur-700);
+  --dur-ring: var(--dur-1100);   /* 원문 위치 신호(두 번) */
+  --dur-spin: var(--dur-750);
+  --dur-spin-slow: var(--dur-800);
+  --dur-shimmer: var(--dur-1500);
+  --dur-indet: var(--dur-1500);
+}
+
+/* --------------------------------------------------------------------------
+   반응형 — L 값의 휴대폰·태블릿·데스크톱 차이(토큰 값만 바꾼다)
+   -------------------------------------------------------------------------- */
+
+/* 넓은 데스크톱(≥ 1400px): 옆 패널이 더 넓다 */
+@media (min-width: 1400px) {
+  :root {
+    --left-w: 256px;
+    --right-w: 408px;
+  }
+}
+
+/* 태블릿 이하(< 1200px) */
+@media (max-width: 1199.98px) {
+  :root {
+    --head-h: 56px;
+    --left-w: 248px;
+    --right-w: 352px;
+    --fs-detail-title: 20px;
+  }
+}
+
+/* 휴대폰(< 768px) */
+@media (max-width: 767.98px) {
+  :root {
+    --ctl: 44px;
+    --ctl-sm: 40px;
+    --chip-h: 36px;
+    --gutter: 16px;
+    --head-gap: 8px;
+    --nav-gap: 16px;
+    --nav-ml: 6px;
+    --fs-h1: 24px;
+    --fs-lead: 15px;
+    --page-pad: 24px 16px 40px;
+    --list-gap: 24px;
+    --sum-pad: 12px 12px;
+    --fs-sum-num: 26px;
+    --search-max: 100%;
+    --empty-pad: 36px 4px;
+    --step-line-w: 2px;
+    --step-line-h: 12px;
+    --upload-pad: 16px 16px 28px;
+    --dropzone-pad: 28px 16px;
+    --upload-foot-pad: 12px 16px 16px;
+    --detail-head-pad: 8px 16px 12px;
+    --detail-head-gap: 8px;
+    --fs-detail-title: 18px;
+    --pager-w: auto;
+    --detail-btn-pad-l: 10px;
+    --detail-btn-pad-r: 12px;
+    --viewer-bar-bottom: 12px;
+    --viewer-btn: 32px;
+    --viewer-label-w: 40px;
+    --viewer-label-w-2: 40px;
+    --viewer-div-m: 2px;
+    --stat-pr: 0;
+    --stat-mr: 14px;
+    --fail-pad: 24px 16px 40px;
+    --modal-pad: 0;
+    --modal-max-h: 92vh;
+    --modal-radius: 24px 24px 0 0;
+    --modal-head-pad: 10px 20px 4px;
+    --modal-body-pad: 10px 20px 16px;
+    --modal-foot-pad: 8px 20px 20px;
+    --toast-bottom: 20px;
+    --report-pad: 24px 16px 48px;
+    --report-gap: 28px;
+    --fs-report-title: 26px;
+    --fs-kpi-num: 28px;
+    --report-sec-pad: 24px;
+    --report-cell3-pl: 0;
+  }
+}

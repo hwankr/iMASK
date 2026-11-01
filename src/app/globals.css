@@ -1,0 +1,105 @@
+/* ==========================================================================
+   전역 스타일 — Main.dc.html head(1–43줄) 규칙과 44줄 루트 글자 규칙
+   값은 모두 tokens.css 의 변수다. @keyframes·@property 안의 값은 원본 그대로 둔다.
+   화면 높이 고정·내부 스크롤 구조는 AppShell(T2)이 맡는다.
+   ========================================================================== */
+@import "../styles/tokens.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+/* 루트 글자 규칙(44줄) */
+html {
+  font-family: var(--sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  letter-spacing: var(--ls-body);
+  color: var(--ink);
+  background: var(--bg);
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: var(--bg);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+}
+
+:focus-visible {
+  outline: var(--focus-w) solid var(--accent);
+  outline-offset: var(--focus-offset);
+}
+
+::placeholder {
+  color: var(--placeholder);
+  opacity: 1;
+}
+
+::selection {
+  background: var(--selection);
+}
+
+/* 숫자 세어 올라가기(dg-count)용 정수 변수 */
+@property --dg-n {
+  syntax: '<integer>';
+  inherits: false;
+  initial-value: 0;
+}
+
+/* 움직임 — 이름·내용 원본 그대로 */
+@keyframes dg-count { from { --dg-n: 0; } }
+@keyframes dg-in { from { opacity: 0; transform: translateY(12px); } }
+@keyframes dg-in-b { from { opacity: 0; transform: translateY(12px); } }
+@keyframes dg-fade { from { opacity: 0; } }
+@keyframes dg-pop { from { opacity: 0; transform: translateY(10px) scale(.97); } }
+@keyframes dg-drop { from { opacity: 0; transform: translateY(-6px) scale(.98); } }
+@keyframes dg-sheet { from { transform: translateY(100%); } }
+@keyframes dg-toast { from { opacity: 0; transform: translate(-50%, 18px) scale(.96); } }
+@keyframes dg-expand { from { opacity: 0; transform: translateY(-6px); } }
+@keyframes dg-page-a { from { opacity: 0; transform: translateY(10px); } }
+@keyframes dg-page-b { from { opacity: 0; transform: translateY(10px); } }
+@keyframes dg-ring-a {
+  0% { box-shadow: 0 0 0 2px var(--pc), 0 0 0 2px var(--ph); }
+  100% { box-shadow: 0 0 0 2px var(--pc), 0 0 0 14px transparent; }
+}
+@keyframes dg-ring-b {
+  0% { box-shadow: 0 0 0 2px var(--pc), 0 0 0 2px var(--ph); }
+  100% { box-shadow: 0 0 0 2px var(--pc), 0 0 0 14px transparent; }
+}
+@keyframes dg-spin { to { transform: rotate(360deg); } }
+@keyframes dg-shimmer { from { background-position: 160% 0; } to { background-position: -60% 0; } }
+@keyframes dg-indet { from { transform: translateX(-110%); } to { transform: translateX(260%); } }
+@keyframes dg-grow { from { transform: scaleX(0); } }
+@keyframes dg-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+
+/* 동작 줄이기 — 모든 움직임이 즉시 끝난다(원본 규칙 그대로) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: var(--dur-reduced) !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: var(--dur-none) !important;
+    transition-duration: var(--dur-reduced) !important;
+    scroll-behavior: auto !important;
+  }
+}

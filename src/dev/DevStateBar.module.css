@@ -1,0 +1,68 @@
+/* 개발용 상태 막대 — 화면 디자인 밖의 도구라 단순하게 둔다. */
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: var(--ctl-sm);
+  padding: var(--space-6) var(--gutter);
+  background: var(--demo-bg);
+  color: var(--demo-fg);
+  font-size: var(--fs-13);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-140);
+  border-bottom: 1px solid var(--line-2);
+}
+
+.back,
+.move {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-28);
+  padding: 0 var(--space-10);
+  border-radius: var(--radius-pill);
+  color: inherit;
+  text-decoration: none;
+  transition: background-color var(--dur-color) var(--ease);
+}
+
+.back:hover,
+.move:hover {
+  background: var(--tint-060);
+}
+
+.move[aria-disabled='true'] {
+  color: var(--disabled-ghost);
+  background: transparent;
+}
+
+.sep {
+  color: var(--ink-4);
+}
+
+.count {
+  font-family: var(--mono);
+  font-weight: var(--fw-semibold);
+}
+
+.phone {
+  font-weight: var(--fw-bold);
+}
+
+.title {
+  font-weight: var(--fw-heavy);
+  color: var(--ink);
+}
+
+.moves {
+  display: inline-flex;
+  gap: var(--space-4);
+  margin-left: auto;
+}
+
+@media (max-width: 767.98px) {
+  .back,
+  .move {
+    min-height: var(--touch-min);
+  }
+}

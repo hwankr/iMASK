@@ -1,0 +1,112 @@
+/* ==========================================================================
+   아이콘 버튼 — 보드 02 '아이콘 · 포커스', Main 285·304·333·376·709
+   누름 scale(.92) · 툴팁(마우스 올림·키보드 포커스) · 휴대폰 누르는 영역 44px 이상
+   ========================================================================== */
+.button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    background-color var(--dur-color) var(--ease),
+    color var(--dur-color) var(--ease),
+    transform var(--dur-press) var(--ease);
+}
+
+.s32 { width: var(--size-32); height: var(--size-32); border-radius: var(--radius-10); }
+.s34 { width: var(--size-34); height: var(--size-34); border-radius: var(--radius-10); }
+.s36 { width: var(--size-36); height: var(--size-36); border-radius: var(--radius-10); }
+.s40 { width: var(--size-40); height: var(--size-40); border-radius: var(--radius-12); }
+.s44 { width: var(--size-44); height: var(--size-44); border-radius: var(--radius-12); }
+
+.ghost {
+  background: transparent;
+  color: var(--ink-2);
+}
+.muted {
+  background: transparent;
+  color: var(--ink-3);
+}
+.secondary {
+  background: var(--fill);
+  color: var(--ink);
+}
+
+@media (hover: hover) {
+  .ghost:hover:not(:disabled),
+  .muted:hover:not(:disabled) {
+    background: var(--fill);
+    color: var(--ink);
+  }
+  .secondary:hover:not(:disabled) {
+    background: var(--fill-2);
+  }
+}
+
+.button:active:not(:disabled) {
+  transform: scale(.92);
+}
+
+.button:disabled {
+  color: var(--disabled-ghost);
+  cursor: not-allowed;
+}
+
+/* 휴대폰: 보이는 크기는 그대로 두고 누르는 영역만 44px 이상으로 넓힌다 */
+@media (max-width: 767.98px) {
+  .button::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, var(--touch-min));
+    height: max(100%, var(--touch-min));
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* ---------- 툴팁 ----------
+   숨어 있을 때는 display:none — 보이지 않는 툴팁이 스크롤 영역을 넓히지 않게 한다.
+   마우스 올림은 0.3초 뒤에, 키보드 포커스는 바로 나타난다(dg-fade). */
+.tip {
+  position: absolute;
+  top: calc(100% + var(--space-6));
+  left: 50%;
+  z-index: var(--z-dropdown);
+  display: none;
+  padding: var(--space-5) var(--space-8);
+  border-radius: var(--radius-8);
+  background: var(--toast-bg);
+  color: var(--toast-fg);
+  box-shadow: var(--shadow-2);
+  font-size: var(--fs-12);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-135);
+  letter-spacing: var(--ls-none);
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+.tipTop {
+  top: auto;
+  bottom: calc(100% + var(--space-6));
+}
+
+@media (hover: hover) {
+  .button:hover .tip {
+    display: block;
+    --dg-anim: dg-fade; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+    animation: var(--dg-anim) var(--dur-color) var(--ease) var(--dur-300) both;
+  }
+}
+.button:focus-visible .tip {
+  display: block;
+  --dg-anim: dg-fade; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-color) var(--ease) both;
+}

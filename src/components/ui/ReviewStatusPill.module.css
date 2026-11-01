@@ -1,0 +1,47 @@
+/* 검토 상태 — 원본 border-radius:999px; color:{{rv.fg}}; background:{{rv.bg}}; box-shadow:inset 0 0 0 1.5px {{rv.line}} */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-5);
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+  color: var(--rv-fg);
+  background: var(--rv-bg);
+  box-shadow: inset 0 0 0 var(--bw-1-5) var(--rv-line);
+  font-weight: var(--fw-heavy);
+}
+
+/* 휴대폰 목록 카드 (Main 190) */
+.xs {
+  gap: var(--space-4);
+  height: var(--size-26);
+  padding: 0 var(--space-10) 0 var(--space-8);
+  font-size: var(--fs-12-5);
+  font-weight: var(--fw-bold);
+}
+
+/* 목록 행 (Main 175) · strong = 상세 머리 (349) */
+.sm {
+  height: var(--size-26);
+  padding: 0 var(--space-11) 0 var(--space-9);
+  font-size: var(--fs-13);
+  font-weight: var(--fw-bold);
+}
+.sm.strong {
+  font-weight: var(--fw-heavy);
+  transition: background-color var(--dur-color-3), color var(--dur-color-3);
+}
+
+/* 보드 01 (Components 100) */
+.md {
+  height: var(--size-28);
+  padding: 0 var(--space-12) 0 var(--space-10);
+  font-size: var(--fs-13-5);
+}
+
+/* 보고서 머리 (Main 621) */
+.lg {
+  height: var(--size-30);
+  padding: 0 var(--space-12) 0 var(--space-10);
+  font-size: var(--fs-14);
+}

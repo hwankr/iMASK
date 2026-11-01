@@ -1,0 +1,276 @@
+/* ==========================================================================
+   드롭다운 — 보드 03(펼친 상태) · Main 148–160(목록 필터·정렬) · 717–724(분류 수정)
+   ========================================================================== */
+.wrap {
+  position: relative;
+  display: inline-flex;
+}
+.wrapField {
+  display: flex;
+  min-width: 0;
+}
+
+/* ---------- 트리거 ---------- */
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  margin: 0;
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--ink);
+  background: var(--fill);
+  transition:
+    background-color var(--dur-color-2) var(--ease),
+    color var(--dur-color-2) var(--ease),
+    box-shadow var(--dur-color-2) var(--ease),
+    filter var(--dur-color) var(--ease),
+    transform var(--dur-press) var(--ease);
+}
+.trigger:disabled {
+  color: var(--disabled-ghost);
+  cursor: not-allowed;
+}
+
+/* 목록 필터 (Main 150) */
+.trigger-filter,
+.trigger-sort {
+  gap: var(--space-7);
+  height: var(--size-44);
+  padding: 0 var(--space-12) 0 var(--space-14);
+  border-radius: var(--radius-12);
+  font-size: var(--fs-14);
+  font-weight: var(--fw-bold);
+}
+/* 정렬 — 바탕 없음 · 진한 보조 글자 · 왼쪽 여백 10 */
+.trigger-sort {
+  padding-left: var(--space-10);
+  background: transparent;
+  color: var(--ink-2);
+}
+/* 필터가 걸림 — 초록 */
+.on {
+  background: var(--accent-soft-2);
+  color: var(--accent-ink);
+  box-shadow: inset 0 0 0 var(--bw-1-5) var(--accent-line);
+}
+@media (hover: hover) {
+  .trigger-filter:enabled:hover,
+  .trigger-sort:enabled:hover {
+    filter: brightness(.97);
+  }
+  .trigger-field:enabled:hover {
+    filter: brightness(.98);
+  }
+}
+.trigger-filter:enabled:active,
+.trigger-sort:enabled:active {
+  transform: scale(.97);
+}
+
+/* 모달 선택칸 (Main 719) */
+.trigger-field {
+  width: 100%;
+  gap: var(--space-8);
+  height: var(--size-48);
+  padding: 0 var(--space-12) 0 var(--space-14);
+  border-radius: var(--radius-12);
+  font-size: var(--fs-14-5);
+  font-weight: var(--fw-semibold);
+  text-align: left;
+}
+.trigger-field:enabled:active {
+  transform: scale(.98);
+}
+.changed {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 var(--bw-1-5) var(--accent);
+}
+
+/* 펼침 — 흰 바탕 + 강조색 2px */
+.open {
+  background: var(--surface);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.value {
+  min-width: 0;
+}
+.trigger-field .value {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sortIcon {
+  flex: none;
+  width: var(--size-16);
+  height: var(--size-16);
+}
+
+.chev {
+  display: inline-flex;
+  transition: transform var(--dur-280) var(--ease);
+}
+.trigger-field .chev {
+  color: var(--ink-2);
+}
+.chevOpen {
+  transform: rotate(180deg);
+}
+
+/* ---------- 메뉴 ---------- */
+.menu {
+  position: absolute;
+  z-index: var(--z-dropdown);
+  width: max-content;
+  padding: var(--space-6);
+  background: var(--surface);
+  box-shadow: var(--shadow-menu);
+}
+.alignStart {
+  left: 0;
+  right: auto;
+  transform-origin: top left;
+}
+.alignEnd {
+  left: auto;
+  right: 0;
+  transform-origin: top right;
+}
+
+/* 목록 필터·정렬 메뉴 (Main 152)
+   최소 폭 기본은 Main 의 232(--list-menu-min-w). 보드 견본처럼 다른 폭이 필요하면 감싼 요소에서
+   --dd-menu-min-w 를 토큰으로 지정한다(예: /dev/components 보드 03 = --menu-w 248). */
+.menuList {
+  top: calc(100% + var(--space-8));
+  min-width: var(--dd-menu-min-w, var(--list-menu-min-w));
+  max-width: calc(100vw - var(--space-32));
+  border-radius: var(--radius-menu);
+  --dg-anim: dg-drop; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-drop) var(--ease) both;
+}
+
+/* 모달 선택칸 메뉴 (Main 720) */
+.menuField {
+  top: calc(100% + var(--space-6));
+  min-width: max(100%, var(--select-menu-min-w));
+  max-width: var(--select-menu-max-w);
+  max-height: var(--select-menu-max-h);
+  overflow: auto;
+  border-radius: var(--radius-16);
+  transform-origin: top center;
+  --dg-anim: dg-drop; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-200) var(--ease) both;
+}
+
+.menuTitle {
+  padding: var(--space-8) var(--space-10) var(--space-6);
+  font-size: var(--fs-12);
+  font-weight: var(--fw-bold);
+  color: var(--ink-3);
+}
+
+/* ---------- 항목 ---------- */
+.option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  border: 0;
+  margin: 0;
+  background: transparent;
+  color: var(--ink);
+  font-weight: var(--fw-semibold);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-press);
+}
+.optionList {
+  gap: var(--space-10);
+  height: var(--size-44);
+  padding: 0 var(--space-10) 0 var(--space-8);
+  border-radius: var(--radius-12);
+  font-size: var(--fs-14-5);
+  white-space: nowrap;
+}
+.optionField {
+  gap: var(--space-8);
+  min-height: var(--size-42);
+  padding: var(--space-6) var(--space-8) var(--space-6) var(--space-12);
+  border-radius: var(--radius-10);
+  font-size: var(--fs-14);
+}
+.selected {
+  background: var(--accent-soft);
+  font-weight: var(--fw-heavy);
+}
+@media (hover: hover) {
+  .option:hover {
+    background: var(--fill);
+  }
+}
+.option:focus-visible {
+  outline: none;
+  background: var(--fill);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.tile {
+  width: var(--size-28);
+  height: var(--size-28);
+  flex: none;
+  border-radius: var(--radius-9);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--dd-tile-bg);
+  color: var(--dd-tile-fg);
+}
+
+.optionLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.count {
+  min-width: var(--size-18);
+  text-align: right;
+  font-size: var(--fs-13);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* '최초 AI' 표시 (Main 720) */
+.ai {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: var(--size-20);
+  padding: 0 var(--space-7);
+  border-radius: var(--radius-pill);
+  background: var(--fill);
+  color: var(--ink-3);
+  font-size: var(--fs-11-5);
+  font-weight: var(--fw-heavy);
+  white-space: nowrap;
+}
+
+/* 고른 항목의 초록 체크 */
+.check {
+  width: var(--size-18);
+  flex: none;
+  display: inline-flex;
+  justify-content: center;
+  color: var(--accent);
+  opacity: 0;
+  transform: scale(.5);
+  transition:
+    opacity var(--dur-color),
+    transform var(--dur-drop) var(--ease);
+}
+.selected .check {
+  opacity: 1;
+  transform: scale(1);
+}

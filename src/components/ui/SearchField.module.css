@@ -1,0 +1,47 @@
+/* 검색칸 — Main 143–147: height 44 · padding 0 14 0 42 · radius 12 · 15px */
+.wrap {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+
+.icon {
+  position: absolute;
+  left: var(--space-14);
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  color: var(--ink-3);
+  pointer-events: none;
+}
+
+.input {
+  width: 100%;
+  height: var(--size-44);
+  padding: 0 var(--space-14) 0 var(--space-42);
+  border: 0;
+  margin: 0;
+  border-radius: var(--radius-12);
+  background: var(--fill);
+  box-shadow: none;
+  font-size: var(--fs-15);
+  outline: none;
+  transition:
+    background-color var(--dur-color) var(--ease),
+    box-shadow var(--dur-color) var(--ease);
+}
+.input:focus-visible {
+  outline: none;
+}
+
+/* 검색어가 있을 때 (list.qBg / qRing) */
+.filled {
+  background: var(--surface);
+  box-shadow: inset 0 0 0 var(--bw-1-5) var(--accent-line);
+}
+
+/* 누르면 흰 바탕 + 강조색 2px (style-focus) */
+.input:focus {
+  background: var(--surface);
+  box-shadow: 0 0 0 2px var(--accent);
+}

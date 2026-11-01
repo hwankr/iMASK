@@ -1,0 +1,30 @@
+.spinner {
+  display: inline-block;
+  flex: none;
+  border-radius: var(--radius-round);
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  --dg-anim: dg-spin; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-spin) var(--ease-linear) infinite;
+}
+
+.s12 { width: var(--size-12); height: var(--size-12); }
+.s13 { width: var(--size-13); height: var(--size-13); }
+.s14 { width: var(--size-14); height: var(--size-14); }
+.s15 { width: var(--size-15); height: var(--size-15); }
+.s16 { width: var(--size-16); height: var(--size-16); border-width: var(--bw-2-2); }
+.s22,
+.s24 {
+  border-width: var(--bw-3);
+  animation-duration: var(--dur-spin-slow);
+}
+.s22 { width: var(--size-22); height: var(--size-22); }
+.s24 { width: var(--size-24); height: var(--size-24); }
+
+.spinner.medium {
+  border-width: var(--bw-2-2);
+}
+
+.spinner.heavy {
+  border-width: var(--bw-2-5);
+}

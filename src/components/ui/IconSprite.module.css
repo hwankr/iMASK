@@ -1,0 +1,12 @@
+/* 숨은 스프라이트 — 원본 style="position:absolute; width:0; height:0; overflow:hidden" */
+.sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* 로고 안쪽 흰 도형(원본 fill="#fff") — use 로 복제된 도형에도 같은 규칙이 적용된다 */
+.logoInk {
+  fill: var(--on-solid);
+}

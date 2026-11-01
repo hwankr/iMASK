@@ -1,0 +1,44 @@
+/* 분석 상태 — 원본 display:inline-flex; align-items:center; gap:6px; … color:{{st.fg}} */
+.label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  white-space: nowrap;
+  color: var(--as-fg);
+  font-weight: var(--fw-bold);
+}
+
+/* 문서 목록 (Main 386) */
+.xs {
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+  font-size: var(--fs-12-5);
+}
+
+/* 휴대폰 목록 카드 (Main 189) */
+.sm {
+  gap: var(--space-5);
+  min-height: var(--size-26);
+  font-size: var(--fs-13-5);
+}
+
+/* 목록 행 (Main 175) · strong = 상세 머리 (348) */
+.md {
+  font-size: var(--fs-14);
+}
+.md.strong {
+  font-weight: var(--fw-heavy);
+}
+
+/* 보드 01 (Components 98) */
+.lg {
+  font-size: var(--fs-14-5);
+  font-weight: var(--fw-heavy);
+}
+
+/* 보고서 머리 (Main 620) */
+.xl {
+  min-height: var(--size-30);
+  font-size: var(--fs-15);
+  font-weight: var(--fw-heavy);
+}

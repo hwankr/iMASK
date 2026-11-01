@@ -1,0 +1,45 @@
+/* 뼈대 — linear-gradient(90deg, #EEF0F3 0%, #F8F9FB 45%, #EEF0F3 90%) · 220% 100% · dg-shimmer 1.5s linear */
+.line {
+  display: block;
+  width: var(--sk-w, 100%);
+  border-radius: var(--radius-6);
+  background: linear-gradient(90deg, var(--skeleton-base) 0%, var(--skeleton-hi) 45%, var(--skeleton-base) 90%);
+  background-size: 220% 100%;
+  --dg-anim: dg-shimmer; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-shimmer) var(--ease-linear) infinite;
+}
+.title {
+  height: var(--size-12);
+}
+.text {
+  height: var(--size-9);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-16);
+  background: var(--surface);
+}
+
+/* 보드 06 */
+.board {
+  gap: var(--space-10);
+  padding: var(--space-20);
+  box-shadow: var(--shadow-1), inset 0 0 0 1px var(--line);
+}
+
+/* 원문 준비 중 (Main 430) */
+.viewer {
+  gap: var(--space-12);
+  width: 100%;
+  max-width: calc(var(--size-38) * 10); /* 380px (Main 430) */
+  padding: var(--space-24);
+  box-shadow: var(--shadow-1);
+}
+
+.label {
+  font-size: var(--fs-13);
+  font-weight: var(--fw-bold);
+  color: var(--ink-3);
+}

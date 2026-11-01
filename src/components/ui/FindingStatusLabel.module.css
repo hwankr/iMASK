@@ -1,0 +1,10 @@
+/* 탐지 확인 상태 — 원본 display:inline-flex; gap:4px; font-size:12.5px; font-weight:800; color:{{f.st.fg}} */
+.label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: var(--fs-12-5);
+  font-weight: var(--fw-heavy);
+  white-space: nowrap;
+  color: var(--fst-fg);
+}

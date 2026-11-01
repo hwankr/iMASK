@@ -1,0 +1,58 @@
+/* 흐르는 막대 — dg-indet(translateX -110% → 260%) · 곡선 --ease-io */
+.run { --ib-color: var(--run); --ib-track: var(--run-bg); }
+.accent { --ib-color: var(--accent); --ib-track: var(--fill-2); }
+.warn { --ib-color: var(--warn); --ib-track: var(--warn-bg); }
+
+/* 띠 아래 가장자리 (Main 363 · 보드 06) */
+.edge {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 38%;
+  height: 2px;
+  border-radius: var(--radius-2);
+  background: var(--ib-color);
+  opacity: .55;
+  --dg-anim: dg-indet; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-indet) var(--ease-io) infinite;
+}
+
+/* 길 위 막대 */
+.track {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--ib-track);
+}
+.bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  border-radius: var(--radius-pill);
+  background: var(--ib-color);
+}
+
+/* 파일 올리는 중 (Main 301): 64×4 · 막대 40% · 1.1초 */
+.track-sm {
+  width: var(--size-64);
+  height: var(--size-4);
+}
+.track-sm .bar {
+  width: 40%;
+  --dg-anim: dg-indet; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-1100) var(--ease-io) infinite;
+}
+
+/* 결과 기다리는 중 (Main 568): 꽉 찬 폭×6 · 막대 36% · 불투명도 .7 · 1.5초 */
+.track-md {
+  width: 100%;
+  height: var(--size-6);
+}
+.track-md .bar {
+  width: 36%;
+  opacity: .7;
+  --dg-anim: dg-indet; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-indet) var(--ease-io) infinite;
+}

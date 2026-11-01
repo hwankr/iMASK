@@ -1,0 +1,26 @@
+/* 아이콘 크기 — 디자인의 width/height 값을 --size-* 토큰으로 */
+.icon {
+  flex: none;
+}
+
+.s11 { width: var(--size-11); height: var(--size-11); }
+.s12 { width: var(--size-12); height: var(--size-12); }
+.s13 { width: var(--size-13); height: var(--size-13); }
+.s14 { width: var(--size-14); height: var(--size-14); }
+.s15 { width: var(--size-15); height: var(--size-15); }
+.s16 { width: var(--size-16); height: var(--size-16); }
+.s17 { width: var(--size-17); height: var(--size-17); }
+.s18 { width: var(--size-18); height: var(--size-18); }
+.s19 { width: var(--size-19); height: var(--size-19); }
+.s20 { width: var(--size-20); height: var(--size-20); }
+.s22 { width: var(--size-22); height: var(--size-22); }
+.s24 { width: var(--size-24); height: var(--size-24); }
+.s28 { width: var(--size-28); height: var(--size-28); }
+
+/* 로고(28×32 비율) — 헤더 24×28, 보드 머리 21×24. 원본은 display:block */
+.logo28,
+.logo24 {
+  display: block;
+}
+.logo28 { width: var(--size-24); height: var(--size-28); }
+.logo24 { width: var(--size-21); height: var(--size-24); }

@@ -1,0 +1,70 @@
+/* 세그먼트 탭 — Main 459(결과 탭) · 367(휴대폰 전환 탭) · 보드 03 */
+.list {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--tab-n), minmax(0, 1fr));
+  padding: var(--space-4);
+  border-radius: var(--radius-14);
+  background: var(--fill);
+}
+
+/* 흰 판 — 고른 탭으로 미끄러진다 */
+.knob {
+  position: absolute;
+  top: var(--space-4);
+  bottom: var(--space-4);
+  left: var(--space-4);
+  width: calc((100% - var(--space-8)) / var(--tab-n));
+  border-radius: var(--radius-10);
+  background: var(--surface);
+  box-shadow: var(--shadow-knob-2);
+  transform: translateX(calc(100% * var(--tab-i)));
+  transition: transform var(--dur-slide) var(--ease);
+}
+.lg .knob {
+  box-shadow: var(--shadow-knob);
+}
+
+.tab {
+  position: relative;
+  z-index: var(--z-raise);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  border: 0;
+  margin: 0;
+  border-radius: var(--radius-10);
+  background: transparent;
+  color: var(--ink-3);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--dur-color-2) var(--ease);
+}
+.md .tab {
+  height: var(--size-38);
+  padding: 0 var(--space-4);
+  font-size: var(--fs-13-5);
+}
+.lg .tab {
+  height: var(--size-40);
+  font-size: var(--fs-14);
+}
+.on {
+  color: var(--ink);
+  font-weight: var(--fw-heavy);
+}
+
+.count {
+  font-size: var(--fs-12-5);
+  font-weight: var(--fw-heavy);
+  font-variant-numeric: tabular-nums;
+  transition: color var(--dur-color-2) var(--ease);
+}
+.countOn {
+  color: var(--accent-ink);
+}
+.countWarn {
+  color: var(--warn);
+}

@@ -1,0 +1,49 @@
+/* 스위치 — Main 467: 34×20 · 손잡이 16 · 꺼짐 #CDD2DA · 켜짐 강조색 · translateX(14px)
+   라벨 글자 기본은 Main 의 13.5. 보드 견본처럼 다른 크기가 필요하면 감싼 요소에서
+   --switch-label-fs 를 토큰으로 지정한다(예: /dev/components 보드 03 = --fs-14). */
+.wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: var(--size-28);
+  font-size: var(--switch-label-fs, var(--fs-13-5));
+  font-weight: var(--fw-semibold);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.disabled {
+  cursor: not-allowed;
+  opacity: .5;
+}
+
+.switch {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex: none;
+  width: var(--size-34);
+  height: var(--size-20);
+  margin: 0;
+  border-radius: var(--radius-pill);
+  background: var(--switch-off);
+  cursor: inherit;
+  transition: background-color var(--dur-220) var(--ease);
+}
+.switch::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: var(--size-16);
+  height: var(--size-16);
+  border-radius: var(--radius-round);
+  background: var(--surface);
+  box-shadow: var(--shadow-switch);
+  transition: transform var(--dur-260) var(--ease);
+}
+.switch:checked {
+  background: var(--accent);
+}
+.switch:checked::before {
+  transform: translateX(var(--space-14));
+}

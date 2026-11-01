@@ -1,0 +1,48 @@
+/* 필터 칩 — Main 465: height {{L.chipH}}; padding 0 12; radius 999; 13px · 700
+   높이 기본은 Main 의 --chip-h(30 · 휴대폰 36). 보드 견본처럼 다른 높이가 필요하면 감싼 요소에서
+   --filter-chip-h 를 토큰으로 지정한다(예: /dev/components 보드 03 = --size-32). */
+.group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-5);
+  height: var(--filter-chip-h, var(--chip-h));
+  padding: 0 var(--space-12);
+  border: 0;
+  margin: 0;
+  border-radius: var(--radius-pill);
+  background: var(--fill);
+  color: var(--ink-2);
+  font-size: var(--fs-13);
+  font-weight: var(--fw-bold);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-color-2) var(--ease),
+    color var(--dur-color-2) var(--ease),
+    filter var(--dur-color) var(--ease),
+    transform var(--dur-press);
+}
+.on {
+  background: var(--ink);
+  color: var(--on-solid);
+}
+@media (hover: hover) {
+  .chip:hover {
+    filter: brightness(.96);
+  }
+}
+.chip:active {
+  transform: scale(.95);
+}
+
+.count {
+  font-weight: var(--fw-semibold);
+  opacity: .72;
+  font-variant-numeric: tabular-nums;
+}

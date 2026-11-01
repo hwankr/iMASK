@@ -1,0 +1,59 @@
+/* 토스트 — Main 756 · 보드 06 */
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-10);
+  width: max-content;
+  max-width: calc(100% - var(--space-32));
+  padding: var(--space-12) var(--space-14) var(--space-12) var(--space-16);
+  border-radius: var(--radius-16);
+  background: var(--toast-bg);
+  color: var(--toast-fg);
+  font-size: var(--fs-14-5);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-145);
+  box-shadow: var(--shadow-toast);
+}
+
+/* 화면 아래 가운데에서 올라온다 */
+.floating {
+  position: fixed;
+  left: 50%;
+  bottom: var(--toast-bottom);
+  z-index: var(--z-toast);
+  transform: translateX(-50%);
+  --dg-anim: dg-toast; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-toast) var(--ease) both;
+}
+
+.icon {
+  display: inline-flex;
+  flex: none;
+}
+.iconOk {
+  color: var(--toast-icon-success);
+}
+.iconError {
+  color: var(--toast-icon-error);
+}
+
+.action {
+  flex: none;
+  height: var(--size-32);
+  margin-left: var(--space-4);
+  padding: 0 var(--space-12);
+  border: 0;
+  border-radius: var(--radius-10);
+  background: var(--toast-action-bg);
+  color: var(--toast-fg);
+  font-size: var(--fs-13-5);
+  font-weight: var(--fw-heavy);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--dur-color) var(--ease);
+}
+@media (hover: hover) {
+  .action:hover {
+    background: var(--toast-action-hover);
+  }
+}

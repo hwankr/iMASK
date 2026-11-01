@@ -1,0 +1,687 @@
+/* ==========================================================================
+   /dev/components — Components.dc.html 보드 배치(1440 폭 기준)
+   보드 고정 폭 값(260·150·820·420·300 …)은 토큰 곱으로 쓴다(괄호 = px).
+   ========================================================================== */
+.board {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-72) calc(var(--space-40) * 2) calc(var(--space-48) * 2); /* 72 80 96 */
+  background: var(--surface);
+}
+
+/* ---------- 머리 ---------- */
+.boardHead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-32);
+  padding-bottom: var(--space-48);
+}
+.boardIntro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  max-width: calc(var(--space-20) * 41); /* 820 */
+}
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-10);
+  font-size: var(--fs-14);
+  font-weight: var(--fw-heavy);
+  color: var(--accent-ink);
+}
+.eyebrowLogo {
+  color: var(--accent);
+}
+.devTag {
+  display: inline-flex;
+  align-items: center;
+  height: var(--size-22);
+  padding: 0 var(--space-8);
+  border-radius: var(--radius-pill);
+  background: var(--fill);
+  color: var(--ink-2);
+  font-size: var(--fs-12);
+  font-weight: var(--fw-heavy);
+}
+.h1 {
+  margin: 0;
+  font-size: var(--fs-44);
+  line-height: var(--lh-120);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--ls-tight-6);
+}
+.lead {
+  margin: 0;
+  font-size: var(--fs-17);
+  line-height: var(--lh-165);
+  color: var(--ink-2);
+}
+
+/* ---------- 구역 ---------- */
+.section {
+  display: grid;
+  grid-template-columns: calc(var(--size-26) * 10) minmax(0, 1fr); /* 260 */
+  gap: var(--space-40);
+  padding: var(--space-44) 0;
+  border-top: 1px solid var(--line);
+}
+.sectionLast {
+  padding-bottom: 0;
+}
+.sectionHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.num {
+  font-family: var(--mono);
+  font-size: var(--fs-13);
+  font-weight: var(--fw-semibold);
+  color: var(--accent-ink);
+}
+.h2 {
+  margin: 0;
+  font-size: var(--fs-22);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--ls-tight-4);
+}
+.desc {
+  margin: 0;
+  font-size: var(--fs-14);
+  line-height: var(--lh-160);
+  color: var(--ink-3);
+}
+.sectionBody {
+  min-width: 0;
+}
+
+.stack28 { display: flex; flex-direction: column; gap: var(--space-28); }
+.stack26 { display: flex; flex-direction: column; gap: var(--space-26); }
+.stack20 { display: flex; flex-direction: column; gap: var(--space-20); }
+.stack12 { display: flex; flex-direction: column; gap: var(--space-12); min-width: 0; }
+
+/* 보드 03 견본 크기 — 보드(Components.dc.html 130–139) 값. 제품 화면 기본값(Main)은 컴포넌트가 그대로 가진다.
+   펼친 드롭다운 248(Main 232) · 필터 칩 32(Main 30) · 스위치 라벨 14(Main 13.5).
+   필터 칩은 휴대폰에서 Main 의 36(누르기 쉬운 높이)을 그대로 두고 태블릿 이상에서만 보드 값을 쓴다. */
+.board03 {
+  --dd-menu-min-w: var(--menu-w);
+  --switch-label-fs: var(--fs-14);
+}
+@media (min-width: 768px) {
+  .board03 {
+    --filter-chip-h: var(--size-32);
+  }
+}
+
+/* 왼쪽 이름 150 + 오른쪽 견본 */
+.rows {
+  display: grid;
+  grid-template-columns: calc(var(--space-30) * 5) minmax(0, 1fr); /* 150 */
+  gap: var(--space-20) var(--space-24);
+  align-items: center;
+}
+.rowsButtons {
+  gap: var(--space-22) var(--space-24);
+}
+.rowLabel {
+  font-size: var(--fs-14);
+  font-weight: var(--fw-bold);
+  color: var(--ink-2);
+}
+.rowSub {
+  display: block;
+  font-size: var(--fs-12-5);
+  font-weight: var(--fw-medium);
+  color: var(--ink-3);
+}
+
+.wrap8 { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-8); }
+.wrap10 { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-10); }
+.wrapStatus { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-10) var(--space-22); }
+
+.note {
+  font-size: var(--fs-13-5);
+  font-weight: var(--fw-medium);
+  color: var(--ink-3);
+}
+.noteMl {
+  margin-left: var(--space-12);
+  font-size: var(--fs-13-5);
+  color: var(--ink-3);
+}
+.noteMl8 {
+  margin-left: var(--space-8);
+  font-size: var(--fs-13-5);
+  color: var(--ink-3);
+}
+.note13 {
+  font-size: var(--fs-13);
+  color: var(--ink-3);
+}
+
+/* 01 함께 놓인 모습 */
+.together {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-12) 0;
+  padding: var(--space-16) var(--space-20);
+  border-radius: var(--radius-18);
+  background: var(--band);
+}
+.togetherTitle {
+  margin-right: var(--space-20);
+  font-size: var(--fs-13);
+  font-weight: var(--fw-heavy);
+  color: var(--ink-3);
+}
+.togetherItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding-right: var(--space-18);
+  margin-right: var(--space-18);
+  border-right: 1px solid var(--line-2);
+}
+.togetherLast {
+  padding-right: 0;
+  margin-right: 0;
+  border-right: 0;
+}
+.togetherLabel {
+  font-size: var(--fs-13);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-3);
+}
+
+/* ---------- 02 버튼 ---------- */
+.board .forceHover {
+  background: var(--accent-ink);
+}
+.board .forceFocus {
+  outline: var(--focus-w) solid var(--accent);
+  outline-offset: var(--focus-offset);
+}
+.itemBox {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-14) var(--space-16);
+  border-radius: var(--radius-16);
+  background: var(--hover);
+}
+.toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: var(--space-5);
+  border-radius: var(--radius-16);
+  background: var(--surface);
+  box-shadow: var(--shadow-2);
+}
+.pager {
+  min-width: var(--size-44);
+  text-align: center;
+  font-size: var(--fs-13-5);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+.toolDivider {
+  width: 1px;
+  height: var(--size-20);
+  margin: 0 var(--space-4);
+  background: var(--line-2);
+}
+.board .toolbar .fitBtn {
+  gap: var(--space-5);
+  padding: 0 var(--space-10);
+  font-size: var(--fs-13);
+  font-weight: var(--fw-bold);
+}
+
+/* ---------- 03 입력과 선택 ---------- */
+.grid3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-18);
+}
+.board .forceFocusField input {
+  background: var(--surface);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.search {
+  flex: none;
+  width: calc(var(--space-30) * 10); /* 300 */
+}
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-18) var(--space-28);
+  align-items: start;
+}
+.cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+  min-width: 0;
+}
+.cap {
+  font-size: var(--fs-13);
+  font-weight: var(--fw-bold);
+  color: var(--ink-3);
+}
+.max420 {
+  max-width: calc(var(--space-42) * 10); /* 420 */
+}
+.switches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-24);
+}
+
+.ddDemo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  padding-top: var(--space-6);
+}
+.ddRow {
+  display: flex;
+  gap: var(--space-36);
+  align-items: flex-start;
+}
+/* 펼친 메뉴(트리거 44 + 8 + 메뉴 ≈ 265)가 아래 내용을 덮지 않게 자리를 잡아 둔다 */
+.ddOpenSlot {
+  flex: none;
+  min-width: var(--menu-w);
+  min-height: calc(var(--size-44) * 7 + var(--space-12)); /* 320 */
+}
+.checks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  max-width: calc(var(--space-42) * 10); /* 420 */
+  font-size: var(--fs-14);
+  line-height: var(--lh-160);
+  color: var(--ink-2);
+}
+.checks li {
+  display: flex;
+  gap: var(--space-10);
+}
+.checkIcon {
+  display: inline-flex;
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent);
+}
+.ddMore {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-24) var(--space-36);
+}
+.fieldCell {
+  gap: var(--space-6);
+  width: var(--menu-w);
+}
+.fieldLabel {
+  font-size: var(--fs-13-5);
+  font-weight: var(--fw-heavy);
+}
+
+/* 04·05 화면 작업에서 구현 */
+.pending {
+  display: flex;
+  align-items: center;
+  gap: var(--space-10);
+  padding: var(--space-14) var(--space-16);
+  border-radius: var(--radius-14);
+  background: var(--band);
+  color: var(--ink-3);
+  font-size: var(--fs-14);
+}
+.pending strong {
+  font-weight: var(--fw-heavy);
+  color: var(--ink);
+}
+.pending span {
+  color: var(--ink-2);
+}
+
+/* ---------- 06 알림과 진행 ---------- */
+.grid2top {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-28);
+  align-items: start;
+}
+.modalCaption {
+  font-size: var(--fs-13);
+  color: var(--ink-3);
+}
+.selfStart {
+  align-self: flex-start;
+}
+.progressRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-16) var(--space-24);
+  padding: var(--space-14) var(--space-16);
+  border-radius: var(--radius-14);
+  background: var(--band);
+  font-size: var(--fs-13);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-3);
+}
+.progressItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-10);
+}
+.progressItem:first-child {
+  color: var(--run);
+}
+.progressWide {
+  flex: 1 1 calc(var(--space-40) * 4); /* 160 */
+}
+.target {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-14) var(--space-16);
+  border-radius: var(--radius-16);
+  background: var(--band);
+}
+.targetRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-6) var(--space-8);
+}
+.targetTitle {
+  font-size: var(--fs-15);
+  font-weight: var(--fw-heavy);
+}
+.targetId {
+  font-family: var(--mono);
+  font-size: var(--fs-12);
+  color: var(--ink-3);
+}
+.targetValue {
+  font-family: var(--mono);
+  font-size: var(--fs-15);
+  font-weight: var(--fw-semibold);
+}
+.modalInfo {
+  margin: 0;
+  font-size: var(--fs-13);
+  line-height: var(--lh-160);
+  color: var(--ink-3);
+}
+.modalError {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  font-size: var(--fs-13-5);
+  font-weight: var(--fw-bold);
+  color: var(--err);
+  --dg-anim: dg-pop; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-260) var(--ease) both;
+}
+
+/* ---------- 07 움직임 ---------- */
+.motionBand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-8) var(--space-28);
+  padding: var(--space-18) var(--space-22);
+  border-radius: var(--radius-18);
+  background: var(--band);
+}
+.curve {
+  font-family: var(--mono);
+  font-size: var(--fs-13-5);
+  font-weight: var(--fw-semibold);
+}
+.motionText {
+  font-size: var(--fs-13-5);
+  color: var(--ink-2);
+}
+.countWrap {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin-left: auto;
+}
+.count34 {
+  font-size: var(--fs-34);
+  line-height: var(--lh-100);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--ls-tight-4);
+}
+.countUnit {
+  font-size: var(--fs-16);
+  font-weight: var(--fw-bold);
+  color: var(--ink-2);
+}
+.stagger {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+}
+.stagger li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-10) var(--space-8);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-14);
+  font-weight: var(--fw-semibold);
+}
+.rowIn {
+  --dg-anim: dg-in; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-page) var(--ease) both;
+}
+.rowInB {
+  --dg-anim: dg-in-b; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-page) var(--ease) both;
+}
+.staggerIdx {
+  font-family: var(--mono);
+  font-size: var(--fs-12);
+  color: var(--ink-3);
+}
+.tableWrap {
+  overflow: hidden;
+  border-top: 1px solid var(--line-2);
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-14);
+}
+.table th {
+  padding: var(--space-12) var(--space-16);
+  text-align: left;
+  font-size: var(--fs-13);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-3);
+  border-bottom: 1px solid var(--line-2);
+}
+.table td {
+  padding: var(--space-12) var(--space-16);
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-2);
+}
+.table th:first-child,
+.table td:first-child {
+  padding-left: 0;
+}
+.table th:last-child,
+.table td:last-child {
+  padding-right: 0;
+}
+.table td:first-child {
+  font-weight: var(--fw-bold);
+  color: var(--ink);
+}
+.table td:last-child {
+  color: var(--ink-3);
+}
+
+/* ---------- 08 색과 글꼴 ---------- */
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--space-14);
+}
+.swatch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.chip {
+  height: var(--size-64);
+  border-radius: var(--radius-16);
+}
+.cInk { background: var(--ink); }
+.cInk3 { background: var(--ink-3); }
+.cFill { background: var(--fill); }
+.cAccent { background: var(--accent); }
+.cAccentSoft { background: var(--accent-soft-2); }
+.cDemo { background: var(--demo-bg); }
+.cHi { background: var(--hi-solid); }
+.cMd { background: var(--md-solid); }
+.cLo { background: var(--lo-solid); }
+.cNa { background: var(--na-solid); }
+.cLine { background: var(--line); }
+.cBg { background: var(--bg); box-shadow: inset 0 0 0 1px var(--line-2); }
+.swatchName {
+  font-size: var(--fs-13-5);
+  font-weight: var(--fw-heavy);
+}
+.swatchCode {
+  font-family: var(--mono);
+  font-size: var(--fs-12);
+  color: var(--ink-3);
+}
+.typeScale {
+  display: grid;
+  grid-template-columns: calc(var(--space-30) * 5) minmax(0, 1fr); /* 150 */
+  gap: var(--space-14) var(--space-24);
+  align-items: baseline;
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--line);
+}
+.typeLabel {
+  font-size: var(--fs-13);
+  color: var(--ink-3);
+}
+.tNum {
+  font-size: var(--fs-num);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--ls-tight-4);
+  font-variant-numeric: tabular-nums;
+}
+.tTitle {
+  font-size: var(--fs-title);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--ls-tight-4);
+}
+.tSection {
+  font-size: var(--fs-section);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--ls-tight-3);
+}
+.tBody {
+  font-size: var(--fs-body);
+}
+.tSub {
+  font-size: var(--fs-sub);
+  color: var(--ink-3);
+}
+.tMono {
+  font-family: var(--mono);
+  font-size: var(--fs-mono);
+}
+
+/* ---------- 태블릿 이하: 구역 이름을 위로 ---------- */
+@media (max-width: 1199.98px) {
+  .board {
+    padding: var(--space-48) var(--space-40) var(--space-72);
+  }
+  .section {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-24);
+  }
+}
+
+/* ---------- 휴대폰 ---------- */
+@media (max-width: 767.98px) {
+  .board {
+    padding: var(--space-24) var(--space-16) var(--space-40);
+  }
+  .boardHead {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-16);
+    padding-bottom: var(--space-32);
+  }
+  .h1 {
+    font-size: var(--fs-30);
+  }
+  .lead {
+    font-size: var(--fs-15);
+  }
+  .section {
+    gap: var(--space-20);
+    padding: var(--space-32) 0;
+  }
+  .rows,
+  .typeScale {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-8);
+  }
+  .rows > .rowLabel:not(:first-child) {
+    margin-top: var(--space-12);
+  }
+  .grid3,
+  .grid2,
+  .grid2top {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .search {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+  .noteMl,
+  .noteMl8 {
+    margin-left: 0;
+  }
+  .ddRow {
+    flex-direction: column;
+    gap: var(--space-16);
+  }
+  .swatches {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .tableWrap {
+    overflow-x: auto;
+  }
+  .countWrap {
+    margin-left: 0;
+  }
+}

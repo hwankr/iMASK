@@ -1,0 +1,185 @@
+/* ==========================================================================
+   모달 — Main 703–755 (값은 tokens.css 의 --modal-* 반응형 토큰)
+   데스크톱: 가운데 · 떠오름(dg-pop .32s) / 휴대폰(< 768px): 아래 시트(dg-sheet .4s)
+   ========================================================================== */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--modal-pad);
+  background: var(--scrim);
+  /* 뒤 화면 흐림(Main 704). 접두어 없는 속성 하나만 쓴다 — CSS 처리기(Lightning CSS)가 Safari 16.4 용
+     -webkit- 를 덧붙인다. -webkit- 줄을 이 뒤에 따로 쓰면 둘을 한 속성으로 합치며 접두어 쪽만 남겨
+     Chrome·Firefox 에서 흐림이 사라진다(T2-fix2). */
+  backdrop-filter: blur(2px);
+  --dg-anim: dg-fade; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-drop) var(--ease) both;
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: var(--modal-w-sm);
+  max-height: var(--modal-max-h);
+  overflow: hidden;
+  background: var(--surface);
+  border-radius: var(--modal-radius);
+  box-shadow: var(--shadow-3);
+  --dg-anim: dg-pop; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-pop) var(--ease) both;
+}
+.dialog:focus {
+  outline: none;
+}
+.sm { max-width: var(--modal-w-sm); }
+.md { max-width: var(--modal-w); }
+.lg { max-width: var(--modal-w-lg); }
+
+/* 시트 손잡이 — 휴대폰에서만 */
+.handle {
+  display: none;
+  flex: none;
+  justify-content: center;
+  padding-top: var(--space-8);
+}
+.handle span {
+  width: var(--size-40);
+  height: var(--size-5);
+  border-radius: var(--radius-pill);
+  background: var(--fill-2);
+}
+
+.head {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-12);
+  padding: var(--modal-head-pad);
+}
+.headText {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.title {
+  margin: 0;
+  font-size: var(--fs-20);
+  line-height: var(--lh-135);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--ls-tight-3);
+}
+.sub {
+  margin: 0;
+  font-size: var(--fs-14);
+  line-height: var(--lh-155);
+  color: var(--ink-3);
+}
+.close {
+  margin: calc(var(--space-6) * -1) calc(var(--space-8) * -1) 0 0;
+}
+
+.body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  padding: var(--modal-body-pad);
+}
+
+.foot {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-8);
+  padding: var(--modal-foot-pad);
+}
+
+/* 바닥 버튼 — Main 750 */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-7);
+  flex: 0 0 auto;
+  height: var(--size-50);
+  padding: 0 var(--space-20);
+  border: 0;
+  border-radius: var(--radius-14);
+  font-size: var(--fs-15);
+  font-weight: var(--fw-bold);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    filter var(--dur-color) var(--ease),
+    transform var(--dur-press) var(--ease);
+}
+.primary {
+  background: var(--accent);
+  color: var(--on-solid);
+  font-weight: var(--fw-heavy);
+}
+.secondary {
+  background: var(--fill);
+  color: var(--ink);
+}
+.ghost {
+  background: transparent;
+  color: var(--ink-2);
+}
+@media (hover: hover) {
+  .btn:enabled:not(.loading):hover {
+    filter: brightness(.95);
+  }
+}
+.btn:enabled:not(.loading):active {
+  transform: scale(.97);
+}
+.btn:disabled,
+.btn.loading {
+  opacity: .55;
+  cursor: progress;
+}
+
+/* ---------- 견본(inline) — 놓인 자리에 흐린 판과 함께 (보드 06) ---------- */
+.inlineBackdrop {
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  padding: var(--space-22);
+  border-radius: var(--radius-22);
+  animation: none;
+}
+.inlineDialog,
+.inlineBackdrop .dialog {
+  max-height: none;
+  animation: none;
+}
+
+/* ---------- 휴대폰: 아래에서 올라오는 시트 ---------- */
+@media (max-width: 767.98px) {
+  .backdrop {
+    align-items: flex-end;
+  }
+  .dialog {
+    --dg-anim: dg-sheet; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+    animation: var(--dg-anim) var(--dur-sheet) var(--ease) both;
+  }
+  .inlineBackdrop {
+    padding: var(--space-12) var(--space-12) 0;
+  }
+  .handle {
+    display: flex;
+  }
+  .btn {
+    flex: 1 1 0;
+  }
+}

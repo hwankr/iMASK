@@ -1,0 +1,47 @@
+/* 위험등급 표기 — 원본 display:inline-flex; gap:5px; … color:{{risk.fg}}; background:{{risk.bg}} */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-5);
+  white-space: nowrap;
+  color: var(--rb-fg);
+  background: var(--rb-bg);
+  font-weight: var(--fw-heavy);
+}
+
+/* 탐지 항목·모달 대상 (Main 476·713) */
+.xs {
+  height: var(--size-24);
+  padding: 0 var(--space-8) 0 var(--space-7);
+  border-radius: var(--radius-7);
+  font-size: var(--fs-12-5);
+}
+
+/* 목록 행 (Main 175·188) — 굵기 700, strong 이면 상세 머리(347) */
+.sm {
+  height: var(--size-26);
+  padding: 0 var(--space-9) 0 var(--space-8);
+  border-radius: var(--radius-8);
+  font-size: var(--fs-13);
+  font-weight: var(--fw-bold);
+}
+.sm.strong {
+  font-weight: var(--fw-heavy);
+}
+
+/* 보드 01 (Components 96) */
+.md {
+  height: var(--size-28);
+  padding: 0 var(--space-10) 0 var(--space-9);
+  border-radius: var(--radius-8);
+  font-size: var(--fs-13-5);
+}
+
+/* 보고서 머리 (Main 619) */
+.lg {
+  gap: var(--space-6);
+  height: var(--size-30);
+  padding: 0 var(--space-11) 0 var(--space-10);
+  border-radius: var(--radius-9);
+  font-size: var(--fs-14-5);
+}

@@ -1,0 +1,229 @@
+/* ==========================================================================
+   버튼 — Components.dc.html 02 + Main.dc.html 버튼 마크업
+   크기: sm(--ctl-sm) · md(--ctl) · item(36) · lg(44) · xl(52)
+   상태: 올림(색 한 단계 진하게) · 누름 scale(.97) 0.12초 · 비활성 · 로딩
+   ========================================================================== */
+.button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  gap: var(--space-7);
+  border: 0;
+  margin: 0;
+  font-weight: var(--fw-bold);
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-color) var(--ease),
+    color var(--dur-color) var(--ease),
+    box-shadow var(--dur-color-2) var(--ease),
+    filter var(--dur-color) var(--ease),
+    transform var(--dur-press) var(--ease);
+}
+
+.block {
+  display: flex;
+  width: 100%;
+}
+
+/* ---------- 크기 ---------- */
+
+/* 작게 — 띠·카드 안 행동 (Main 175·362) */
+.sm {
+  gap: var(--space-5);
+  height: var(--ctl-sm);
+  padding: 0 var(--space-12);
+  border-radius: var(--radius-10);
+  font-size: var(--fs-13-5);
+}
+.sm.withIcon {
+  padding-left: var(--space-10);
+}
+
+/* 기본 — 상세 머리 행동 (Main 339·341·342) */
+.md {
+  height: var(--ctl);
+  padding: 0 var(--space-16);
+  border-radius: var(--radius-12);
+  font-size: var(--fs-14);
+}
+.md.withIcon {
+  gap: var(--space-6);
+  padding-left: var(--space-12);
+}
+.md.ghost {
+  gap: var(--space-6);
+  padding: 0 var(--space-12);
+  border-radius: var(--radius-10);
+  font-size: var(--fs-14-5);
+}
+.md.ghost.withIcon {
+  padding-left: var(--space-8);
+}
+
+/* 항목 행동 — 펼친 행 안 36px (Main 498–504 · 보드 02) */
+.item {
+  gap: var(--space-5);
+  height: var(--item-action-h);
+  padding: 0 var(--space-12);
+  border-radius: var(--radius-10);
+  font-size: var(--fs-13-5);
+}
+.item.withIcon {
+  padding-left: var(--space-10);
+}
+.item.primary {
+  padding: 0 var(--space-13) 0 var(--space-11);
+}
+
+/* 크게 — 보드 02 의 44px */
+.lg {
+  height: var(--size-44);
+  padding: 0 var(--space-16);
+  border-radius: var(--radius-12);
+  font-size: var(--fs-14-5);
+}
+.lg.withIcon {
+  padding-left: var(--space-14);
+}
+.lg.primary {
+  padding-right: var(--space-18);
+}
+.lg.primary:not(.withIcon) {
+  padding-left: var(--space-18);
+}
+/* 보드 02 '파일 선택': 아이콘이 있어도 좌우 18 */
+.lg.dark {
+  padding: 0 var(--space-18);
+}
+.lg.ghost {
+  gap: var(--space-6);
+  padding: 0 var(--space-14);
+}
+.lg.ghost.withIcon {
+  padding-left: var(--space-10);
+}
+.lg.loading {
+  gap: var(--space-8);
+  padding: 0 var(--space-20);
+}
+
+/* 아주 크게 — 큰 주요 행동 52px (보드 02 '새 분석' · Main 230·320·321) */
+.xl {
+  gap: var(--space-8);
+  height: var(--size-52);
+  padding: 0 var(--space-22);
+  border-radius: var(--radius-14);
+  font-size: var(--fs-16);
+}
+.xl.withIcon {
+  padding-left: var(--space-18);
+}
+
+/* ---------- 모양 ---------- */
+
+.primary {
+  background: var(--accent);
+  color: var(--on-solid);
+  font-weight: var(--fw-heavy);
+}
+.secondary {
+  background: var(--fill);
+  color: var(--ink);
+}
+.ghost {
+  background: transparent;
+  color: var(--ink-2);
+}
+.soft {
+  background: var(--accent-soft-2);
+  color: var(--accent-ink);
+  font-weight: var(--fw-heavy);
+}
+.danger {
+  background: var(--err-bg);
+  color: var(--err);
+  font-weight: var(--fw-heavy);
+}
+.dark {
+  background: var(--ink);
+  color: var(--on-solid);
+}
+.outline {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+}
+
+/* 주요 버튼 그림자 */
+.raised.primary {
+  box-shadow: var(--shadow-accent);
+}
+.raised.primary.xl {
+  box-shadow: var(--shadow-accent-lg);
+}
+
+/* ---------- 마우스 올림 ---------- */
+@media (hover: hover) {
+  .primary:hover:not(:disabled):not(.loading) {
+    background: var(--accent-ink);
+  }
+  .secondary:hover:not(:disabled):not(.loading) {
+    background: var(--fill-2);
+  }
+  .ghost:hover:not(:disabled):not(.loading) {
+    background: var(--fill);
+  }
+  .item.ghost:hover:not(:disabled):not(.loading) {
+    background: var(--tint-050);
+  }
+  .soft:hover:not(:disabled):not(.loading) {
+    filter: brightness(.96);
+  }
+  .danger:hover:not(:disabled):not(.loading) {
+    filter: brightness(.97);
+  }
+  .dark:hover:not(:disabled):not(.loading) {
+    background: var(--ink-hover);
+  }
+  .outline:hover:not(:disabled):not(.loading) {
+    background: var(--hover);
+  }
+}
+
+/* ---------- 누름 ---------- */
+.button:active:not(:disabled):not(.loading) {
+  transform: scale(.97);
+}
+.item:active:not(:disabled):not(.loading) {
+  transform: scale(.95);
+}
+
+/* ---------- 로딩 — 색은 그대로, 누를 수 없음 ---------- */
+.loading {
+  cursor: progress;
+}
+
+/* ---------- 사용할 수 없음 ---------- */
+.button:disabled {
+  cursor: not-allowed;
+}
+.primary:disabled,
+.soft:disabled,
+.danger:disabled,
+.dark:disabled {
+  background: var(--disabled-bg);
+  color: var(--disabled-fg);
+  box-shadow: none;
+}
+.item.primary:disabled {
+  color: var(--disabled-fg-2);
+}
+.secondary:disabled,
+.ghost:disabled,
+.outline:disabled {
+  color: var(--disabled-ghost);
+}

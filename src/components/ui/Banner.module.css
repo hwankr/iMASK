@@ -1,0 +1,96 @@
+/* ==========================================================================
+   화면 위 띠 — Main 358–366(상세), Components 06(보드)
+   ========================================================================== */
+.banner {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-8) var(--space-12);
+  background: var(--bn-bg);
+  font-size: var(--fs-14);
+  line-height: var(--lh-155);
+}
+
+/* 꽉 찬 띠 (Main 359) — 화면에 들어올 때 dg-in */
+.band {
+  flex: none;
+  padding: var(--space-12) var(--gutter);
+  --dg-anim: dg-in; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-350) var(--ease) both;
+}
+
+/* 둥근 띠 (보드 06) — 한 줄에 아이콘 · 글(줄바꿈) · 행동 */
+.card {
+  flex-wrap: nowrap;
+  gap: var(--space-10);
+  padding: var(--space-12) var(--space-16);
+  border-radius: var(--radius-14);
+}
+
+.running { --bn-fg: var(--run); --bn-bg: var(--run-bg); }
+.partial { --bn-fg: var(--warn); --bn-bg: var(--warn-bg); }
+.failed { --bn-fg: var(--err); --bn-bg: var(--err-bg); }
+.done { --bn-fg: var(--accent-ink); --bn-bg: var(--accent-soft); }
+.info { --bn-fg: var(--ink-2); --bn-bg: var(--band); }
+
+.icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--bn-fg);
+}
+
+.text {
+  flex: 1 1 var(--status-banner-basis);
+  min-width: 0;
+}
+.card .text {
+  flex: 1 1 auto;
+}
+
+.title {
+  font-weight: var(--fw-heavy);
+  color: var(--bn-fg);
+}
+.desc {
+  color: var(--ink-2);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+}
+
+/* 띠 안 행동 버튼 (Main 362) */
+.action {
+  display: inline-flex;
+  align-items: center;
+  height: var(--size-34);
+  padding: 0 var(--space-12);
+  border: 0;
+  border-radius: var(--radius-10);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--fs-13-5);
+  font-weight: var(--fw-bold);
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: var(--shadow-1);
+  transition:
+    transform var(--dur-press) var(--ease),
+    box-shadow var(--dur-color) var(--ease);
+}
+@media (hover: hover) {
+  .action:enabled:hover {
+    box-shadow: 0 0 0 1px var(--line-2), var(--shadow-lift);
+  }
+}
+.action:enabled:active {
+  transform: scale(.96);
+}
+.action:disabled {
+  color: var(--disabled-ghost);
+  cursor: progress;
+}

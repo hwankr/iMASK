@@ -1,0 +1,156 @@
+/* ==========================================================================
+   탐지 항목 행 — Main 472–510 · 디자인 기준 04 '목록 행'
+   누르면 같은 자리에서 펼침(dg-expand) · 화살표가 돈다
+   ========================================================================== */
+.row {
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  transition: background-color var(--dur-250) var(--ease);
+}
+.open {
+  background: var(--hover);
+}
+
+.toggle {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-10);
+  padding: var(--space-14) var(--space-14) var(--space-14) var(--space-16);
+  border: 0;
+  margin: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-color) var(--ease);
+}
+@media (hover: hover) {
+  .toggle:hover {
+    background: var(--tint-025);
+  }
+}
+
+.body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+.line1 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
+}
+.cat {
+  font-size: var(--fs-12-5);
+  font-weight: var(--fw-bold);
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.status {
+  margin-left: auto;
+}
+.label {
+  font-size: var(--fs-15);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-tight-1);
+  color: var(--ink);
+}
+.masked {
+  font-family: var(--mono);
+  font-size: var(--fs-14);
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+}
+.maskedFp {
+  color: var(--ink-3);
+  text-decoration: line-through;
+}
+.metaLine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--space-6);
+  font-size: var(--fs-12-5);
+  color: var(--ink-3);
+}
+.id {
+  font-family: var(--mono);
+  font-size: var(--fs-12);
+}
+.noLoc {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-weight: var(--fw-heavy);
+  color: var(--warn);
+}
+
+.chev {
+  flex: none;
+  margin-top: 2px;
+  display: inline-flex;
+  color: var(--ink-4);
+  transition: transform var(--dur-300) var(--ease);
+}
+.open .chev {
+  transform: rotate(180deg);
+}
+
+/* 펼친 내용 */
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-14);
+  padding: 0 var(--space-16) var(--space-16);
+  --dg-anim: dg-expand; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-320) var(--ease) both;
+}
+.dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: var(--finding-label-w) minmax(0, 1fr);
+  gap: var(--space-8) var(--space-12);
+  font-size: var(--fs-13-5);
+  line-height: var(--lh-155);
+}
+.dt {
+  color: var(--ink-3);
+  font-weight: var(--fw-semibold);
+}
+.dd {
+  margin: 0;
+  color: var(--ink);
+}
+.dd2 {
+  color: var(--ink-2);
+}
+.ddWarn {
+  color: var(--warn);
+}
+.rule {
+  padding: 1px var(--space-6);
+  border-radius: var(--radius-6);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+  font-family: var(--mono);
+  font-size: var(--fs-12-5);
+  font-weight: var(--fw-semibold);
+}
+.ruleName {
+  color: var(--ink-2);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+}
+.locked {
+  margin: 0;
+  font-size: var(--fs-13);
+  color: var(--ink-3);
+}

@@ -1,0 +1,437 @@
+/* ==========================================================================
+   원문 종이와 샘플 문서 블록 12종 — Main 409–421 (가상 서식 화면)
+   하이라이트(디자인 기준 05): 평소 위험 색 밑줄 · 고르면 테두리와 이름표 · 고른 순간 두 번 퍼지는 신호
+   색은 tokens.css 의 --doc-* · 위험 색은 ② 값을 CSS 변수(--hl-*)로 받는다.
+   ========================================================================== */
+
+/* 종이 (Main 408) — 배율은 --paper-zoom, 쪽이 바뀌면 dg-page-a/b 를 번갈아 떠오른다 */
+.paper {
+  zoom: var(--paper-zoom);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: var(--paper-w);
+  min-height: var(--paper-min-h);
+  margin: 0 auto;
+  padding: var(--space-52) var(--space-58) var(--space-40);
+  border-radius: var(--radius-paper);
+  background: var(--paper);
+  box-shadow: var(--shadow-paper);
+  font-size: var(--fs-13);
+  line-height: var(--lh-160);
+  color: var(--doc-ink);
+  animation: var(--dg-anim) var(--dur-page) var(--ease) both;
+}
+.pageA {
+  --dg-anim: dg-page-a; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+}
+.pageB {
+  --dg-anim: dg-page-b; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+}
+/* 스캔 문서 — 종이색 · 약한 대비 · 살짝 기울어짐 */
+.scan {
+  background: var(--paper-scan);
+  filter: contrast(0.97) saturate(0.85);
+  transform: rotate(-0.35deg);
+}
+
+/* 종이는 CSS zoom 으로 줄어든다. 포커스 윤곽선이 화면에서 2px(디자인 기준 08)로 보이도록 배율만큼 되돌린다
+   (그대로 두면 0.95배에서 1px 로 깎인다). */
+.paper :focus-visible {
+  outline-width: calc(var(--focus-w) / var(--paper-zoom));
+  outline-offset: calc(var(--focus-offset) / var(--paper-zoom));
+}
+
+/* ---------- 하이라이트 ---------- */
+
+/* 탐지 위치 — 진짜 버튼. 평소: 위험 색 옅은 바탕 + 밑줄 */
+.hl {
+  position: relative;
+  margin: 0;
+  padding: 1px 2px;
+  border: 0;
+  border-radius: var(--radius-3);
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  background: var(--hl-soft);
+  box-shadow: inset 0 -2px 0 var(--hl-solid);
+  text-decoration: none;
+  text-underline-offset: var(--space-3);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-250) var(--ease),
+    box-shadow var(--dur-250) var(--ease);
+}
+/* 오탐 — 점선 밑줄, 바탕·밑줄 없음 */
+.fp {
+  text-decoration: underline dotted var(--fp-underline);
+}
+.fp:not(.on) {
+  background: transparent;
+  box-shadow: none;
+}
+/* 고른 위치 — 테두리 */
+.on {
+  background: var(--hl-on);
+  box-shadow: 0 0 0 2px var(--pc);
+}
+/* 탐지 항목이 아닌 고른 위치(검토사항 · 연결 근거) */
+.mark {
+  position: relative;
+  padding: 1px 2px;
+  border-radius: var(--radius-3);
+  background: var(--hl-on);
+  box-shadow: 0 0 0 2px var(--pc);
+  transition:
+    background-color var(--dur-250) var(--ease),
+    box-shadow var(--dur-250) var(--ease);
+}
+/* 도장 안 탐지 위치는 밑줄 간격을 두지 않는다(Main 418) */
+.stampHl {
+  text-underline-offset: auto;
+}
+
+/* 고른 순간 테두리 밖으로 두 번 퍼지는 신호 — 같은 모양의 keyframes 둘을 번갈아 다시 재생 */
+.ringA {
+  --dg-anim: dg-ring-a; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-ring) var(--ease) 2;
+}
+.ringB {
+  --dg-anim: dg-ring-b; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-ring) var(--ease) 2;
+}
+
+/* 이름표 — 항목 ID · 정보 종류 · 위험 */
+.tag {
+  position: absolute;
+  left: -2px;
+  bottom: calc(100% + var(--space-6));
+  z-index: var(--z-tag);
+  padding: var(--space-4) var(--space-6);
+  border-radius: var(--radius-4);
+  background: var(--tag-bg);
+  color: var(--on-solid);
+  box-shadow: var(--shadow-tag);
+  font-size: var(--fs-11);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-100);
+  letter-spacing: var(--ls-none);
+  white-space: nowrap;
+  pointer-events: none;
+  --dg-anim: dg-pop; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-pop) var(--ease) both;
+}
+/* 판독 불가 · 잘림 블록의 이름표는 왼쪽 0 */
+.tagBlock {
+  left: 0;
+}
+/* 도장 안 이름표 — 아래쪽, 기울기를 되돌림 */
+.tagStamp {
+  left: auto;
+  right: -2px;
+  bottom: auto;
+  top: calc(100% + var(--space-6));
+  transform: rotate(5deg);
+}
+
+/* ---------- 블록 ---------- */
+
+/* 머리 막대 */
+.bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: var(--space-12);
+  margin-bottom: var(--space-14);
+  padding-bottom: var(--space-6);
+  border-bottom: 2px solid var(--doc-ink);
+  font-size: var(--fs-11-5);
+  color: var(--doc-ink-2);
+}
+.barLeft {
+  font-size: var(--fs-12-5);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--ls-wide-2);
+  color: var(--doc-ink);
+}
+
+/* 제목 */
+.titleBlock {
+  margin: var(--space-10) 0 var(--space-18);
+  text-align: center;
+}
+.titleText {
+  font-size: var(--fs-22);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--ls-wide-3);
+  color: var(--doc-title);
+}
+.titleSub {
+  margin-top: var(--space-4);
+  font-size: var(--fs-12);
+  color: var(--doc-ink-2);
+}
+
+/* 구역 제목 */
+.sec {
+  margin: var(--space-16) 0 var(--space-7);
+  font-size: var(--fs-13-5);
+  font-weight: var(--fw-heavy);
+  color: var(--doc-title);
+}
+
+/* 항목표 */
+.kv {
+  display: grid;
+  margin-bottom: var(--space-6);
+  border-top: 1px solid var(--doc-rule);
+  border-left: 1px solid var(--doc-rule);
+}
+.kv2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  --kv-label: var(--kv-label-w);
+}
+.kv3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  --kv-label: var(--kv-label-w-3);
+}
+.kvItem {
+  display: grid;
+  grid-template-columns: var(--kv-label) minmax(0, 1fr);
+  min-height: var(--size-36);
+  border-right: 1px solid var(--doc-rule);
+  border-bottom: 1px solid var(--doc-rule);
+}
+.kvLabel {
+  display: flex;
+  align-items: center;
+  padding: var(--space-7) var(--space-10);
+  border-right: 1px solid var(--doc-rule-2);
+  background: var(--doc-label-bg);
+  font-size: var(--fs-12);
+  font-weight: var(--fw-bold);
+  color: var(--doc-label);
+}
+.kvValue {
+  align-self: center;
+  padding: var(--space-7) var(--space-10);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 표 */
+.table {
+  width: 100%;
+  margin: var(--space-4) 0 var(--space-10);
+  border-collapse: collapse;
+  font-size: var(--fs-12-5);
+  font-variant-numeric: tabular-nums;
+}
+.th {
+  padding: var(--space-6) var(--space-8);
+  border: 1px solid var(--doc-rule);
+  background: var(--doc-label-bg);
+  font-weight: var(--fw-bold);
+  color: var(--doc-label);
+  white-space: nowrap;
+}
+.td {
+  padding: var(--space-6) var(--space-8);
+  border: 1px solid var(--doc-cell-line);
+  vertical-align: middle;
+}
+.left {
+  text-align: left;
+}
+.right {
+  text-align: right;
+}
+.center {
+  text-align: center;
+}
+
+/* 문단 */
+.p {
+  margin: var(--space-10) 0;
+  font-size: var(--fs-13);
+  line-height: var(--lh-170);
+  color: var(--doc-ink);
+}
+.small {
+  font-size: var(--fs-11-5);
+  color: var(--doc-ink-2);
+}
+
+/* 동의 체크 */
+.checks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  margin: var(--space-10) 0;
+}
+.check {
+  display: flex;
+  gap: var(--space-8);
+  align-items: flex-start;
+  font-size: var(--fs-12-5);
+}
+.box {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--size-14);
+  height: var(--size-14);
+  margin-top: var(--space-3);
+  border: var(--bw-1-4) solid var(--doc-ink);
+  border-radius: var(--radius-2);
+  color: var(--doc-ink);
+}
+.boxMark {
+  width: var(--size-11);
+  height: var(--size-11);
+}
+
+/* 서명란 */
+.sign {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-10);
+  margin: var(--space-20) 0 var(--space-8);
+}
+.signDate {
+  font-size: var(--fs-13);
+}
+.signRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-12);
+  font-size: var(--fs-13);
+}
+.signRole {
+  color: var(--doc-label);
+}
+.signName {
+  min-width: var(--doc-sign-name-min-w);
+  padding: 0 var(--space-8) var(--space-3);
+  border-bottom: 1px solid var(--doc-ink);
+  text-align: center;
+  font-weight: var(--fw-bold);
+}
+.signMark {
+  color: var(--doc-ink-2);
+}
+
+/* 접수 도장 */
+.stamp {
+  position: absolute;
+  right: var(--space-56);
+  top: var(--space-44);
+  z-index: var(--z-raise);
+  padding: var(--space-6) var(--space-12);
+  border: 2px solid var(--doc-stamp-line);
+  border-radius: var(--radius-6);
+  background: var(--doc-stamp-bg);
+  color: var(--doc-stamp-ink);
+  font-size: var(--fs-11-5);
+  font-weight: var(--fw-heavy);
+  line-height: var(--lh-160);
+  text-align: center;
+  transform: rotate(-5deg);
+}
+
+/* 판독 불가 */
+.blur {
+  position: relative;
+  margin: var(--space-6) 0 var(--space-12);
+  border-radius: var(--radius-4);
+}
+.blockOn {
+  box-shadow: 0 0 0 2px var(--pc);
+}
+.blurText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-9);
+  padding: var(--space-8) var(--space-6);
+  overflow: hidden;
+  filter: blur(var(--doc-blur-radius));
+  opacity: .8;
+  font-size: var(--fs-12-5);
+  color: var(--doc-blur-ink);
+  white-space: nowrap;
+}
+.blurCover {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--doc-blur-line);
+  border-radius: var(--radius-4);
+  background: repeating-linear-gradient(135deg, var(--doc-blur-stripe) 0 var(--space-8), transparent var(--space-8) var(--space-16));
+}
+.flag {
+  display: inline-flex;
+  gap: var(--space-6);
+  align-items: center;
+  padding: var(--space-4) var(--space-8);
+  border: 1px solid var(--doc-flag-line);
+  border-radius: var(--radius-4);
+  background: var(--doc-flag-bg);
+  color: var(--doc-flag-fg);
+  font-size: var(--fs-12);
+  font-weight: var(--fw-bold);
+}
+.flagCut {
+  padding: var(--space-5) var(--space-10);
+}
+
+/* 잘림 */
+.cut {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: var(--doc-cut-min-h);
+  margin-top: var(--space-10);
+  border-radius: var(--radius-2);
+}
+.cutGhost {
+  height: var(--size-13);
+  overflow: hidden;
+  font-size: var(--fs-13);
+  line-height: var(--lh-20px);
+  color: var(--doc-ink);
+  white-space: nowrap;
+}
+.cutEdge {
+  display: block;
+  fill: var(--doc-cut-1);
+}
+/* 종이 안쪽 여백(좌우 58 · 아래 40)까지 채운다 */
+.cutBody {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 calc(var(--space-58) * -1) calc(var(--space-40) * -1);
+  padding: var(--space-24);
+  background: repeating-linear-gradient(135deg, var(--doc-cut-1) 0 var(--space-10), var(--doc-cut-2) var(--space-10) var(--space-20));
+}
+
+/* 바닥글 */
+.foot {
+  margin-top: auto;
+  padding-top: var(--space-24);
+}
+.footInner {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-12);
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--doc-rule-2);
+  font-size: var(--fs-11-5);
+  color: var(--doc-foot);
+}

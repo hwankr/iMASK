@@ -1,0 +1,411 @@
+/* ==========================================================================
+   원문 뷰어 — Main 402–456: 스크롤 영역 · 문서 이름 줄 · 공지 · 종이 · 미리보기 대신 화면 · 떠 있는 도구 줄
+   ========================================================================== */
+.viewer {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--canvas);
+}
+
+/* 스크롤 영역 — 여백 18 24 92 (휴대폰 12 12 84 — 도구 줄이 두 줄로 접히면 아래 여백을 늘린다) */
+.scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-18) var(--space-24) calc(var(--space-72) + var(--space-20));
+}
+.scroll:focus-visible {
+  outline-offset: calc(var(--space-3) * -1);
+}
+@media (max-width: 767.98px) {
+  /* 아래 여백 84 는 한 줄 도구 줄(높이 34 + 위아래 여백 5 = 44)을 기준으로 끝까지 내렸을 때 종이 바닥과 도구 줄 사이 28 을 남긴다.
+     좁은 휴대폰(360 · 375 · 320 …)에서 도구 줄이 두 줄로 접히면 늘어난 높이(실제 높이 − 44)만큼 아래 여백도 늘려 같은 28 을 지킨다.
+     --viewer-bar-h 는 DocViewer.tsx 가 ResizeObserver 로 잰 도구 줄 실제 높이 — 재기 전 · 한 줄일 때는 늘림 0 */
+  .scroll {
+    padding: var(--space-12) var(--space-12)
+      calc(var(--space-72) + var(--space-12) + max(0px, var(--viewer-bar-h, 0px) - var(--size-34) - var(--space-5) * 2));
+  }
+}
+
+/* 종이 폭(배율 반영)에 맞춘 줄 */
+.fit {
+  max-width: calc(var(--paper-w) * var(--paper-zoom));
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.nameLine {
+  display: flex;
+  align-items: center;
+  gap: var(--space-7);
+  margin-bottom: var(--space-10);
+  font-size: var(--fs-13);
+  font-weight: var(--fw-bold);
+  color: var(--ink-2);
+}
+.nameIcon {
+  display: inline-flex;
+  flex: none;
+  color: var(--ink-3);
+}
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pageNo {
+  flex: none;
+  font-weight: var(--fw-semibold);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 공지 */
+.notices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin-bottom: var(--space-12);
+}
+.notice {
+  display: flex;
+  gap: var(--space-10);
+  align-items: flex-start;
+  padding: var(--space-10) var(--space-14);
+  border-radius: var(--radius-14);
+  background: var(--nt-bg);
+  box-shadow: var(--shadow-1);
+  font-size: var(--fs-13-5);
+  line-height: var(--lh-155);
+  --dg-anim: dg-pop; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-pop) var(--ease) both;
+}
+.warn {
+  --nt-bg: var(--warn-bg);
+  --nt-fg: var(--warn);
+}
+.accent {
+  --nt-bg: var(--accent-soft-2);
+  --nt-fg: var(--accent-ink);
+}
+.run {
+  --nt-bg: var(--run-bg);
+  --nt-fg: var(--run);
+}
+.noticeIcon {
+  display: inline-flex;
+  flex: none;
+  margin-top: 1px;
+  color: var(--nt-fg);
+}
+.noticeTitle {
+  font-weight: var(--fw-heavy);
+  color: var(--nt-fg);
+}
+.noticeText {
+  color: var(--ink-2);
+}
+
+/* ---------- 미리보기 대신 화면 (Main 425–433) ---------- */
+.ph {
+  max-width: var(--narrow-max);
+  margin: var(--space-20) auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-28) var(--space-20);
+  text-align: center;
+  --dg-anim: dg-in; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-400) var(--ease) both;
+}
+.phIcon {
+  width: var(--size-64);
+  height: var(--size-64);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-22);
+  background: var(--fill);
+  color: var(--ink-2);
+}
+.phErr {
+  background: var(--err-bg);
+  color: var(--err);
+}
+.phRun {
+  background: var(--run-bg);
+  color: var(--run);
+}
+.phTitle {
+  font-size: var(--fs-18);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--ls-tight-2);
+}
+.phText {
+  font-size: var(--fs-14);
+  line-height: var(--lh-160);
+  color: var(--ink-2);
+}
+.phSkeleton {
+  margin-top: var(--space-8);
+}
+.phNote {
+  font-size: var(--fs-13);
+  color: var(--ink-3);
+}
+
+/* 큰 행동 버튼 46px (Main 431 · 573) — 링크·버튼 모두 */
+.bigBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-7);
+  height: var(--size-46);
+  padding: 0 var(--space-18) 0 var(--space-14);
+  border: 0;
+  margin: 0;
+  border-radius: var(--radius-12);
+  background: var(--accent);
+  color: var(--on-solid);
+  font-size: var(--fs-15);
+  font-weight: var(--fw-heavy);
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-color) var(--ease),
+    transform var(--dur-press) var(--ease);
+}
+.phBtn {
+  margin-top: var(--space-4);
+}
+@media (hover: hover) {
+  .bigBtn:hover:not(:disabled) {
+    background: var(--accent-ink);
+  }
+}
+.bigBtn:active:not(:disabled) {
+  transform: scale(.97);
+}
+.bigBtn:disabled {
+  background: var(--disabled-bg);
+  color: var(--disabled-fg);
+  cursor: progress;
+}
+
+/* ---------- 떠 있는 도구 줄 (Main 436–452) ---------- */
+.barWrap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--viewer-bar-bottom);
+  z-index: var(--z-float);
+  display: flex;
+  justify-content: center;
+  padding: 0 var(--space-12);
+  pointer-events: none;
+}
+.bar {
+  pointer-events: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  max-width: 100%;
+  padding: var(--space-5);
+  border-radius: var(--radius-16);
+  background: var(--frost-toolbar);
+  backdrop-filter: saturate(1.6) blur(var(--space-12));
+  box-shadow: var(--shadow-float);
+  --dg-anim: dg-in; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-450) var(--ease) var(--dur-100) both;
+}
+.group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* 아이콘 버튼 — 34px(휴대폰 32) · 비활성 연한 회색 · 누름 .9 (공통 IconButton 을 덮어쓴다) */
+.tool.tool {
+  width: var(--viewer-btn);
+  height: var(--viewer-btn);
+  border-radius: var(--radius-10);
+}
+.tool.tool:disabled {
+  color: var(--disabled-icon);
+  cursor: default;
+}
+.tool.tool:active:not(:disabled) {
+  transform: scale(.9);
+}
+
+.label {
+  min-width: var(--viewer-label-w);
+  text-align: center;
+  font-size: var(--fs-13-5);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+.label2 {
+  min-width: var(--viewer-label-w-2);
+}
+.div {
+  width: 1px;
+  height: var(--size-20);
+  margin: 0 var(--viewer-div-m);
+  background: var(--line-2);
+}
+
+/* 화면 맞춤 */
+.fitBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-5);
+  height: var(--size-34);
+  padding: 0 var(--space-10);
+  margin: 0 0 0 2px;
+  border: 0;
+  border-radius: var(--radius-10);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: var(--fs-13);
+  font-weight: var(--fw-bold);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-200) var(--ease),
+    color var(--dur-200) var(--ease),
+    transform var(--dur-press) var(--ease);
+}
+.fitOn {
+  background: var(--accent-soft-2);
+  color: var(--accent-ink);
+}
+.fitBtn:active:not(:disabled) {
+  transform: scale(.95);
+}
+.fitBtn:disabled {
+  opacity: .45;
+  cursor: default;
+}
+
+/* 마스킹 미리보기 */
+.maskBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: var(--size-34);
+  padding: 0 var(--space-10) 0 var(--space-8);
+  margin: 0;
+  border: 0;
+  border-radius: var(--radius-10);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: var(--fs-13);
+  font-weight: var(--fw-bold);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--dur-color) var(--ease);
+}
+@media (hover: hover) {
+  .maskBtn:hover:not(:disabled) {
+    background: var(--fill);
+  }
+}
+.maskBtn:disabled {
+  opacity: .45;
+  cursor: default;
+}
+.track {
+  position: relative;
+  flex: none;
+  width: var(--size-32);
+  height: var(--size-20);
+  border-radius: var(--radius-pill);
+  background: var(--switch-off);
+  transition: background-color var(--dur-220) var(--ease);
+}
+.knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: var(--size-16);
+  height: var(--size-16);
+  border-radius: var(--radius-round);
+  background: var(--surface);
+  box-shadow: var(--shadow-switch);
+  transition: transform var(--dur-260) var(--ease);
+}
+.maskOn .track {
+  background: var(--accent);
+}
+.maskOn .knob {
+  transform: translateX(var(--space-12));
+}
+
+/* ---------- 휴대폰 누름 영역 (BRIEF §3: 최소 44px) ----------
+   보이는 크기(아이콘 32 · 화면 맞춤 · 마스킹 34)와 배치는 그대로 두고 투명 ::after 로 누름 영역만 넓힌다.
+   도구 줄은 버튼 사이가 좁아(구분선 칸 9px, 확대↔화면 맞춤 4px) 공통 IconButton 처럼 가운데 기준으로 넓히면
+   이웃끼리 겹치고 뒤에 그린 버튼이 앞 버튼의 넓힌 영역을 가로챈다. 그래서 버튼마다 왼쪽(--hit-l) · 오른쪽(--hit-r)
+   넓힘을 정해 틈을 겹치지 않게 나누고, 모자란 폭은 글자 칸('1 / 2' · '47%') 쪽으로 넓힌다.
+   - 구분선 칸(간격 2 + 여백 + 선 1 + 여백 + 간격 2): 선까지는 왼쪽 버튼(--hit-div-l), 선 오른쪽은 오른쪽 버튼(--hit-div-r)
+   - 확대↔화면 맞춤 틈(묶음 간격 2 + 화면 맞춤 왼쪽 여백 2): 화면 맞춤(폭 35)이 갖고, 확대는 글자 칸 쪽으로 넓힌다
+   - 높이는 모두 max(100%, --touch-min) — 도구 줄 안쪽 여백 5 안에 들어간다
+   390 폭 실제 칸(x): 이전 15–59 · 다음 90–134 · 축소 134–178 · 확대 202–246 · 화면 맞춤 246–290 · 마스킹 290–374
+   두 줄로 접히는 폭에서는 아래 .bar 의 row-gap 이 위 · 아래 행의 넓힌 영역을 떼어 놓는다 */
+@media (max-width: 767.98px) {
+  .bar {
+    --hit-spare: calc(var(--touch-min) - var(--viewer-btn));
+    --hit-div-l: calc(2px + var(--viewer-div-m) + 1px);
+    --hit-div-r: calc(2px + var(--viewer-div-m));
+    /* 좁은 휴대폰(360 · 375 · 320 …)에서는 도구 줄이 두 줄로 접힌다. 각 행 상자(34)의 위아래로 5씩 넓힌 44 영역이
+       행 간격 2px 에서는 위 · 아래 행끼리 8px 겹쳐 아래 행(마스킹)이 위 행(다음 · 축소)의 누름을 가로챈다.
+       행 간격만 (44 − 34) + 2 = 12 로 넓혀 넓힌 영역 사이에도 열 간격과 같은 2px 틈을 둔다.
+       열 간격은 2px 그대로라 한 줄로 놓이는 폭(390 · 414)의 배치는 바뀌지 않는다. */
+    row-gap: calc(var(--touch-min) - var(--size-34) + 2px);
+  }
+  .hitPrev {
+    --hit-l: calc(var(--hit-spare) / 2);
+    --hit-r: calc(var(--hit-spare) / 2);
+  }
+  .hitNext {
+    --hit-l: calc(var(--hit-spare) - var(--hit-div-l));
+    --hit-r: var(--hit-div-l);
+  }
+  .hitZoomOut {
+    --hit-l: var(--hit-div-r);
+    --hit-r: calc(var(--hit-spare) - var(--hit-div-r));
+  }
+  .hitZoomIn {
+    --hit-l: var(--hit-spare);
+    --hit-r: 0px;
+  }
+  .fitBtn {
+    position: relative;
+    --hit-l: calc(2px + 2px);
+    --hit-r: var(--hit-div-l);
+  }
+  .maskBtn {
+    position: relative;
+    --hit-l: var(--hit-div-r);
+    --hit-r: var(--space-5);
+  }
+  /* 공통 IconButton 의 가운데 ::after(44×44)를 이 칸 나누기로 덮어쓴다(같은 클래스 두 번 선택자) */
+  .tool.tool::after,
+  .fitBtn::after,
+  .maskBtn::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: calc(var(--hit-l) * -1);
+    right: calc(var(--hit-r) * -1);
+    width: auto;
+    height: max(100%, var(--touch-min));
+    transform: translateY(-50%);
+  }
+}

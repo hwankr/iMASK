@@ -1,0 +1,241 @@
+/* ==========================================================================
+   결과 패널 — Main 457–600: 탭 · 스크롤 영역 · 탐지 항목 머리(필터 칩 · 현재 문서만 보기) · 빈 상태 ·
+   기다림 안내 · 검토 메모
+   ========================================================================== */
+.panel {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+}
+.mobile {
+  border-left: 0;
+}
+
+.tabs {
+  flex: none;
+  padding: var(--space-14) var(--space-16) var(--space-10);
+}
+
+.scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+.scroll:focus-visible {
+  outline-offset: calc(var(--space-3) * -1);
+}
+
+.fade {
+  --dg-anim: dg-fade; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-300) var(--ease) both;
+}
+
+/* 탐지 항목 머리 — 위에 붙어 있다 */
+.sticky {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-tag);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+  padding: 2px var(--space-16) var(--space-12);
+  background: var(--frost-sticky);
+  backdrop-filter: blur(var(--space-8));
+  border-bottom: 1px solid var(--line);
+}
+.stickyRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+}
+.shown {
+  font-size: var(--fs-12-5);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* 조건에 맞는 항목 없음 */
+.noItems {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-10);
+  padding: var(--space-40) var(--space-16);
+  text-align: center;
+  font-size: var(--fs-14);
+  color: var(--ink-2);
+}
+.clearBtn {
+  height: var(--size-38);
+  padding: 0 var(--space-14);
+  border: 0;
+  margin: 0;
+  border-radius: var(--radius-10);
+  background: var(--fill);
+  color: var(--ink);
+  font-size: var(--fs-13-5);
+  font-weight: var(--fw-bold);
+  cursor: pointer;
+  transition: background-color var(--dur-color) var(--ease);
+}
+@media (hover: hover) {
+  .clearBtn:hover {
+    background: var(--fill-2);
+  }
+}
+/* 휴대폰: 보이는 높이 38 은 그대로, 투명 ::after 로 누름 영역만 44 이상(위아래 3px 씩 — 주변에 다른 버튼 없음) */
+@media (max-width: 767.98px) {
+  .clearBtn {
+    position: relative;
+  }
+  .clearBtn::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, var(--touch-min));
+    height: max(100%, var(--touch-min));
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* ---------- 기다림 (Main 565–576) ---------- */
+.wait {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  padding: var(--space-24) var(--space-20);
+  --dg-anim: dg-in; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-400) var(--ease) both;
+}
+.waitHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-14);
+}
+.waitIcon {
+  flex: none;
+  width: var(--size-52);
+  height: var(--size-52);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-18);
+  background: var(--run-bg);
+  color: var(--run);
+}
+.waitQueued {
+  background: var(--fill);
+  color: var(--ink-2);
+}
+.waitTitles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.waitTitle {
+  font-size: var(--fs-18);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--ls-tight-2);
+}
+.waitSub {
+  font-size: var(--fs-13-5);
+  color: var(--ink-3);
+}
+.waitText {
+  margin: 0;
+  font-size: var(--fs-14);
+  line-height: var(--lh-165);
+  color: var(--ink-2);
+}
+.waitDocs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+.waitDoc {
+  display: flex;
+  align-items: center;
+  gap: var(--space-10);
+  padding: var(--space-12) 2px;
+  border-bottom: 1px solid var(--line);
+}
+.waitDocIcon {
+  display: inline-flex;
+  color: var(--st-fg);
+}
+.waitDocTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--fs-14);
+  font-weight: var(--fw-semibold);
+}
+.waitDocState {
+  font-size: var(--fs-13);
+  font-weight: var(--fw-heavy);
+  color: var(--st-fg);
+}
+.waitHint {
+  margin: 0;
+  font-size: var(--fs-13);
+  line-height: var(--lh-160);
+  color: var(--ink-3);
+}
+.tryBtn {
+  align-self: flex-start;
+}
+
+/* ---------- 검토 메모 (Main 595–600) ---------- */
+.memo {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-12) var(--space-16);
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+.memoIcon {
+  flex: none;
+  width: var(--size-36);
+  height: var(--size-36);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-12);
+  background: var(--fill);
+  color: var(--ink-2);
+}
+.memoTexts {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.memoTitle {
+  font-size: var(--fs-13);
+  font-weight: var(--fw-heavy);
+}
+.memoPreview {
+  font-size: var(--fs-13);
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.memoHas {
+  color: var(--ink-2);
+}
+.memoBtn.memoBtn {
+  padding: 0 var(--space-14);
+}

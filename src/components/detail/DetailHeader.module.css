@@ -1,0 +1,197 @@
+/* ==========================================================================
+   상세 머리글 — Main 331–357 (제목 · 분석 ID · 행동 버튼 · 상태 3종 · 탐지 확인 진행)
+   ========================================================================== */
+.head {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--detail-head-gap);
+  padding: var(--detail-head-pad);
+  background: var(--surface);
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8) var(--space-10);
+  min-width: 0;
+}
+
+/* 뒤로 — 40px · 왼쪽 -8 (Main 333) */
+.back {
+  margin-left: calc(var(--space-8) * -1);
+}
+
+/* 데스크톱: 제목 옆에 줄을 맞춰 메타 / 태블릿 이하: 제목 아래 (L.dTitleDir) */
+.titles {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: var(--space-12);
+}
+@media (max-width: 1199.98px) {
+  .titles {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+  }
+}
+
+.title {
+  flex: none;
+  margin: 0;
+  max-width: 100%;
+  min-width: 0;
+  font-size: var(--fs-detail-title);
+  line-height: var(--lh-130);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--ls-tight-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meta {
+  min-width: 0;
+  max-width: 100%;
+  font-size: var(--fs-12-5);
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.code {
+  font-family: var(--mono);
+  font-size: var(--fs-12);
+}
+
+.actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+/* 머리글 버튼은 휴대폰에서도 40px (Main 339·341·342) — 공통 Button md 는 휴대폰 44 라 높이를 고정한다.
+   공통 Button 의 크기 규칙(.md.withIcon 등)보다 확실히 앞서도록 부모 클래스를 붙인다. */
+.actions .btn.btn {
+  height: var(--size-40);
+}
+/* '결과 보고서' — 0 14 0 12 · 간격 7 (Main 339) */
+.actions .report.report {
+  gap: var(--space-7);
+  padding: 0 var(--space-14) 0 var(--space-12);
+}
+/* '검토 완료' · '검토 다시 열기' — 0 R 0 L (L.dBtnPadL/R) */
+.actions .state.state {
+  gap: var(--space-6);
+  padding: 0 var(--detail-btn-pad-r) 0 var(--detail-btn-pad-l);
+}
+.actions .complete.complete {
+  font-size: var(--fs-14);
+}
+/* 휴대폰: 위에서 40px 로 고정했으므로 투명 ::after 로 누름 영역만 넓힌다(보이는 크기 · 배치 그대로).
+   위(머리글 안쪽 여백 8) · 오른쪽(16) · 왼쪽(보고서 버튼과 8)이 비어 있어 사방 5px — 도구 줄 34px 버튼이 44px 이 될 때와
+   같은 폭 — 넓힌다 → 높이 50(≥ --touch-min). 보고서 아이콘 버튼(공통 IconButton)의 넓힌 영역(오른쪽 2px)과는 1px 떨어진다. */
+@media (max-width: 767.98px) {
+  .actions .state.state::after {
+    content: '';
+    position: absolute;
+    inset: calc(var(--space-5) * -1);
+  }
+}
+
+/* ---------- 상태 3종 + 진행 ---------- */
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8) var(--space-20);
+}
+.dl {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8) 0;
+}
+.stat {
+  display: flex;
+  align-items: center;
+  gap: var(--space-7);
+  padding-right: var(--stat-pr);
+  margin-right: var(--stat-mr);
+  border-right: 1px solid var(--line-2);
+}
+.stat:last-child {
+  padding-right: 0;
+  margin-right: 0;
+  border-right: 0;
+}
+@media (max-width: 767.98px) {
+  .stat {
+    border-right: 0;
+  }
+}
+.dt {
+  font-size: var(--fs-12-5);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-3);
+}
+.dd {
+  margin: 0;
+}
+
+.progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-10);
+  margin-left: auto;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+@media (max-width: 767.98px) {
+  .progress {
+    margin-left: 0;
+    flex: 1 1 100%;
+  }
+}
+.bar {
+  flex: none;
+  width: var(--pager-w);
+  height: var(--size-8);
+  border-radius: var(--radius-pill);
+  background: var(--fill-2);
+  overflow: hidden;
+}
+@media (max-width: 767.98px) {
+  .bar {
+    flex: 1 1 auto;
+  }
+}
+.fill {
+  height: 100%;
+  width: var(--pct);
+  border-radius: var(--radius-pill);
+  background: var(--accent-bright);
+  transform-origin: left center;
+  --dg-anim: dg-grow; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-1000) var(--ease) both;
+  transition: width var(--dur-600) var(--ease);
+}
+.pgText {
+  flex: none;
+  font-size: var(--fs-13);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pgText strong {
+  font-weight: var(--fw-heavy);
+  color: var(--ink);
+}
+.pgText .warn {
+  color: var(--warn);
+}

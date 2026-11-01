@@ -1,0 +1,90 @@
+/* ==========================================================================
+   상세 검토 화면 틀 — Main 328–369 · renderVals L(반응형)
+   데스크톱(≥1200): 문서 목록 · 원문 · 결과 3단 / 태블릿: 왼쪽 접힌 레일 기본 / 휴대폰(<768): 탭으로 한 판씩
+   ========================================================================== */
+.screen {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  --dg-anim: dg-fade; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-350) var(--ease) both;
+}
+
+/* 휴대폰 화면 전환 탭 (Main 367) */
+.mTabs {
+  flex: none;
+  padding: var(--space-4) var(--space-16) var(--space-12);
+  background: var(--surface);
+}
+
+.panes {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: var(--left-w) minmax(0, 1fr) var(--right-w);
+  grid-template-rows: minmax(0, 1fr);
+  border-top: 1px solid var(--line);
+}
+.railCols {
+  grid-template-columns: var(--rail-w) minmax(0, 1fr) var(--right-w);
+}
+.single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* ---------- 불러오는 중 ---------- */
+.skHead {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  padding: var(--detail-head-pad);
+  background: var(--surface);
+}
+.skTitle {
+  max-width: calc(var(--size-40) * 10);
+}
+.skMeta {
+  max-width: calc(var(--size-60) * 10);
+}
+.skPane {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  padding: var(--space-20) var(--space-18);
+  background: var(--surface);
+}
+.skLeft {
+  border-right: 1px solid var(--line);
+}
+.skRight {
+  border-left: 1px solid var(--line);
+}
+.skViewer {
+  min-height: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--space-28) var(--space-24);
+  background: var(--canvas);
+}
+@media (max-width: 767.98px) {
+  .skPanes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .skLeft,
+  .skRight {
+    display: none;
+  }
+}
+.error {
+  margin: 0;
+  padding: var(--space-24);
+  font-size: var(--fs-14);
+  color: var(--ink-2);
+}
+.errorBtn {
+  margin-left: var(--space-8);
+}

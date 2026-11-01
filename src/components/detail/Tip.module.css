@@ -1,0 +1,54 @@
+/* ==========================================================================
+   상세 화면 전용 툴팁 — 공통 IconButton(T2)의 툴팁과 같은 모양(토스트 색 · 12px · 700 · 둥글기 8)
+   IconButton 의 툴팁은 버튼 아래 가운데에만 뜬다. 화면 왼쪽 끝(접힌 레일)과 원문 뷰어 아래쪽 도구 줄처럼
+   그 자리에 뜨면 잘리는 곳에서 이 툴팁을 쓴다. 마우스 올림은 0.3초 뒤, 키보드 포커스는 바로 보인다.
+   ========================================================================== */
+.host {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.tip {
+  position: absolute;
+  z-index: var(--z-dropdown);
+  display: none;
+  padding: var(--space-5) var(--space-8);
+  border-radius: var(--radius-8);
+  background: var(--toast-bg);
+  color: var(--toast-fg);
+  box-shadow: var(--shadow-2);
+  font-size: var(--fs-12);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-135);
+  letter-spacing: var(--ls-none);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* 오른쪽(접힌 레일) */
+.right {
+  top: 50%;
+  left: calc(100% + var(--space-6));
+  transform: translateY(-50%);
+}
+
+/* 위(원문 뷰어 도구 줄) */
+.top {
+  bottom: calc(100% + var(--space-10));
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+@media (hover: hover) {
+  .host:hover .tip {
+    display: block;
+    --dg-anim: dg-fade; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+    animation: var(--dg-anim) var(--dur-color) var(--ease) var(--dur-300) both;
+  }
+}
+.host:has(:focus-visible) .tip {
+  display: block;
+  --dg-anim: dg-fade; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-color) var(--ease) both;
+}

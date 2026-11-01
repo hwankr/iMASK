@@ -15,7 +15,7 @@ import { DEFAULT_FILTERS, filtersToQuery, parseFilters, type ListFilters } from 
    - 로고(goHome) — 검색·필터를 모두 푼다(정렬은 그대로)
    ========================================================================== */
 
-const KEY = 'docguard:list-query';
+const KEY = 'imask:list-query';
 
 /** 저장소를 못 쓰는 환경(사생활 보호 모드 등)에서도 이 탭 안에서는 기억한다 */
 let memory = '';

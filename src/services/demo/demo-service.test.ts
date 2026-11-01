@@ -507,7 +507,7 @@ describe('9. DemoControls.prepare(state)', () => {
     expect(a.history.map((h) => h.id)).toEqual(['H116']);
 
     const csv = await svc.buildExport(id, 'csv');
-    expect(csv.name).toBe('문서가드_DG-20261101-0115_검토결과_탐지항목.csv');
+    expect(csv.name).toBe('iMASK_DG-20261101-0115_검토결과_탐지항목.csv');
     const json = await svc.buildExport(id, 'json');
     expect((JSON.parse(json.text) as { 분석: { 분석ID: string } }).분석.분석ID).toBe('DG-20261101-0115');
   });

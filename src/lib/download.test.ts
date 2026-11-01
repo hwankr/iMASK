@@ -25,7 +25,7 @@ function fakeEnv(overrides: Partial<DownloadEnv> = {}) {
   return { env, log, blobs, timers };
 }
 
-const CSV = { name: '문서가드_DG-20261030-0007_검토결과_탐지항목.csv', mime: 'text/csv;charset=utf-8', text: '﻿항목ID,정보종류\r\nF-01,이름\r\n' };
+const CSV = { name: 'iMASK_DG-20261030-0007_검토결과_탐지항목.csv', mime: 'text/csv;charset=utf-8', text: '﻿항목ID,정보종류\r\nF-01,이름\r\n' };
 
 describe('downloadFile — 브라우저 다운로드', () => {
   it('Blob 을 만들어 앵커를 누르고 handed 를 돌려준다', () => {

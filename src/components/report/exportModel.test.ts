@@ -19,7 +19,7 @@ describe('내보내기 모달 화면 값 — 원본 modalVM export', () => {
       const file = await svc.buildExport('A1', format);
       expect(expectedExportName('DG-20261030-0007', format)).toBe(file.name);
     }
-    expect(expectedExportName('DG-20261030-0007', 'csv')).toBe('문서가드_DG-20261030-0007_검토결과_탐지항목.csv');
+    expect(expectedExportName('DG-20261030-0007', 'csv')).toBe('iMASK_DG-20261030-0007_검토결과_탐지항목.csv');
   });
 
   it('주요 버튼 글자 — 만들기 · 만드는 중 · 다시 내보내기 · 다시 시도', async () => {

@@ -36,7 +36,7 @@ export interface AppConfig {
 }
 
 export const CONFIG = {
-  brandName: '문서가드',
+  brandName: 'iMASK',
   accent: '#00845C',
   user: { name: '이지은', team: '여신관리팀' },
   upload: { maxFiles: 10, maxFileMB: 20, accept: ['pdf', 'png', 'jpg', 'jpeg'] },

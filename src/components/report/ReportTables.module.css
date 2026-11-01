@@ -1,0 +1,173 @@
+/* 보고서 표 — Main 646(문서) · 654(정보 종류) · 655(전체 탐지 항목) · 679(최초 AI 결과와 담당자 수정)
+   표는 가로로 넘치면 그 칸 안에서만 스크롤한다(overflow-x:auto). */
+.scroll {
+  overflow-x: auto;
+}
+
+/* width:100%; border-collapse:separate; border-spacing:0; font-size:14px */
+.table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--fs-14);
+}
+.docTable {
+  min-width: var(--report-doc-table-min-w);
+}
+.catTable {
+  min-width: var(--report-cat-table-min-w);
+}
+/* 전체 탐지 항목 표 — min-width:720px; font-size:13.5px */
+.small {
+  min-width: var(--table-min-w);
+  font-size: var(--fs-13-5);
+}
+.changeTable {
+  min-width: var(--report-change-table-min-w);
+  font-size: var(--fs-13-5);
+}
+
+/* 머리 칸 — padding:10px 12px(처음 칸 왼쪽 0 ·끝 칸 오른쪽 0); font-size:13px; font-weight:600; color:var(--ink-3); border-bottom:1px solid var(--line-2) */
+.th {
+  padding: var(--space-10) var(--space-12);
+  text-align: left;
+  font-size: var(--fs-13);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-3);
+  border-bottom: 1px solid var(--line-2);
+}
+/* 전체 탐지 항목 — padding:8px 10px; font-size:12.5px */
+.thSm {
+  padding: var(--space-8) var(--space-10);
+  font-size: var(--fs-12-5);
+}
+
+/* 몸통 칸 — 문서 표 padding:14px 12px · border-bottom:1px solid var(--line) */
+.td {
+  padding: var(--space-14) var(--space-12);
+  border-bottom: 1px solid var(--line);
+}
+/* 정보 종류 표 · 수정 표 — padding:12px */
+.tdCat {
+  padding-top: var(--space-12);
+  padding-bottom: var(--space-12);
+}
+/* 전체 탐지 항목 — padding:9px 10px · 선은 var(--line-2) */
+.tdSm {
+  padding: var(--space-9) var(--space-10);
+  border-bottom-color: var(--line-2);
+}
+
+.th:first-child,
+.td:first-child {
+  padding-left: 0;
+}
+.th:last-child,
+.td:last-child {
+  padding-right: 0;
+}
+
+.right {
+  text-align: right;
+}
+.nowrap {
+  white-space: nowrap;
+}
+.tab {
+  font-variant-numeric: tabular-nums;
+}
+.top {
+  vertical-align: top;
+}
+.bold {
+  font-weight: var(--fw-bold);
+}
+.heavy {
+  font-weight: var(--fw-heavy);
+}
+.mono {
+  font-family: var(--mono);
+  font-size: var(--fs-12-5);
+}
+
+/* 글자색 */
+.muted {
+  color: var(--ink-2);
+}
+.faint {
+  color: var(--ink-3);
+}
+.hi {
+  color: var(--hi);
+}
+.md {
+  color: var(--md);
+}
+.lo {
+  color: var(--lo);
+}
+.warn {
+  color: var(--warn);
+}
+/* ② 표시 규칙의 색(처리 상태 · 위험 · 확인 상태)을 그대로 */
+.colored {
+  color: var(--cell-fg);
+}
+
+/* 문서 칸 — 제목 700 · 파일 이름 12.5 ink-3 */
+.docTitle {
+  font-weight: var(--fw-bold);
+}
+.docFile {
+  font-size: var(--fs-12-5);
+  color: var(--ink-3);
+}
+
+/* 오탐 표시값 — 흐리게 + 취소선 */
+.struck {
+  color: var(--ink-3);
+  text-decoration: line-through;
+}
+
+/* 최초 AI 결과 — color:var(--ink-3); text-decoration:line-through; text-decoration-color:rgba(99,107,122,.5) */
+.aiWas {
+  color: var(--ink-3);
+  text-decoration: line-through;
+  text-decoration-color: var(--strike);
+}
+.changeId {
+  font-family: var(--mono);
+  font-size: var(--fs-12-5);
+  color: var(--ink-3);
+}
+.changeAt {
+  font-family: var(--mono);
+  font-size: var(--fs-12-5);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+/* 펼치기 — border-radius:16px; background:var(--band) */
+.details {
+  border-radius: var(--radius-16);
+  background: var(--band);
+}
+/* display:flex; align-items:center; gap:8px; min-height:52px; padding:0 18px; font-size:14.5px; font-weight:800; cursor:pointer; list-style:none */
+.summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: var(--size-52);
+  padding: 0 var(--space-18);
+  border-radius: var(--radius-16);
+  font-size: var(--fs-14-5);
+  font-weight: var(--fw-heavy);
+  cursor: pointer;
+  list-style: none;
+}
+.summary::-webkit-details-marker {
+  display: none;
+}
+.detailsBody {
+  padding: 0 var(--space-18) var(--space-14);
+}

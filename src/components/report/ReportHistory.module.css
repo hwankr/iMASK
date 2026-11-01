@@ -1,0 +1,106 @@
+/* 08 수정 이력과 검토 기록 — Main 678–699 */
+.h3 {
+  margin: 0;
+  font-size: var(--fs-16);
+  font-weight: var(--fw-heavy);
+}
+/* '검토 기록' — margin:8px 0 0 */
+.h3Log {
+  margin-top: var(--space-8);
+}
+.empty {
+  margin: 0;
+  font-size: var(--fs-14-5);
+  color: var(--ink-2);
+}
+
+/* ol: position:relative; list-style:none — ::before 세로 선 left:6px; top:10px; bottom:14px; width:2px; radius 2; var(--line-2) */
+.timeline {
+  position: relative;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: var(--space-6);
+  top: var(--space-10);
+  bottom: var(--space-14);
+  width: 2px;
+  border-radius: 2px;
+  background: var(--line-2);
+}
+
+/* li: grid {{L.tlCols}}(132px 1fr · 휴대폰 1열); gap:2px 18px; padding:0 0 18px 30px */
+.entry {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--timeline-label-w) minmax(0, 1fr);
+  gap: 2px var(--space-18);
+  padding: 0 0 var(--space-18) var(--space-30);
+}
+
+/* 점 — left:0; top:5px; 14×14; 흰 바탕 + 안쪽 3.5px 구분 색 링 */
+.dot {
+  position: absolute;
+  left: 0;
+  top: var(--space-5);
+  width: var(--size-14);
+  height: var(--size-14);
+  border-radius: var(--radius-round);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 var(--bw-3-5) var(--dot);
+}
+
+/* 시각 — mono 12.5 · line-height 1.9 · ink-3 · nowrap */
+.at {
+  font-family: var(--mono);
+  font-size: var(--fs-12-5);
+  line-height: var(--lh-190);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.line1 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px var(--space-8);
+}
+.kind {
+  font-size: var(--fs-14-5);
+  font-weight: var(--fw-heavy);
+  color: var(--kind-fg);
+}
+.actor {
+  font-size: var(--fs-13);
+  color: var(--ink-3);
+}
+.target {
+  font-family: var(--mono);
+  font-size: var(--fs-12-5);
+  color: var(--ink-2);
+}
+.change {
+  font-size: var(--fs-14);
+  line-height: var(--lh-155);
+  color: var(--ink);
+}
+.reason {
+  font-size: var(--fs-13);
+  line-height: var(--lh-155);
+  color: var(--ink-3);
+}
+
+@media (max-width: 767.98px) {
+  .entry {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

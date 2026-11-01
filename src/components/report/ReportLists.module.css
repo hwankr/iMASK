@@ -1,0 +1,153 @@
+/* 보고서 목록·글 구역 — Main 640–674 */
+
+/* ol: list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:12px */
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+
+/* 02 사유 — display:flex; gap:12px; align-items:flex-start; font-size:15px; line-height:1.6 */
+.reason {
+  display: flex;
+  gap: var(--space-12);
+  align-items: flex-start;
+  font-size: var(--fs-15);
+  line-height: var(--lh-160);
+}
+/* width:8px; height:8px; flex:none; margin-top:9px; border-radius:50%; background:var(--hi-solid) */
+.dot {
+  width: var(--size-8);
+  height: var(--size-8);
+  flex: none;
+  margin-top: var(--space-9);
+  border-radius: var(--radius-round);
+  background: var(--hi-solid);
+}
+
+/* 없을 때 — margin:0; font-size:14.5px; color:var(--ink-2) */
+.empty {
+  margin: 0;
+  font-size: var(--fs-14-5);
+  color: var(--ink-2);
+}
+
+/* 분석 한계 — padding:14px 16px; border-radius:16px; background:var(--warn-bg); font-size:14px; line-height:1.6 */
+.limits {
+  display: flex;
+  gap: var(--space-10);
+  align-items: flex-start;
+  padding: var(--space-14) var(--space-16);
+  border-radius: var(--radius-16);
+  background: var(--warn-bg);
+  font-size: var(--fs-14);
+  line-height: var(--lh-160);
+}
+.limitsIcon {
+  display: inline-flex;
+  flex: none;
+  margin-top: 2px;
+  color: var(--warn);
+}
+.limitsTitle {
+  font-weight: var(--fw-heavy);
+  color: var(--warn);
+}
+
+/* 05 남은 검토사항 — ul border-top · li padding:14px 0 · border-bottom */
+.remaining {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+.remainingItem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-14) 0;
+  border-bottom: 1px solid var(--line);
+}
+.remainingHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-6) var(--space-8);
+}
+/* 유형 — height:24px; padding:0 8px; border-radius:7px; background:var(--warn-bg); color:var(--warn); font-size:12.5px; font-weight:800 */
+.type {
+  display: inline-flex;
+  align-items: center;
+  height: var(--size-24);
+  padding: 0 var(--space-8);
+  border-radius: var(--radius-7);
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-size: var(--fs-12-5);
+  font-weight: var(--fw-heavy);
+}
+.itemId {
+  font-family: var(--mono);
+  font-size: var(--fs-12);
+  color: var(--ink-3);
+}
+.itemTitle {
+  font-size: var(--fs-15);
+  font-weight: var(--fw-heavy);
+}
+.itemWhere {
+  font-size: var(--fs-13-5);
+  line-height: var(--lh-155);
+  color: var(--ink-2);
+}
+/* 없을 때 — display:flex; align-items:center; gap:8px; font-size:14.5px; color:var(--accent-ink); font-weight:700 */
+.none {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  font-size: var(--fs-14-5);
+  color: var(--accent-ink);
+  font-weight: var(--fw-bold);
+}
+
+/* 06 권장 조치 — display:flex; gap:10px; align-items:flex-start; font-size:15px; line-height:1.6 */
+.rec {
+  display: flex;
+  gap: var(--space-10);
+  align-items: flex-start;
+  font-size: var(--fs-15);
+  line-height: var(--lh-160);
+}
+.recIcon {
+  display: inline-flex;
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent);
+}
+
+/* 07 메모 — padding:18px 20px; border-radius:18px; background:var(--band); font-size:15px; line-height:1.7; white-space:pre-line */
+.memo {
+  padding: var(--space-18) var(--space-20);
+  border-radius: var(--radius-18);
+  background: var(--band);
+  font-size: var(--fs-15);
+  line-height: var(--lh-170);
+  white-space: pre-line;
+  color: var(--ink);
+}
+.memoEmpty {
+  color: var(--ink-3);
+}
+.completion {
+  font-size: var(--fs-14);
+  line-height: var(--lh-160);
+  color: var(--ink-2);
+}
+.completionTitle {
+  font-weight: var(--fw-heavy);
+  color: var(--ink);
+}

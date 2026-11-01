@@ -1,0 +1,41 @@
+/* 보고서 구역 — Main 627(01) · 640~671(02~07) · 676(08)
+   display:flex; flex-direction:column; gap:16px; padding-top:{{L.rpSecPad}}; border-top:1px solid var(--line) */
+.section {
+  display: flex;
+  flex-direction: column;
+}
+
+.default,
+.history {
+  padding-top: var(--report-sec-pad);
+  border-top: 1px solid var(--line);
+}
+.default {
+  gap: var(--space-16);
+}
+.history {
+  gap: var(--space-18);
+}
+/* 01 결과 요약 — 위 선 없음, gap 22 */
+.summary {
+  gap: var(--space-22);
+}
+
+/* margin:0; display:flex; align-items:baseline; gap:10px; font-size:20px; font-weight:800; letter-spacing:-0.025em */
+.title {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-10);
+  font-size: var(--fs-20);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--ls-tight-3);
+}
+
+/* font-family:var(--mono); font-size:13px; font-weight:600; color:var(--accent-ink) */
+.num {
+  font-family: var(--mono);
+  font-size: var(--fs-13);
+  font-weight: var(--fw-semibold);
+  color: var(--accent-ink);
+}

@@ -1,0 +1,134 @@
+/* 결과 내보내기 모달 본문 — Main 734–743 */
+
+/* 형식 설명 — 원본 라벨은 굵기를 바꾸지 않는다(설명 13px · 보통 굵기) */
+.desc {
+  font-weight: var(--fw-regular);
+}
+
+/* 마스킹 안내 — padding:12px 14px; border-radius:14px; background:var(--accent-soft); font-size:13.5px; line-height:1.6 */
+.mask {
+  display: flex;
+  gap: var(--space-10);
+  align-items: flex-start;
+  padding: var(--space-12) var(--space-14);
+  border-radius: var(--radius-14);
+  background: var(--accent-soft);
+  font-size: var(--fs-13-5);
+  line-height: var(--lh-160);
+}
+.maskIcon {
+  display: inline-flex;
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent-ink);
+}
+.strong {
+  font-weight: var(--fw-heavy);
+}
+
+/* 파일 이름 — flex-wrap; space-between; gap:4px 12px; padding:12px 14px; border-radius:14px; background:var(--band) */
+.fileRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4) var(--space-12);
+  padding: var(--space-12) var(--space-14);
+  border-radius: var(--radius-14);
+  background: var(--band);
+}
+.fileLabel {
+  font-size: var(--fs-13);
+  font-weight: var(--fw-bold);
+  color: var(--ink-3);
+}
+.fileName {
+  font-family: var(--mono);
+  font-size: var(--fs-12-5);
+  word-break: break-all;
+}
+
+/* 상태 상자 — display:flex; gap:10px; padding:12px 14px; border-radius:14px; font-size:14px */
+.box {
+  display: flex;
+  gap: var(--space-10);
+  padding: var(--space-12) var(--space-14);
+  border-radius: var(--radius-14);
+  font-size: var(--fs-14);
+}
+/* 만드는 중 — align-items:center; background:var(--run-bg); color:var(--run); font-weight:700; dg-pop .3s */
+.working {
+  align-items: center;
+  background: var(--run-bg);
+  color: var(--run);
+  font-weight: var(--fw-bold);
+  --dg-anim: dg-pop; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-300) var(--ease) both;
+}
+/* 끝난 상태 — align-items:flex-start; line-height:1.6; dg-pop .34s */
+.done {
+  align-items: flex-start;
+  line-height: var(--lh-160);
+  --dg-anim: dg-pop; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-340) var(--ease) both;
+}
+.boxIcon {
+  display: inline-flex;
+  flex: none;
+  margin-top: 1px;
+}
+/* 내보내기 완료 — accent-soft 바탕 · 아이콘 accent · 제목 accent-ink */
+.saved {
+  background: var(--accent-soft);
+}
+.saved .boxIcon {
+  color: var(--accent);
+}
+.savedTitle {
+  font-weight: var(--fw-heavy);
+  color: var(--accent-ink);
+}
+/* 파일을 만들었습니다 · 저장 취소 — band 바탕 · 아이콘 ink-2 */
+.info {
+  background: var(--band);
+}
+.info .boxIcon {
+  color: var(--ink-2);
+}
+/* 실패 — err-bg 바탕 · 아이콘·제목 err */
+.failed {
+  background: var(--err-bg);
+}
+.failed .boxIcon {
+  color: var(--err);
+}
+.failedTitle {
+  font-weight: var(--fw-heavy);
+  color: var(--err);
+}
+
+/* 미리보기 — border-radius:14px; background:var(--band) */
+.preview {
+  border-radius: var(--radius-14);
+  background: var(--band);
+}
+.previewSummary {
+  padding: var(--space-12) var(--space-14);
+  border-radius: var(--radius-14);
+  font-size: var(--fs-13-5);
+  font-weight: var(--fw-bold);
+  cursor: pointer;
+}
+/* margin:0; padding:0 14px 14px; max-height:180px; overflow:auto; mono 11.5 / 1.55; pre-wrap; break-all; ink-2 */
+.previewText {
+  margin: 0;
+  padding: 0 var(--space-14) var(--space-14);
+  max-height: var(--export-preview-max-h);
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: var(--fs-11-5);
+  line-height: var(--lh-155);
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--ink-2);
+}

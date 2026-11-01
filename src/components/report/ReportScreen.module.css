@@ -1,0 +1,102 @@
+/* 보고서 화면 — Main 604–701 */
+
+/* min-height:100%; background:#fff; animation:dg-in .45s var(--ease) both */
+.screen {
+  min-height: 100%;
+  background: var(--surface);
+  --dg-anim: dg-in; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-enter) var(--ease) both;
+}
+
+/* 위쪽 막대 — position:sticky; top:0; z-index:5; background:rgba(255,255,255,.92);
+   backdrop-filter:saturate(1.6) blur(12px); border-bottom:1px solid var(--line)
+   (접두어 없는 속성 한 줄만 — BRIEF: Lightning CSS 가 필요한 접두어를 붙인다) */
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  background: var(--frost);
+  backdrop-filter: saturate(1.6) blur(var(--space-12));
+  border-bottom: 1px solid var(--line);
+}
+/* max-width:1040px; margin:0 auto; padding:10px {{L.gutter}}; flex · space-between · gap 12 */
+.barInner {
+  max-width: var(--report-max);
+  margin: 0 auto;
+  padding: var(--space-10) var(--gutter);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+}
+
+/* 상세 검토로 돌아가기 — 40px · padding 0 12 0 8 · margin-left -8 · radius 10 · 14.5px 700 · ink-2 (공통 Button md ghost) */
+.back {
+  margin-left: calc(var(--space-8) * -1);
+}
+
+.barRight {
+  display: flex;
+  align-items: center;
+  gap: var(--space-14);
+}
+/* 마스킹 안내 — inline-flex; gap:6px; font-size:13px; color:var(--ink-3) (휴대폰에서는 숨김) */
+.maskNote {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  font-size: var(--fs-13);
+  color: var(--ink-3);
+}
+
+/* 결과 내보내기 — 공통 Button lg primary raised(44 · 0 18 0 14 · radius 12 · gap 7 · 그림자 24%).
+   원본 글자는 15px(공통 lg 14.5) — 같은 클래스 두 번으로 덮는다 */
+.exportBtn.exportBtn {
+  font-size: var(--fs-15);
+}
+
+/* article — max-width:1040px; margin:0 auto; padding:{{L.reportPad}}; flex column; gap:{{L.rpGap}} */
+.article {
+  max-width: var(--report-max);
+  margin: 0 auto;
+  padding: var(--report-pad);
+  display: flex;
+  flex-direction: column;
+  gap: var(--report-gap);
+}
+
+/* 바닥글 — padding-top:20px; border-top:1px solid var(--line); font-size:12.5px; line-height:1.6; color:var(--ink-3) */
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-top: var(--space-20);
+  border-top: 1px solid var(--line);
+  font-size: var(--fs-12-5);
+  line-height: var(--lh-160);
+  color: var(--ink-3);
+}
+
+/* 불러오는 중 · 불러오기 실패 (원본에는 없음 — 데이터가 동기) */
+.skHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+.error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-12);
+  margin: 0 auto;
+  max-width: var(--report-max);
+  padding: var(--report-pad);
+  font-size: var(--fs-15);
+  color: var(--ink-2);
+}
+
+@media (max-width: 767.98px) {
+  .maskNote {
+    display: none;
+  }
+}

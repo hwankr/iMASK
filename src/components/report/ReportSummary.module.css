@@ -1,0 +1,146 @@
+/* 01 결과 요약 — Main 629–637 */
+
+/* grid {{L.kpiCols}}(4열 · 휴대폰 2열); gap:20px 0 */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-20) 0;
+}
+
+/* 카드 — padding:2px 20px 2px {{c.pl}}; border-left:{{c.sep}} — 첫 카드(휴대폰은 3번째도)는 선·왼쪽 여백 없음 */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: 2px var(--space-20) 2px var(--space-20);
+  border-left: 1px solid var(--line);
+}
+.card:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.label {
+  font-size: var(--fs-13-5);
+  font-weight: var(--fw-bold);
+  color: var(--ink-3);
+}
+
+/* display:inline-flex; align-items:baseline; gap:2px; color:{{c.fg}} */
+.value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  color: var(--ink);
+}
+.warn {
+  color: var(--warn);
+}
+
+/* font-size:{{L.kpiNum}}(36 · 휴대폰 28); line-height:1.15; font-weight:800; letter-spacing:-0.035em; tabular-nums */
+.num {
+  font-size: var(--fs-kpi-num);
+  line-height: var(--lh-115);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--ls-tight-5);
+}
+.unit {
+  font-size: var(--fs-17);
+  font-weight: var(--fw-heavy);
+}
+.after {
+  margin-left: var(--space-4);
+  font-size: var(--fs-17);
+  font-weight: var(--fw-bold);
+  color: var(--ink-3);
+}
+.sub {
+  font-size: var(--fs-13);
+  color: var(--ink-3);
+}
+
+/* 분포 — padding:18px 20px; border-radius:18px; background:var(--band) */
+.dist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+  padding: var(--space-18) var(--space-20);
+  border-radius: var(--radius-18);
+  background: var(--band);
+}
+.distHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+.distTitle {
+  font-size: var(--fs-14-5);
+  font-weight: var(--fw-heavy);
+}
+.distBasis {
+  font-size: var(--fs-13);
+  color: var(--ink-3);
+}
+
+/* 막대 — display:flex; gap:3px; height:14px; border-radius:999px; overflow:hidden */
+.bar {
+  display: flex;
+  gap: var(--space-3);
+  height: var(--size-14);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+/* 조각 — flex:{{n}} 1 0; min-width:6px; 왼쪽에서 자람(dg-grow .9s, 0.12초 간격) */
+.seg {
+  flex: var(--seg-n) 1 0;
+  min-width: var(--size-6);
+  background: var(--seg-color);
+  transform-origin: left center;
+  --dg-anim: dg-grow; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-900) var(--ease) both;
+  animation-delay: calc(var(--dur-120) * var(--seg-i));
+}
+
+/* 범례 — flex-wrap; gap:6px 18px; font-size:13px; color:var(--ink-2) */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6) var(--space-18);
+  font-size: var(--fs-13);
+  color: var(--ink-2);
+}
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+.swatch {
+  width: var(--size-10);
+  height: var(--size-10);
+  border-radius: var(--radius-3);
+  background: var(--seg-color);
+}
+.legendNum {
+  font-weight: var(--fw-heavy);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.keep {
+  margin: 0;
+  font-size: var(--fs-14);
+  line-height: var(--lh-160);
+  color: var(--ink-2);
+}
+
+/* 휴대폰 — 2열, 3번째 카드는 새 줄의 첫 카드라 선·왼쪽 여백 없음(원본 first = i===0 || (mob && i===2)) */
+@media (max-width: 767.98px) {
+  .cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .card:nth-child(3) {
+    padding-left: 0;
+    border-left: 0;
+  }
+}

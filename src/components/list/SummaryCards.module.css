@@ -1,0 +1,117 @@
+/* 요약 — Main 127–139 */
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-8);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--fs-15);
+  font-weight: var(--fw-heavy);
+}
+
+.note {
+  font-size: var(--fs-13);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-3);
+}
+
+/* grid repeat(3, minmax(0,1fr)); gap 4; padding 6; radius 22; band (129) */
+.band {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border-radius: var(--radius-22);
+  background: var(--band);
+}
+
+/* 카드 버튼 (131) */
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+  min-width: 0;
+  margin: 0;
+  padding: var(--sum-pad);
+  border: 0;
+  border-radius: var(--radius-16);
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-color-3) var(--ease),
+    box-shadow var(--dur-color-3) var(--ease),
+    transform var(--dur-press) var(--ease);
+}
+/* 고른 카드 — 흰 바탕 + 0 1px 3px rgba(20,27,45,.08), 0 0 0 1.5px var(--accent) */
+.on {
+  background: var(--surface);
+  box-shadow: var(--shadow-pick), 0 0 0 var(--bw-1-5) var(--accent);
+}
+@media (hover: hover) {
+  .card:hover {
+    background-image: linear-gradient(var(--tint-035), var(--tint-035));
+  }
+}
+.card:active {
+  transform: scale(.985);
+}
+
+.label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-7);
+  font-size: var(--fs-14);
+  font-weight: var(--fw-bold);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.icon {
+  display: inline-flex;
+  color: var(--card-icon);
+}
+
+.value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  color: var(--card-fg);
+}
+
+/* font-size:{{L.sumNum}}; line-height:1.2; 800; -0.03em; tabular-nums (134) */
+.num {
+  font-size: var(--fs-sum-num);
+  line-height: var(--lh-120);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--ls-tight-4);
+}
+
+.unit {
+  font-size: var(--fs-16);
+  font-weight: var(--fw-bold);
+  color: var(--ink-2);
+}
+
+.hint {
+  font-size: var(--fs-12-5);
+  color: var(--ink-3);
+}
+/* 힌트는 데스크톱·태블릿만 (L.notMobile) */
+@media (max-width: 767.98px) {
+  .hint {
+    display: none;
+  }
+}

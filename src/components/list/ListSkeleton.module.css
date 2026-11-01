@@ -1,0 +1,80 @@
+/* 불러오는 중 — 요약 띠 + 목록 행 자리 */
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--list-gap);
+}
+
+.band {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border-radius: var(--radius-22);
+  background: var(--band);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  padding: var(--sum-pad);
+  border-radius: var(--radius-16);
+}
+
+.num.num {
+  height: var(--size-30);
+}
+
+@media (max-width: 767.98px) {
+  .hint {
+    display: none;
+  }
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+}
+
+.toolbar {
+  display: flex;
+  padding: var(--space-12) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.search {
+  display: block;
+  width: 100%;
+  max-width: var(--search-max);
+  height: var(--size-44);
+  border-radius: var(--radius-12);
+  background: var(--fill);
+}
+
+/* 표 행과 같은 높이(14 + 44 + 14) */
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-14);
+  padding: var(--space-14) var(--space-8);
+  border-bottom: 1px solid var(--line);
+}
+
+.tile {
+  width: var(--size-44);
+  height: var(--size-44);
+  flex: none;
+  border-radius: var(--radius-14);
+  background: var(--fill);
+}
+
+.lines {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  max-width: calc(var(--size-44) * 10);
+}

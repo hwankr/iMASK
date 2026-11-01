@@ -1,10 +1,6 @@
-import styles from './placeholder.module.css';
+import { ListScreen } from '@/components/list/ListScreen';
 
-/** / 분석 목록 — 자리(T4가 채운다) */
+/** / 분석 목록 — 필터는 URL 검색 파라미터(q · risk · status · review · sort)와 이어진다. */
 export default function ListPage() {
-  return (
-    <main className={styles.page}>
-      <h1 className={styles.title}>분석 목록</h1>
-    </main>
-  );
+  return <ListScreen />;
 }

@@ -1,0 +1,140 @@
+/* ==========================================================================
+   분석 이력 없음 — Main 205–233
+   ========================================================================== */
+
+/* flex column; center; gap 24; padding:{{L.emptyPad}}; animation:dg-in .55s */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-24);
+  padding: var(--empty-pad);
+  --dg-anim: dg-in; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-550) var(--ease) both;
+}
+
+/* ---------- 그림 ---------- */
+.art {
+  width: var(--empty-art-w);
+  height: var(--empty-art-h);
+  flex: none;
+}
+.artBack {
+  fill: var(--fill-2);
+}
+.artPaper {
+  fill: var(--surface);
+  stroke: var(--line-2);
+}
+.artLine {
+  fill: var(--line-2);
+}
+.artMark {
+  fill: var(--accent-soft-2);
+}
+.artLens {
+  fill: var(--surface);
+  stroke: var(--accent);
+}
+.artStroke {
+  stroke: var(--accent);
+}
+
+/* ---------- 글 ---------- */
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  max-width: var(--narrow-max);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--fs-24);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--ls-tight-4);
+}
+
+.desc {
+  margin: 0;
+  font-size: var(--fs-15-5);
+  line-height: var(--lh-165);
+  color: var(--ink-2);
+}
+
+/* ---------- 단계 — flex-direction:{{L.stepsDir}}; gap 10 14; 14.5px 600 ink-2 ---------- */
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-10) var(--space-14);
+  font-size: var(--fs-14-5);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-2);
+}
+@media (max-width: 767.98px) {
+  .steps {
+    flex-direction: column;
+  }
+}
+
+.step {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+/* 26 × 26 동그라미, 13px 800 — 첫 단계만 채운 강조색 */
+.stepNum,
+.stepNumFirst {
+  width: var(--size-26);
+  height: var(--size-26);
+  border-radius: var(--radius-round);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--fs-13);
+  font-weight: var(--fw-heavy);
+  background: var(--accent-soft-2);
+  color: var(--accent-ink);
+}
+.stepNumFirst {
+  background: var(--accent);
+  color: var(--on-solid);
+}
+
+/* 연결선 — width:{{L.stepLW}}; height:{{L.stepLH}}; radius 2; line-2 */
+.stepLine {
+  width: var(--step-line-w);
+  height: var(--step-line-h);
+  border-radius: var(--radius-2);
+  background: var(--line-2);
+}
+
+/* ---------- 버튼 ---------- */
+.ctas {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-8);
+}
+
+/* 공통 Button xl(52px · 0 22 0 18 · radius 14 · 16px) 위에 원본 굵기 700 (230) — 같은 클래스 두 번으로 공통 규칙보다 우선 */
+.cta.cta {
+  font-weight: var(--fw-bold);
+}
+/* '샘플 분석 건 둘러보기' — padding:0 20px 0 16px; 700 (231) */
+.ctaSecondary.ctaSecondary {
+  padding: 0 var(--space-20) 0 var(--space-16);
+  font-weight: var(--fw-bold);
+}
+
+.note {
+  margin: 0;
+  font-size: var(--fs-13);
+  color: var(--ink-3);
+}

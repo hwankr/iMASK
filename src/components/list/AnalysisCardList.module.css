@@ -1,0 +1,184 @@
+/* ==========================================================================
+   휴대폰 카드 목록 — Main 180–200 (768px 미만)
+   ========================================================================== */
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+}
+
+/* display:flex; gap:12px; padding:16px 0; 아래 선; 차례 등장 */
+.card {
+  display: flex;
+  gap: var(--space-12);
+  padding: var(--space-16) 0;
+  border-bottom: 1px solid var(--line);
+  --dg-anim: dg-in; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-420) var(--ease) both;
+}
+.cardAlt {
+  --dg-anim: dg-in-b;
+}
+
+/* 위험 타일 — 42 × 42, radius 14, 아이콘 21 */
+.tile {
+  width: var(--size-42);
+  height: var(--size-42);
+  flex: none;
+  border-radius: var(--radius-14);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--tile-bg);
+  color: var(--tile-fg);
+}
+.tileIcon {
+  width: var(--size-21);
+  height: var(--size-21);
+}
+
+.body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.name {
+  font-size: var(--fs-16);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-tight-1);
+}
+
+.meta {
+  font-size: var(--fs-13);
+  color: var(--ink-3);
+}
+
+/* 상태 3종 — grid repeat(3, minmax(0,1fr)); gap 4 8 */
+.facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4) var(--space-8);
+}
+
+.fact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.dt {
+  font-size: var(--fs-12);
+  color: var(--ink-3);
+}
+
+.dd {
+  margin: 0;
+}
+
+.statusDd {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.sub {
+  font-size: var(--fs-12);
+  color: var(--ink-3);
+}
+
+/* ---------- 버튼 ---------- */
+.actions {
+  display: flex;
+  gap: var(--space-8);
+}
+
+/* flex:1 1 0; height:44px; radius 12; 14.5px 700
+   '오류 확인'은 button, '상세 보기'는 링크(a)라 브라우저 기본 여백이 다르다(button 1px 6px · a 0).
+   padding 을 0 으로 맞춰야 flex:1 1 0 이 원본(둘 다 button)처럼 같은 폭으로 나뉜다. */
+.btn {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--size-44);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-12);
+  font-size: var(--fs-14-5);
+  font-weight: var(--fw-bold);
+  text-decoration: none;
+  cursor: pointer;
+}
+.btn:active {
+  transform: scale(.97);
+}
+
+.btnError {
+  background: var(--err-bg);
+  color: var(--err);
+  transition: transform var(--dur-press);
+}
+
+.btnOpen {
+  gap: var(--space-2);
+  background: var(--fill);
+  color: var(--ink);
+  transition:
+    background-color var(--dur-color),
+    transform var(--dur-press);
+}
+@media (hover: hover) {
+  .btnOpen:hover {
+    background: var(--fill-2);
+  }
+}
+
+/* ---------- 검색 결과 없음 (Main 198) ---------- */
+.noResults {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-10);
+  padding: var(--space-48) var(--space-8);
+  text-align: center;
+  border-bottom: 1px solid var(--line);
+}
+
+.noResultsTitle {
+  font-size: var(--fs-17);
+  font-weight: var(--fw-heavy);
+}
+
+.noResultsText {
+  font-size: var(--fs-14);
+  color: var(--ink-2);
+}
+
+/* height:44px; padding:0 18px; radius 12; fill · ink; 14.5px 700 */
+.noResultsReset {
+  height: var(--size-44);
+  margin: 0;
+  padding: 0 var(--space-18);
+  border: 0;
+  border-radius: var(--radius-12);
+  background: var(--fill);
+  color: var(--ink);
+  font-size: var(--fs-14-5);
+  font-weight: var(--fw-bold);
+  cursor: pointer;
+}

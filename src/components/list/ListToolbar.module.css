@@ -1,0 +1,23 @@
+/* 도구 줄 — display:flex; flex-wrap:wrap; align-items:center; gap:8px (142) */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+/* 검색 — flex:1 1 260px; max-width:{{L.searchMax}} (143) */
+.search {
+  flex: 1 1 var(--list-search-basis);
+  max-width: var(--search-max);
+}
+
+/* 정렬 — 데스크톱은 오른쪽 끝(margin-left:auto), 휴대폰은 0 (listVM ml) */
+.sort {
+  margin-left: auto;
+}
+@media (max-width: 767.98px) {
+  .sort {
+    margin-left: 0;
+  }
+}

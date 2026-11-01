@@ -1,0 +1,135 @@
+/* ==========================================================================
+   분석 목록 — 화면 틀 · 머리말 (Main.dc.html 115–125)
+   ========================================================================== */
+
+/* 화면 등장 — animation:dg-in .45s var(--ease) both (115) */
+.screen {
+  --dg-anim: dg-in; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-enter) var(--ease) both;
+}
+
+/* max-width:1200px; margin:0 auto; padding:{{L.pagePad}}; gap:{{L.listGap}} (116) */
+.page {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: var(--page-pad);
+  display: flex;
+  flex-direction: column;
+  gap: var(--list-gap);
+}
+
+/* ---------- 머리말 (118–125) ---------- */
+.hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-16) var(--space-24);
+  flex-wrap: wrap;
+}
+
+.heroText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--fs-h1);
+  line-height: var(--lh-125);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--ls-tight-4);
+}
+
+.lead {
+  margin: 0;
+  font-size: var(--fs-lead);
+  line-height: var(--lh-150);
+  color: var(--ink-2);
+}
+.lead strong {
+  font-weight: var(--fw-heavy);
+  color: var(--ink);
+}
+
+/* 불러오는 중 — 안내 한 줄 자리(글자 높이에 맞춘 뼈대 막대) */
+.leadSkeleton {
+  display: block;
+  width: calc(var(--size-36) * 10);
+  max-width: 100%;
+  height: calc(var(--fs-lead) * 1.5);
+  border-radius: var(--radius-6);
+  background: linear-gradient(90deg, var(--skeleton-base) 0%, var(--skeleton-hi) 45%, var(--skeleton-base) 90%);
+  background-size: 220% 100%;
+  --dg-anim: dg-shimmer; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-shimmer) var(--ease-linear) infinite;
+}
+
+/* '새 분석' — height:48px; padding:0 20px 0 16px; radius 14; 15.5px 700; 그림자 accent 26% (124)
+   공통 Button 의 크기(34·40·36·44·52)에 48px 이 없어 이 화면 전용으로 그린다. */
+.newButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  height: var(--size-48);
+  padding: 0 var(--space-20) 0 var(--space-16);
+  border: 0;
+  border-radius: var(--radius-14);
+  background: var(--accent);
+  color: var(--on-solid);
+  font-size: var(--fs-15-5);
+  font-weight: var(--fw-bold);
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: var(--shadow-accent-lg);
+  transition:
+    background-color var(--dur-color) var(--ease),
+    transform var(--dur-press) var(--ease),
+    box-shadow var(--dur-color-2) var(--ease);
+}
+@media (hover: hover) {
+  .newButton:hover {
+    background: var(--accent-ink);
+  }
+}
+.newButton:active {
+  transform: scale(.97);
+}
+
+/* 목록 구역 — 도구 줄 · 결과 줄 · 표/카드 (141) */
+.listSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+
+/* 불러오지 못함(데모 서비스에서는 나오지 않는다) */
+.failed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8) var(--space-12);
+  padding: var(--space-14) var(--space-16);
+  border-radius: var(--radius-14);
+  background: var(--err-bg);
+  color: var(--err);
+  font-size: var(--fs-14);
+  font-weight: var(--fw-bold);
+}
+.failedRetry {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-5);
+  height: var(--ctl-sm);
+  padding: 0 var(--space-12);
+  border: 0;
+  border-radius: var(--radius-10);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--fs-13-5);
+  font-weight: var(--fw-bold);
+  cursor: pointer;
+}

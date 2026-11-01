@@ -1,0 +1,84 @@
+/* 결과 줄 — Main 165–172 */
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  min-height: var(--size-32);
+}
+
+.result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-6) var(--space-10);
+  font-size: var(--fs-14);
+  color: var(--ink-2);
+}
+
+/* height 24; padding 0 9; radius 999; 12px 800 (167) */
+.basis {
+  display: inline-flex;
+  align-items: center;
+  height: var(--size-24);
+  padding: 0 var(--space-9);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-12);
+  font-weight: var(--fw-heavy);
+  background: var(--fill);
+  color: var(--ink-2);
+  transition:
+    background-color var(--dur-color-2),
+    color var(--dur-color-2);
+}
+.basisOn {
+  background: var(--accent-soft-2);
+  color: var(--accent-ink);
+}
+
+.text {
+  font-weight: var(--fw-bold);
+  color: var(--ink);
+}
+
+.sub {
+  color: var(--ink-3);
+}
+
+/* 검색·필터 초기화 — height 32; padding 0 10; radius 10; 13.5px 700 (171) */
+.reset {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  height: var(--size-32);
+  margin: 0;
+  padding: 0 var(--space-10);
+  border: 0;
+  border-radius: var(--radius-10);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: var(--fs-13-5);
+  font-weight: var(--fw-bold);
+  cursor: pointer;
+  transition: background-color var(--dur-color) var(--ease);
+}
+@media (hover: hover) {
+  .reset:hover {
+    background: var(--fill);
+  }
+}
+
+/* 휴대폰 누름 영역 — 보이는 높이 32px·배치는 그대로 두고, 투명한 가상 요소로 위아래를 늘려
+   누르는 영역만 44px 로 만든다(BRIEF §3 '휴대폰에서 누르는 영역 최소 44px').
+   위는 결과 문구와의 줄 간격 8px, 아래는 카드 목록까지 12px 이라 6px 씩 늘려도 이웃 조작과 겹치지 않는다. */
+@media (max-width: 767.98px) {
+  .reset {
+    position: relative;
+  }
+  .reset::before {
+    content: '';
+    position: absolute;
+    inset: calc((var(--size-32) - var(--size-44)) / 2) 0;
+  }
+}

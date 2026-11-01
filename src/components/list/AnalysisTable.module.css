@@ -1,0 +1,282 @@
+/* ==========================================================================
+   분석 목록 표 — Main 173–176 (768px 이상)
+   ========================================================================== */
+.scroll {
+  overflow-x: auto;
+}
+
+/* width:100%; min-width:900px; border-collapse:separate; border-spacing:0 */
+.table {
+  width: 100%;
+  min-width: var(--list-table-min-w);
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* 머리 칸 — padding:0 12px 10px; 13px 600 ink-3; 아래 선 */
+.th {
+  padding: 0 var(--space-12) var(--space-10);
+  text-align: left;
+  font-size: var(--fs-13);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-3);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.thFirst {
+  padding-left: var(--space-8);
+}
+.thNum {
+  text-align: right;
+}
+.thLast {
+  padding: 0 var(--space-8) var(--space-10) var(--space-12);
+}
+
+/* ---------- 행 ---------- */
+/* cursor:pointer; animation:{{list.anim}} .42s var(--ease) both; animation-delay:{{r.delay}} */
+.row {
+  cursor: pointer;
+  --dg-anim: dg-in; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-420) var(--ease) both;
+  transition: background-color var(--dur-color) var(--ease);
+}
+/* 필터·정렬이 바뀌면 같은 모양의 다른 keyframes 로 바꿔 다시 재생(listSeq % 2) */
+.rowAlt {
+  --dg-anim: dg-in-b;
+}
+@media (hover: hover) {
+  .row:hover {
+    background: var(--hover);
+  }
+}
+
+/* padding:14px 12px; 아래 선; 가운데 정렬 */
+.td {
+  padding: var(--space-14) var(--space-12);
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+.tdFirst {
+  padding-left: var(--space-8);
+}
+.tdLast {
+  padding: var(--space-14) var(--space-8) var(--space-14) var(--space-12);
+}
+
+/* 분석명 칸 */
+.nameCell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-14);
+  min-width: 0;
+}
+
+/* 위험 타일 — 44 × 44, radius 14, 위험 색 바탕 */
+.tile {
+  width: var(--size-44);
+  height: var(--size-44);
+  flex: none;
+  border-radius: var(--radius-14);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--tile-bg);
+  color: var(--tile-fg);
+}
+.tileIcon {
+  width: var(--size-22);
+  height: var(--size-22);
+}
+
+.nameText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.name {
+  font-size: var(--fs-15-5);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-tight-1);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 파일명 — max-width:300px */
+.files {
+  font-size: var(--fs-13);
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: calc(var(--size-60) * 5);
+}
+
+/* 문서 수 — 오른쪽 정렬, 14.5px 600, 고정폭 숫자 */
+.docs {
+  text-align: right;
+  font-size: var(--fs-14-5);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.sub {
+  font-size: var(--fs-12-5);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+/* 접수일시 — 13.5px ink-2, 고정폭 숫자 */
+.date {
+  font-size: var(--fs-13-5);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- 행 끝 버튼 ---------- */
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-6);
+}
+
+/* height:34px; padding:0 12px; radius 10; 13.5px 700 */
+.act {
+  display: inline-flex;
+  align-items: center;
+  height: var(--size-34);
+  margin: 0;
+  padding: 0 var(--space-12);
+  border: 0;
+  border-radius: var(--radius-10);
+  font-size: var(--fs-13-5);
+  font-weight: var(--fw-bold);
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+/* 오류 확인 — err-bg · err, 올림 brightness(.97), 누름 scale(.96) */
+.actError {
+  background: var(--err-bg);
+  color: var(--err);
+  transition:
+    filter var(--dur-color),
+    transform var(--dur-press);
+}
+@media (hover: hover) {
+  .actError:hover {
+    filter: brightness(.97);
+  }
+}
+.actError:active {
+  transform: scale(.96);
+}
+
+/* 재시도 — fill · ink, 아이콘 14, 사용할 수 없으면 ink-3 · progress */
+.actRetry {
+  gap: var(--space-5);
+  background: var(--fill);
+  color: var(--ink);
+  transition:
+    background-color var(--dur-color),
+    transform var(--dur-press);
+}
+@media (hover: hover) {
+  .actRetry:enabled:hover {
+    background: var(--fill-2);
+  }
+}
+.actRetry:enabled:active {
+  transform: scale(.96);
+}
+.actRetry:disabled {
+  color: var(--ink-3);
+  cursor: progress;
+}
+
+/* 상세 보기 — padding:0 8px 0 12px; gap 2; 바탕 없음 · ink-2, 올림 fill · ink */
+.actOpen {
+  gap: var(--space-2);
+  padding: 0 var(--space-8) 0 var(--space-12);
+  background: transparent;
+  color: var(--ink-2);
+  transition:
+    background-color var(--dur-color),
+    color var(--dur-color);
+}
+@media (hover: hover) {
+  .actOpen:hover {
+    background: var(--fill);
+    color: var(--ink);
+  }
+}
+
+/* ---------- 검색 결과 없음 (Main 175 noResults) ---------- */
+.noResultsCell {
+  padding: var(--space-64) var(--space-16);
+  border-bottom: 1px solid var(--line);
+}
+
+.noResults {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-10);
+  text-align: center;
+  --dg-anim: dg-in; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-400) var(--ease) both;
+}
+
+.noResultsIcon {
+  width: var(--size-56);
+  height: var(--size-56);
+  border-radius: var(--radius-18);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--fill);
+  color: var(--ink-3);
+}
+.noResultsGlyph {
+  width: var(--size-26);
+  height: var(--size-26);
+}
+
+.noResultsTitle {
+  font-size: var(--fs-17);
+  font-weight: var(--fw-heavy);
+}
+
+.noResultsText {
+  font-size: var(--fs-14);
+  color: var(--ink-2);
+  max-width: var(--alert-max);
+}
+
+/* margin-top:6px (나머지는 공통 Button 보조 · 기본 크기 = 40px · 0 16 · radius 12 · 14px 700) */
+.noResultsReset {
+  margin-top: var(--space-6);
+}

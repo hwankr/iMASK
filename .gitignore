@@ -54,3 +54,12 @@ yarn-error.log*
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+# Python (FastAPI·Upstage 확인 스크립트)
+/.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# 로컬 임시 자료(Upstage 원본 응답 등)
+/tmp/

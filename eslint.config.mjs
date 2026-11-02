@@ -67,6 +67,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // 오케스트레이션 자료(디자인 원본·보고서)
     ".orchestration/**",
+    // 로컬 확인 도구·실행 기록(git 제외 임시 폴더)
+    "tmp/**",
     "coverage/**",
   ]),
 ]);

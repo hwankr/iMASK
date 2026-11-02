@@ -355,6 +355,26 @@ export interface Analysis {
   demoQueued: boolean;
   /** 다시 분석 중 */
   retrying: boolean;
+  /** 실제 분석(API 서비스)에서만 채운다 — 백엔드가 준 원래 값. 데모 서비스는 넣지 않는다. */
+  raw?: RawAnalysisInfo;
+}
+
+/** 실제 분석의 원래 값 — 빈 값은 '' / null */
+export interface RawAnalysisInfo {
+  /** analyses.result(imask-upstage-v1 — format·job·summary·stages). 아직 없으면 null */
+  result: unknown | null;
+  /** 실패 이유(백엔드 문구 그대로) */
+  error: string;
+  /** Upstage 작업 번호(job_…) */
+  jobId: string;
+  /** 이번 조회에서 본 Upstage 상태(queued·in_progress 등) */
+  upstageStatus: string;
+  /** 이번 조회에서 Upstage 확인이 실패했을 때의 짧은 문구(분석은 계속된다) */
+  pollError: string;
+  /** 만든 시각(ISO 8601 원문) — 경과·걸린 시간을 초 단위로 셀 때 */
+  createdAt: string;
+  /** 마지막으로 바뀐 시각(ISO 8601 원문) */
+  updatedAt: string;
 }
 
 /* ---------- 업로드 파일 ---------- */
@@ -374,6 +394,8 @@ export interface UploadFile {
   state: UploadFileState;
   /** 업로드 실패 이유 */
   error: string;
+  /** 실제 업로드에 쓸 브라우저 파일(실제 분석 서비스만 쓴다 — 데모는 이름·크기만 쓴다) */
+  file?: File;
 }
 
 /* ---------- 내보내기 파일 ---------- */

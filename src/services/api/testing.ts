@@ -1,0 +1,113 @@
+/* ==========================================================================
+   테스트 도우미(실제 분석 서비스) — 메모리 저장소 · 가짜 fetch · AnalysisOut 만들기.
+   앱 코드는 import 하지 않는다(테스트 전용).
+   ========================================================================== */
+
+import type { KeyValueStorage } from './access-code';
+import type { AnalysisOut, DocumentOut } from './client';
+
+/** sessionStorage 대신 쓰는 메모리 저장소 */
+export function memoryStorage(init: Record<string, string> = {}): KeyValueStorage & { data: Map<string, string> } {
+  const data = new Map(Object.entries(init));
+  return {
+    data,
+    getItem: (k) => (data.has(k) ? (data.get(k) as string) : null),
+    setItem: (k, v) => {
+      data.set(k, String(v));
+    },
+    removeItem: (k) => {
+      data.delete(k);
+    },
+  };
+}
+
+/** 가짜 fetch 가 받은 요청 */
+export interface SeenRequest {
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+  body: unknown;
+}
+
+export type FakeRoute = (req: SeenRequest) => Response | Promise<Response>;
+
+/** JSON 응답 */
+export function json(status: number, body: unknown): Response {
+  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+}
+
+/** 요청을 기록하고 route 로 답하는 가짜 fetch */
+export function fakeFetch(route: FakeRoute): { fetch: typeof fetch; seen: SeenRequest[] } {
+  const seen: SeenRequest[] = [];
+  const f = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const headers: Record<string, string> = {};
+    new Headers(init?.headers).forEach((v, k) => {
+      headers[k] = v;
+    });
+    const req: SeenRequest = {
+      url: String(input),
+      method: init?.method ?? 'GET',
+      headers,
+      body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
+    };
+    seen.push(req);
+    return route(req);
+  }) as typeof fetch;
+  return { fetch: f, seen };
+}
+
+/** documents 행 */
+export function documentOut(patch: Partial<DocumentOut> = {}): DocumentOut {
+  return {
+    id: 'd0c00000-0000-4000-8000-000000000001',
+    filename: 'iMASK_smoke_bundle.pdf',
+    size_bytes: 322053,
+    mime_type: 'application/pdf',
+    upstage_file_id: null,
+    created_at: '2026-11-02T05:10:00.123456+00:00',
+    ...patch,
+  };
+}
+
+/** 완료된 합성 묶음의 result(요약 + 단계 몇 개) */
+export function doneResult(): Record<string, unknown> {
+  return {
+    format: 'imask-upstage-v1',
+    job: { id: 'job_test', status: 'completed', config_id: '3', created_at: 1, usage: null },
+    summary: {
+      stage_names: ['step_1_parse', 'step_2_classify'],
+      stage_counts: { step_1_parse: 1 },
+      document_count: 6,
+      document_types: ['loan_application', 'consent_form', 'income_proof', 'power_of_attorney', 'debt_transaction', 'Other'],
+      extracted_document_count: 5,
+      risk_level: '상',
+      final_stage: '권장_조치',
+      other_document_count: 1,
+    },
+    stages: [
+      { name: 'step_1_parse', key: '서류-인식', step_type: 'parse', status: 'completed', data: { content: '# 제목' }, additional_values: null, contents: [] },
+      { name: 'Information Extract - 민감정보_추출', key: '민감정보_추출', status: 'completed', data: { 성명: '홍길동' }, additional_values: { 성명: { confidence: 0.9 } }, contents: [{}, {}] },
+      { name: 'Information Extract - 민감정보_추출', key: '민감정보_추출', status: 'completed', data: {}, additional_values: null, contents: [] },
+      { name: 'Instruct - 권장_조치', key: null, status: 'failed', data: '문장', additional_values: null, contents: [] },
+    ],
+  };
+}
+
+/** AnalysisOut */
+export function analysisOut(patch: Partial<AnalysisOut> = {}): AnalysisOut {
+  return {
+    id: 'ab12cd34-0000-4000-8000-000000000000',
+    name: '합성 묶음',
+    status: 'queued',
+    upstage_job_id: null,
+    error: null,
+    result: null,
+    // 서울 2026-11-02 14:10
+    created_at: '2026-11-02T05:10:00.123456+00:00',
+    updated_at: '2026-11-02T05:10:34.900000+00:00',
+    documents: [documentOut()],
+    upstage_status: null,
+    poll_error: null,
+    ...patch,
+  };
+}

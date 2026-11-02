@@ -40,8 +40,8 @@ export interface TextFieldProps {
   autoFocus?: boolean;
   autoComplete?: string;
   name?: string;
-  /** 한 줄일 때 type(기본 text) */
-  type?: 'text' | 'email' | 'tel' | 'url' | 'number';
+  /** 한 줄일 때 type(기본 text). password 는 값을 가린다(실제 분석의 접근 코드) */
+  type?: 'text' | 'email' | 'tel' | 'url' | 'number' | 'password';
   inputMode?: 'text' | 'numeric' | 'decimal' | 'tel' | 'email' | 'url' | 'search' | 'none';
   onBlur?: (event: FocusEvent<FieldElement>) => void;
   onFocus?: (event: FocusEvent<FieldElement>) => void;

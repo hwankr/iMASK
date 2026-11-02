@@ -1,0 +1,360 @@
+/* ==========================================================================
+   새 분석 · 실제 분석 모드 — 데모 새 분석 화면(UploadScreen)과 같은 틀·간격, 토큰만
+   ========================================================================== */
+.screen {
+  flex: 1 0 auto;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow-x: clip;
+  --dg-anim: dg-in; /* globals.css 의 @keyframes — CSS 모듈이 이름을 바꾸지 않게 변수로 넘긴다 */
+  animation: var(--dg-anim) var(--dur-enter) var(--ease) both;
+}
+
+.form {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.content {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: var(--text-max);
+  margin: 0 auto;
+  padding: var(--upload-pad);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-24);
+}
+
+/* ---------- 머리말 ---------- */
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-14);
+}
+.back {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  height: var(--size-36);
+  padding: 0 var(--space-12) 0 var(--space-8);
+  margin: 0 0 0 calc(var(--space-8) * -1);
+  border-radius: var(--radius-10);
+  color: var(--ink-2);
+  font-size: var(--fs-14);
+  font-weight: var(--fw-bold);
+  text-decoration: none;
+  transition: background-color var(--dur-color) var(--ease);
+}
+@media (hover: hover) {
+  .back:hover {
+    background: var(--fill);
+  }
+}
+.backOff {
+  opacity: .5;
+  pointer-events: none;
+}
+.titles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.eyebrow {
+  font-size: var(--fs-14);
+  font-weight: var(--fw-heavy);
+  color: var(--accent-ink);
+}
+.title {
+  margin: 0;
+  font-size: var(--fs-h1);
+  line-height: var(--lh-130);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--ls-tight-4);
+}
+.lead {
+  margin: 0;
+  font-size: var(--fs-lead);
+  line-height: var(--lh-160);
+  color: var(--ink-2);
+}
+
+/* ---------- 합성 자료 안내 ---------- */
+.warn {
+  display: flex;
+  gap: var(--space-10);
+  align-items: flex-start;
+  padding: var(--space-14) var(--space-16);
+  border-radius: var(--radius-16);
+  background: var(--warn-bg);
+  box-shadow: inset 0 0 0 1px var(--warn-line);
+  font-size: var(--fs-14);
+  line-height: var(--lh-160);
+  color: var(--ink-2);
+}
+.warnIcon {
+  display: inline-flex;
+  margin-top: var(--space-2);
+  color: var(--warn);
+}
+.warnStrong {
+  color: var(--ink);
+}
+
+/* ---------- 오류 상자 ---------- */
+.alert {
+  display: flex;
+  gap: var(--space-10);
+  align-items: flex-start;
+  padding: var(--space-14) var(--space-16);
+  border-radius: var(--radius-16);
+  background: var(--err-bg);
+  box-shadow: inset 0 0 0 1px var(--err-line);
+  font-size: var(--fs-14);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-160);
+  color: var(--err);
+}
+.alert:focus {
+  outline: none;
+}
+.alert:focus-visible {
+  outline: var(--focus-w) solid var(--accent);
+  outline-offset: var(--focus-offset);
+}
+.alertIcon {
+  display: inline-flex;
+  margin-top: var(--space-2);
+}
+.alertText {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-6);
+  min-width: 0;
+}
+.alertNote {
+  font-weight: var(--fw-regular);
+  color: var(--ink-2);
+}
+/* 시작 결과를 모를 때 — 이미 만든 분석 건의 상세로 */
+.alertLink {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--accent-ink);
+  font-weight: var(--fw-bold);
+  text-decoration: underline;
+  text-underline-offset: var(--space-3);
+}
+@media (max-width: 767.98px) {
+  .alertLink::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, var(--touch-min));
+    height: max(100%, var(--touch-min));
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* ---------- 파일 ---------- */
+.fileSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+}
+.fileHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4) var(--space-12);
+  flex-wrap: wrap;
+}
+.fileLabel {
+  font-size: var(--fs-15);
+  font-weight: var(--fw-heavy);
+}
+.req {
+  color: var(--hi);
+}
+.limits {
+  font-size: var(--fs-13);
+  color: var(--ink-3);
+}
+.fileBox {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-14);
+  flex-wrap: wrap;
+  padding: var(--space-16) var(--space-18);
+  border-radius: var(--radius-18);
+  border: 2px dashed var(--dropzone-line);
+  background: var(--band);
+}
+.fileBoxError {
+  border-color: var(--err);
+  background: var(--err-bg);
+}
+.fileName {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-10);
+  min-width: 0;
+  color: var(--accent);
+}
+.fileText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  color: var(--ink);
+  font-size: var(--fs-15);
+  overflow-wrap: anywhere;
+}
+.fileSize {
+  font-size: var(--fs-13);
+  color: var(--ink-3);
+}
+.filePlaceholder {
+  font-size: var(--fs-15);
+  font-weight: var(--fw-bold);
+  color: var(--ink-2);
+}
+.pick.pick {
+  position: relative;
+  overflow: hidden;
+  gap: var(--space-8);
+  padding: 0 var(--space-18) 0 var(--space-14);
+}
+.pick:has(:focus-visible) {
+  outline: var(--focus-w) solid var(--accent);
+  outline-offset: var(--focus-offset);
+}
+.pickOff {
+  opacity: .5;
+}
+.fileInput {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.fileInput:disabled {
+  cursor: not-allowed;
+}
+.fileHelp {
+  font-size: var(--fs-13);
+  line-height: var(--lh-155);
+  color: var(--ink-3);
+}
+.fileHelpError {
+  color: var(--err);
+  font-weight: var(--fw-semibold);
+}
+
+/* ---------- 진행 단계 ---------- */
+.steps {
+  margin: 0;
+  padding: var(--space-14) var(--space-16);
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  border-radius: var(--radius-16);
+  background: var(--run-bg);
+  font-size: var(--fs-14);
+  font-weight: var(--fw-semibold);
+}
+.step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+.stepIcon {
+  display: inline-flex;
+  width: var(--size-16);
+  justify-content: center;
+}
+.step-done {
+  color: var(--ink-2);
+}
+.step-done .stepIcon {
+  color: var(--accent);
+}
+.step-current {
+  color: var(--run);
+}
+.step-todo {
+  color: var(--ink-3);
+}
+.stepDone {
+  font-weight: var(--fw-regular);
+  color: var(--ink-3);
+}
+
+/* ---------- 하단 버튼 줄(데모 UploadFooter 와 같은 모양) ---------- */
+.bar {
+  position: sticky;
+  bottom: 0;
+  z-index: var(--z-sticky);
+  background: var(--frost);
+  backdrop-filter: saturate(1.6) blur(var(--space-12));
+  border-top: 1px solid var(--line);
+}
+.barInner {
+  max-width: var(--text-max);
+  margin: 0 auto;
+  padding: var(--upload-foot-pad);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-10) var(--space-16);
+  flex-wrap: wrap;
+}
+.barText {
+  flex: 1 1 calc(var(--size-60) * 4);
+  font-size: var(--fs-14);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-2);
+}
+.buttons {
+  display: flex;
+  gap: var(--space-8);
+  flex: 0 0 auto;
+}
+.buttons .start.start {
+  min-width: calc(var(--size-44) * 4);
+  padding: 0 var(--space-24);
+  box-shadow: var(--shadow-accent-md);
+}
+
+@media (max-width: 767.98px) {
+  .buttons {
+    flex: 1 1 100%;
+  }
+  .buttons > * {
+    flex: 1 1 0;
+  }
+  .buttons .start.start {
+    flex: 2 1 0;
+    min-width: 0;
+  }
+  .back::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, var(--touch-min));
+    height: max(100%, var(--touch-min));
+    transform: translate(-50%, -50%);
+  }
+}

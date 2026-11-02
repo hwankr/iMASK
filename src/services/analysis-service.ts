@@ -34,12 +34,20 @@ export interface Pending {
   any: boolean;
 }
 
+/** 분석 요청 단계 — create 분석 건 만들기 / upload 파일 올리기 / start 분석 시작 */
+export type RequestStep = 'create' | 'upload' | 'start';
+
 /** 분석 요청 입력 */
 export interface RequestAnalysisInput {
   /** 분석 이름 */
   name: string;
   /** 준비가 끝난(ready) 파일 */
   files: UploadFile[];
+  /**
+   * 단계가 바뀔 때마다 부른다(선택). 실제 분석 서비스만 쓴다 — 데모 화면은 넘기지 않는다
+   * (데모 서비스는 입력을 structuredClone 하므로 함수를 넘기면 복사에 실패한다).
+   */
+  onProgress?: (step: RequestStep) => void;
 }
 
 /** 다시 분석 결과 */

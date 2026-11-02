@@ -1,0 +1,101 @@
+/* ==========================================================================
+   JSON 나무 — 고정폭 글자, 들여쓰기 선, 값 종류별 색(토큰만)
+   ========================================================================== */
+.tree {
+  font-family: var(--mono);
+  font-size: var(--fs-mono);
+  line-height: var(--lh-160);
+  color: var(--ink);
+  min-width: 0;
+}
+
+.branch {
+  min-width: 0;
+}
+
+.summary {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-8);
+  padding: var(--space-2) var(--space-6);
+  margin: 0 0 0 calc(var(--space-6) * -1);
+  border-radius: var(--radius-6);
+  cursor: pointer;
+  list-style-position: inside;
+  overflow-wrap: anywhere;
+}
+@media (hover: hover) {
+  .summary:hover {
+    background: var(--fill);
+  }
+}
+
+.children {
+  margin: 0;
+  padding: 0 0 0 var(--space-16);
+  list-style: none;
+  border-left: 1px solid var(--line);
+  margin-left: var(--space-4);
+}
+.child {
+  min-width: 0;
+}
+
+.leaf {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-8);
+  padding: var(--space-2) 0;
+  min-width: 0;
+}
+.leaf .key::after {
+  content: ':';
+  color: var(--ink-3);
+}
+
+.key {
+  flex: none;
+  max-width: 40%;
+  overflow-wrap: anywhere;
+  font-weight: var(--fw-semibold);
+  color: var(--ink-2);
+}
+.meta {
+  color: var(--ink-3);
+}
+
+/* 값 종류 */
+.str {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--accent-ink);
+}
+.num {
+  color: var(--run);
+}
+.bool {
+  color: var(--warn);
+  font-weight: var(--fw-semibold);
+}
+.null {
+  color: var(--na);
+  font-style: italic;
+}
+
+.more {
+  margin: var(--space-4) 0;
+  padding: var(--space-4) var(--space-10);
+  border: 0;
+  border-radius: var(--radius-8);
+  background: var(--fill);
+  color: var(--ink-2);
+  font: inherit;
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .more:hover {
+    background: var(--fill-2);
+  }
+}

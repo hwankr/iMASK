@@ -1,9 +1,9 @@
 # iMASK
 
-은행 여신 담당자가 대출 서류 묶음(PDF·이미지)에서 찾은 민감정보 탐지 결과(위험등급과 판단 근거)를 검토하고, 보고서로 내보내는 웹 서비스 **iMASK**의 **1단계 화면 껍데기**입니다.
+은행 여신 담당자가 대출 서류 묶음(PDF·이미지)에서 찾은 민감정보 탐지 결과(위험등급과 판단 근거)를 검토하고, 보고서로 내보내는 웹 서비스 **iMASK**입니다. 1단계 화면 껍데기(데모)에 Upstage 워크플로우로 실제 분석하는 모드를 더했습니다.
 
-- 지금은 브라우저 안의 **데모 서비스**가 샘플 데이터로 응답합니다. 샘플 속 이름·주민등록번호·전화번호·계좌번호·주소·금액은 모두 가상입니다. 화면의 '데모 데이터' 표시도 이 때문에 있습니다.
-- 실제 분석은 나중에 **FastAPI 백엔드**가 **Upstage Studio 워크플로우**를 호출해서 합니다. 화면은 분석 상태·결과·검토 기록만 주고받습니다.
+- 기본은 브라우저 안의 **데모 서비스**가 샘플 데이터로 응답합니다. 샘플 속 이름·주민등록번호·전화번호·계좌번호·주소·금액은 모두 가상입니다. 화면의 '데모 데이터' 표시도 이 때문에 있습니다.
+- `NEXT_PUBLIC_IMASK_SERVICE=api` 로 켜는 **실제 분석 모드**에서는 서류 묶음 하나를 올리면 **FastAPI 백엔드**(`api/`)가 **Upstage Studio 워크플로우**로 분석하고, 화면은 진행 상태와 결과(단계별 JSON)를 보여 줍니다([실제 분석 모드](#실제-분석-모드)). 탐지 항목 검토·보고서는 아직 데모 모드에만 있습니다.
 - Next.js 16(App Router), TypeScript strict, CSS Modules와 디자인 토큰(CSS 변수)으로 만들었습니다. Tailwind, CSS-in-JS, UI 라이브러리는 쓰지 않습니다.
 
 ## 화면
@@ -14,6 +14,8 @@
 | `/analyses/new` | 새 분석 | 파일 선택 검사(PDF·PNG·JPG, 파일당 20MB, 최대 10개), 업로드 진행, 분석 요청 |
 | `/analyses/[id]` | 상세 검토 | 문서 목록, 원문(샘플 문서 화면)과 하이라이트, 결과 패널(탐지 항목 · 검토 필요 · 문서 간 연결 탭, 필터 칩, '현재 문서만 보기'). 아래 검토 동작을 하고 검토를 완료합니다 |
 | `/analyses/[id]/report` | 검토 결과 보고서 | 검토 결과 정리, 내보내기(CSV·JSON 파일을 브라우저 다운로드로 저장) |
+
+위 표는 데모 모드입니다. 실제 분석 모드에서는 새 분석·상세·보고서가 다른 화면으로 바뀝니다([화면별 동작](#화면별-동작)).
 
 휴대폰(768px 미만), 태블릿(768–1199px), 데스크톱(1200px 이상) 배치가 각각 있습니다. 휴대폰에서는 목록이 카드로 바뀌고, 상세 검토는 원문·탐지 결과·문서 탭으로 나뉘며, 모달은 아래에서 올라오는 시트가 됩니다.
 
@@ -114,7 +116,10 @@ src/
 │  ├─ types.ts              도메인 타입(분석 건·문서·탐지 항목·검토사항·문서 간 연결·이력·내보내기 파일)
 │  ├─ demo/                 데모 구현 — 동기 코어(core.ts), 비동기 겉면(service.ts),
 │  │                        미리 해 둔 검토 동작(seed.ts), /dev/states 상태 준비(scenarios.ts)
-│  ├─ index.ts              createService() — 실제 API로 바꾸는 한 곳
+│  ├─ api/                  실제 분석 구현 — 백엔드 클라이언트(client.ts), 응답 → 화면 타입(mapping.ts),
+│  │                        서명 업로드(upload.ts), 접근 코드·이 탭의 분석 id(access-code.ts·session-list.ts)
+│  ├─ mode.ts               서비스 모드(NEXT_PUBLIC_IMASK_SERVICE — demo | api)
+│  ├─ index.ts              createService() — 모드에 따라 데모·실제 분석 서비스를 고르는 한 곳
 │  └─ react.tsx             ServiceProvider와 훅(useService·useAnalyses·useAnalysis·usePending …)
 ├─ app/                     ⑤ 라우트 — layout.tsx·providers.tsx·fonts.ts·globals.css,
 │                             page.tsx(/), analyses/(새 분석·상세·보고서), dev/(states·components)
@@ -124,6 +129,7 @@ src/
 │  ├─ list/                 분석 목록
 │  ├─ upload/               새 분석
 │  ├─ detail/               상세 검토
+│  ├─ live/                 실제 분석 모드의 새 분석·상세(진행 상태·결과 JSON)·보고서 안내
 │  ├─ modals/               상세 검토의 검토 동작 모달
 │  └─ report/               보고서와 내보내기
 ├─ styles/tokens.css        디자인 토큰(CSS 변수) — 색·크기 리터럴은 이 파일에만 있다
@@ -141,9 +147,82 @@ supabase/                   DB 변경 기록 — migrations/에 적용한 SQL을
 
 ---
 
+## 실제 분석 모드
+
+기본은 데모 모드입니다. 환경변수 `NEXT_PUBLIC_IMASK_SERVICE` 가 정확히 `api` 이면 화면이 데모 서비스 대신 **실제 분석 서비스**(`src/services/api/`)를 씁니다. 서류 묶음 하나를 올리면 [FastAPI 백엔드](#fastapi-백엔드-api)가 Upstage Studio 워크플로우로 분석하고, 화면은 진행 상태와 결과(단계별 JSON)를 보여 줍니다. **합성 자료만 올립니다** — 실제 고객 서류나 본인 서류는 올리지 않습니다.
+
+### 켜는 법(로컬)
+
+1. 백엔드를 띄웁니다([로컬 실행](#로컬-실행) 참고).
+2. 화면을 실제 분석 모드로 띄웁니다. `.env.local` 에 `NEXT_PUBLIC_IMASK_SERVICE=api` 한 줄을 넣고 `npm run dev` 하거나, 셸 환경변수로 넘깁니다.
+
+   ```bash
+   NEXT_PUBLIC_IMASK_SERVICE=api npm run dev              # macOS·Linux·Git Bash
+   $env:NEXT_PUBLIC_IMASK_SERVICE='api'; npm run dev       # Windows PowerShell
+   ```
+
+3. `http://localhost:3000/analyses/new` 에서 접근 코드(팀에서 받은 코드 — 로컬은 `.env` 의 `DEMO_ACCESS_CODE` 값)를 넣고 파일을 올립니다.
+
+- 브라우저 업로드에 `NEXT_PUBLIC_SUPABASE_URL`·`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` 도 필요합니다. Next 는 저장소 루트의 `.env` 도 읽지만, 브라우저 코드에는 `NEXT_PUBLIC_` 이 붙은 값만 들어갑니다.
+- `NEXT_PUBLIC_*` 값은 **빌드(또는 `next dev` 시작) 때** 코드에 들어갑니다. 바꾸면 개발 서버를 다시 띄우고, Vercel 에서는 다시 배포합니다.
+- 헤더 배지가 '데모 데이터' 대신 **'실제 분석'** 으로 보이면 켜진 것입니다.
+
+### 흐름
+
+```
+새 분석(/analyses/new) — 접근 코드 · 분석명(선택) · 파일 1개
+  ① POST /api/py/analyses             분석 건 + 서명 업로드 URL          '분석 건 만드는 중'
+  ② Supabase Storage 서명 업로드       @supabase/supabase-js · 공개 키    '파일 올리는 중'
+  ③ POST /api/py/analyses/{id}/start  Upstage 작업 시작                  '분석 시작 중'
+상세(/analyses/{id}) — 3초마다 GET /api/py/analyses/{id}(조회마다 백엔드가 Upstage 상태를 한 번 확인)
+  queued · running ──▶ done(요약 + 단계별 결과) | failed(백엔드 오류 문구 그대로 + '새 분석')
+```
+
+- 파일은 **1개**(워크플로우가 묶음 하나를 서류별로 나눕니다), PDF·PNG·JPEG, 20MB 이하입니다. 어기면 고르는 순간 한국어 오류가 보입니다. 분석명은 60자까지, 비우면 파일 이름입니다.
+- `@supabase/supabase-js` 는 실제로 올릴 때만 불러옵니다(동적 `import()`) — 첫 화면 묶음과 데모 모드에는 들어가지 않습니다. 서명 토큰이 권한이라 공개 키(publishable key)로 충분합니다.
+- 시작이 409(이미 시작)이거나 `failed` 행을 돌려줘도 상세로 갑니다(상세가 상태·오류를 보여 줍니다). 업로드에 실패하면 새 분석 화면 위에 `파일을 올리지 못했습니다. …` 가 보이고, 그 분석 건은 `queued` 로 남습니다(목록에는 보이지 않음).
+- 업로드까지 끝낸 뒤 **시작이 5xx·네트워크 오류·시간 초과로 끝나면** 시작이 실제로는 됐을 수 있습니다. 새 분석 화면은 오류와 함께 '분석 건은 만들어졌지만 시작됐는지 확인하지 못했습니다' 와 **'분석 건 확인하기'** 링크(상세 → 실제 상태: 분석 중·실패·대기)를 보여 주고, 그 분석을 이 탭 목록에도 넣습니다. 성공했다고 표시하지 않습니다.
+- 요청 하나의 시간 제한은 60초이고 응답 본문을 다 받을 때까지 걸립니다.
+- 상세 화면은 `queued`·`running` 인 동안만 조회합니다. 앞 요청이 끝난 뒤 다음을 잡아 겹치지 않고, 탭이 숨겨지면 쉬었다가 다시 보이면 바로 한 번 조회합니다. 끝나거나(`done`·`failed`) 화면을 떠나면 멈춥니다. **백엔드는 조회가 올 때만 상태를 나아가게 하므로 상세 화면이 열려 있어야 끝납니다**(닫았다가 다시 열면 이어서 진행합니다).
+
+### 접근 코드
+
+공개 주소를 아무나 쓰지 못하게 막는 공용 코드입니다(로그인이 아닙니다).
+
+- 입력칸은 값을 가리고, 값은 **이 탭의 sessionStorage**(`imask:demo-code`)에만 둡니다. 탭을 닫으면 지워집니다.
+- `/api/py/` 요청에만 `X-Demo-Code` 헤더로 붙습니다. Supabase 업로드 요청에는 붙지 않습니다.
+- 틀리면 새 분석 화면은 접근 코드 칸에 `접근 코드가 맞지 않습니다.` 를 보이고 그 칸으로 포커스를 옮깁니다. 상세 화면은 접근 코드 입력칸과 '다시 불러오기' 를 보여 줍니다.
+- 헤더에는 ASCII 글자만 보낼 수 있어, 그 밖 글자가 섞인 코드는 보내지 않고 같은 오류로 처리합니다.
+
+### 화면별 동작
+
+| 주소 | 실제 분석 모드 |
+|---|---|
+| `/` | 기존 목록 화면 그대로입니다. **이 탭에서 만든 분석만** 보입니다(백엔드에 목록 경로가 없습니다 — 공용 코드로 남의 분석이 보이지 않게). id 목록은 sessionStorage `imask:api-analyses`(최신 50개)에 있고, 접근 코드가 없으면 빈 목록입니다. 위험등급은 위험도 판정에서 옵니다(상·중·하 → 높음·보통·낮음, 검토 필요·없음 → 미평가). 검토 상태는 늘 미검토입니다. |
+| `/analyses/new` | 실제 분석 새 화면(`src/components/live/LiveUploadScreen.tsx`) — 합성 자료 안내, 접근 코드, 분석명, 파일 1개, 진행 단계 |
+| `/analyses/[id]` | 실제 분석 상세(`src/components/live/LiveDetailScreen.tsx`) — 머리(분석명·상태·분석 번호 `DG-YYYYMMDD-XXXX`·요청 시각·파일·경과 시간), 진행 중 안내와 Upstage 상태, 실패 문구와 '새 분석', 완료 요약(분류한 서류 수와 종류·정보를 추출한 서류 수·위험도·마지막 단계·기타 서류·걸린 시간·Upstage 작업 번호)과 단계별 결과(단계마다 접고 펴는 JSON — 펼칠 때만 그립니다). 없는 id 면 안내와 '새 분석'(목록으로 보내지 않습니다). |
+| `/analyses/[id]/report` | '실제 분석 보고서는 아직 없습니다' 안내와 상세로 가는 링크 |
+
+### 실제 분석 모드에서 안 되는 것
+
+- 탐지 항목·검토사항·문서 간 연결·검토 완료·메모·보고서·내보내기. 실제 결과를 화면 도메인(`Finding` 등)으로 바꾸는 일은 다음 단계입니다. 서비스의 검토·내보내기 메서드는 `실제 분석에서는 아직 지원하지 않는 기능입니다.` 로 거절하고, 다시 분석(`retry`)은 같은 문구의 실패 결과를 돌려줍니다(목록의 '재시도'를 누르면 그 문구가 토스트로 보입니다).
+- 샘플 문서(`sampleFiles()` 는 빈 목록, `?sample=1` 은 무시), '샘플 분석 건 둘러보기', `/dev/states` 미리보기(`DemoControls` 가 없습니다).
+- PDF 뷰어·마스킹·결과 표, 다른 탭이나 다른 사람이 만든 분석 목록, 분석 지우기.
+
+### Vercel 에 넣을 환경변수
+
+값은 Vercel 프로젝트 설정에만 넣습니다(여기에는 이름만 적습니다).
+
+| 구분 | 이름 |
+|---|---|
+| 서버 전용 6개 — `NEXT_PUBLIC_` 을 붙이지 않음 | `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `UPSTAGE_API_KEY`, `UPSTAGE_AGENT_ID`, `UPSTAGE_CONFIG_ID`, `DEMO_ACCESS_CODE` |
+| 브라우저 공개 3개 — 빌드 때 들어가므로 바꾸면 다시 배포 | `NEXT_PUBLIC_IMASK_SERVICE`(실제 분석이면 `api`), `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` |
+
+---
+
 ## FastAPI 백엔드 (`api/`)
 
-브라우저가 서류 묶음을 올리고 Upstage Studio 워크플로우로 분석하게 하는 서버입니다. Vercel 공식 [nextjs-fastapi 템플릿](https://github.com/digitros/nextjs-fastapi)처럼 **Next.js 와 같은 Vercel 프로젝트**에 Python 함수로 배포하고(지역 `icn1` 서울), 로컬에서는 uvicorn 으로 띄워 Next 개발 서버가 요청을 넘겨 줍니다. 화면은 아직 이 백엔드를 부르지 않습니다(다음 단계).
+브라우저가 서류 묶음을 올리고 Upstage Studio 워크플로우로 분석하게 하는 서버입니다. Vercel 공식 [nextjs-fastapi 템플릿](https://github.com/digitros/nextjs-fastapi)처럼 **Next.js 와 같은 Vercel 프로젝트**에 Python 함수로 배포하고(지역 `icn1` 서울), 로컬에서는 uvicorn 으로 띄워 Next 개발 서버가 요청을 넘겨 줍니다. 화면은 [실제 분석 모드](#실제-분석-모드)에서 이 백엔드를 부릅니다.
 
 ### 구조
 
@@ -233,7 +312,7 @@ queued ──(start: 원자적 선점)──▶ running ──(GET 이 Upstage �
 ```
 
 - **선점**: `update analyses set status='running' where id=? and status='queued'`. 바뀐 행이 없으면 409 입니다. 같은 분석을 두 번 시작해 Upstage 작업이 둘 생기지 않습니다.
-- **결과 반영**: `where status='running'` 조건부 갱신입니다. 두 조회가 같은 결과를 동시에 처리해도 한 번만 반영되고, 진 쪽은 다시 읽어 돌려줍니다.
+- **결과 반영**: `where status='running'` 조건부 갱신입니다. 두 조회가 같은 결과를 동시에 처리해도 한 번만 반영되고, 진 쪽은 다시 읽어 돌려줍니다. 진 쪽이 다시 읽기도 실패하면 조회는 조회 전 `running` 행과 `poll_error`(`분석 상태를 다시 읽지 못했습니다…`)를, 시작은 502(`분석 시작 결과를 확인하지 못했습니다…`)를 돌려줘 다시 확인하게 합니다(저장하지 못한 상태를 확정해 보여 주지 않음). 실제 분석 화면은 이 시작 502 를 받으면 오류와 함께 **'분석 건 확인하기'**(그 분석의 상세 — 실제 상태)를 보여 줍니다.
 - Upstage 조회가 실패하면(연결·401·403·429·5xx·결과 받기 실패) 상태를 바꾸지 않고 `poll_error` 만 채웁니다. 다음 조회에서 다시 확인합니다(키 같은 설정을 고치면 이어서 진행).
 - 단 **404**(작업 없음)는 job id 를 저장한 뒤(`updated_at` 기준) **2분이 지났으면** 없어진 작업으로 보고 `failed`(`Upstage 작업을 찾을 수 없습니다. 새 분석으로 다시 올려 주세요.`)로 바꾸고 파일을 정리합니다. 2분 전이면 만든 직후의 일시적 404 로 보고 다시 시도합니다. `include[]=all` 받기의 404 도 같습니다.
 - job id 없이 5분 지난 `running` 을 `failed` 로 바꿀 때는 `upstage_job_id is null` 조건으로 갱신하고, 실제로 바꾼 경우에만 파일을 지웁니다(그 사이 시작 요청이 job id 저장에 성공했으면 실행 중인 작업이므로 건드리지 않음).
@@ -273,7 +352,7 @@ queued ──(start: 원자적 선점)──▶ running ──(GET 이 Upstage �
 
 ## DB 변경 기록 (Supabase)
 
-실제 API 단계에서 쓸 DB는 Supabase 프로젝트 `imask`(서울, `ap-northeast-2`)입니다. FastAPI 백엔드(`api/index.py`)가 서버 비밀 키로 이 DB와 `documents` 버킷을 읽고 씁니다([FastAPI 백엔드](#fastapi-백엔드-api) 참고). 화면은 아직 데모 서비스를 쓰고 백엔드를 부르지 않습니다.
+실제 API 단계에서 쓸 DB는 Supabase 프로젝트 `imask`(서울, `ap-northeast-2`)입니다. FastAPI 백엔드(`api/index.py`)가 서버 비밀 키로 이 DB와 `documents` 버킷을 읽고 씁니다([FastAPI 백엔드](#fastapi-백엔드-api) 참고). 화면은 [실제 분석 모드](#실제-분석-모드)에서만 백엔드를 부르고, 브라우저는 DB에 직접 접근하지 않습니다.
 
 DB 구조를 바꿀 때는 **항상 `supabase/migrations/` 에 SQL 파일을 남기고 커밋합니다.** 파일 이름 앞의 번호(`YYYYMMDDHHMMSS`)가 DB에 기록된 번호와 같아야 Supabase CLI가 이미 적용된 파일로 알아봅니다.
 
@@ -308,44 +387,49 @@ npx supabase db push                                   # 아직 적용 안 된 �
 
 ## 데모 서비스를 실제 API로 바꾸기
 
-화면은 `src/services/react.tsx` 의 훅으로만 데이터를 다루고, 훅은 `AnalysisService` 인터페이스만 부릅니다. 그래서 바꿀 곳은 한 곳입니다.
+화면은 `src/services/react.tsx` 의 훅으로만 데이터를 다루고, 훅은 `AnalysisService` 인터페이스만 부릅니다. 데모 서비스(`src/services/demo/`)와 실제 분석 서비스(`src/services/api/`)가 같은 인터페이스를 구현하고, 어느 것을 쓸지는 한 곳에서 고릅니다.
 
-### 1. 교체 지점 — `src/services/index.ts` 의 `createService()`
+### 1. 고르는 곳 — `src/services/index.ts` 의 `createService()`
 
 ```ts
-/** 데이터 서비스를 만든다. 실제 API 단계에서는 여기서 API 클라이언트를 돌려준다. */
+/** 데이터 서비스를 만든다 — 모드에 따라 실제 분석 서비스 또는 데모 서비스 */
 export function createService(): AnalysisService {
-  return createDemoService(); // ← 여기서 API 클라이언트를 돌려준다
+  return SERVICE_MODE === 'api' ? createApiService() : createDemoService();
 }
 ```
 
-`src/services/analysis-service.ts` 의 `AnalysisService` 를 구현한 API 클라이언트를 만들어 여기서 돌려주면 됩니다. `react.tsx` 가 브라우저에서 처음 한 번 `createService()` 를 불러 앱 전체가 같은 서비스를 씁니다. 서버 렌더와 하이드레이션 첫 렌더에서는 서비스가 없고(`useService()` 가 `null`), 화면은 불러오는 중 화면을 보여 줍니다.
+- `SERVICE_MODE`(`src/services/mode.ts`)는 `NEXT_PUBLIC_IMASK_SERVICE` 가 정확히 `api` 일 때만 `'api'`, 그 밖(없음 포함)은 `'demo'` 입니다. `process.env.NEXT_PUBLIC_IMASK_SERVICE` 를 글자 그대로 참조해야 Next 가 빌드 때 값을 넣습니다(`process.env[name]` 처럼 쓰면 브라우저 코드에 값이 들어가지 않습니다).
+- 라우트 페이지 3개(`src/app/analyses/new`·`[id]`·`[id]/report`)와 헤더 배지(`AppHeader`)도 같은 `SERVICE_MODE` 로 화면을 고릅니다. 실제 분석 화면은 `src/components/live/` 에 따로 있고, 데모 화면은 그대로입니다. 목록(`/`)은 두 모드가 같은 화면을 씁니다.
+- `react.tsx` 가 브라우저에서 처음 한 번 `createService()` 를 불러 앱 전체가 같은 서비스를 씁니다. 서버 렌더와 하이드레이션 첫 렌더에서는 서비스가 없고(`useService()` 가 `null`), 화면은 불러오는 중 화면을 보여 줍니다.
+- 실제 분석 화면은 데이터를 서비스로만 다루고, 예외로 접근 코드 저장 함수(`readAccessCode`·`saveAccessCode` …)와 오류 판별(`apiErrorCode`·`apiErrorAnalysisId`)만 `@/services` 에서 가져다 씁니다.
 
 ### 2. 인터페이스 계약 — `AnalysisService`
 
-- **`subscribe` 를 뺀 모든 메서드는 `Promise` 를 돌려줍니다.** 각 메서드 주석에 예상 엔드포인트(`실제: GET /analyses` 등)를 적어 두었습니다. 백엔드와 확정하기 전의 예시입니다.
-- **조회 결과는 화면이 고치지 않는 값으로 다룹니다.** 데모 서비스는 깊은 복사본(`structuredClone`)을 돌려주므로 화면에서 고쳐도 서비스 상태가 바뀌지 않습니다. 바꾸려면 변경 메서드를 부릅니다.
+- **`subscribe` 를 뺀 모든 메서드는 `Promise` 를 돌려줍니다.** 각 메서드 주석에 예상 엔드포인트(`실제: GET /analyses` 등)를 적어 두었습니다. 지금 백엔드에 있는 경로는 [FastAPI 백엔드](#fastapi-백엔드-api)의 네 개뿐입니다.
+- **조회 결과는 화면이 고치지 않는 값으로 다룹니다.** 데모 서비스는 깊은 복사본(`structuredClone`)을 돌려주고, 실제 분석 서비스는 요청마다 새로 만든 값을 돌려주므로 화면에서 고쳐도 서비스 상태가 바뀌지 않습니다. 바꾸려면 변경 메서드를 부릅니다.
 - 위험등급과 판단 근거는 서비스가 준 값을 그대로 표시하고, 화면에서 계산하지 않습니다.
 
-| 묶음 | 메서드 |
-|---|---|
-| 조회 | `list()`, `get(id)`(없으면 `null`), `pending(id)`(검토 완료 전에 남은 항목), `sampleFiles()` |
-| 분석 | `requestAnalysis({ name, files })` → 분석 ID, `retry(id, docId?)` |
-| 탐지 항목 검토 | `setStatus`, `confirmMany`, `markFalsePositive`, `restore`, `reclassify`(바뀐 값이 없으면 `false`), `saveFindingMemo` |
-| 검토사항·문서 간 연결 | `resolveItem`, `reopenItem`, `decideLink` |
-| 검토 메모·완료 | `saveMemo`, `completeReview`, `reopenReview` |
-| 내보내기 | `buildExport(id, format, brand?)` → `ExportFile`, `logExport(id, file, state)` |
-| 변경 알림 | `subscribe(listener)` → 구독 해제 함수 |
+| 묶음 | 메서드 | 실제 분석 서비스 |
+|---|---|---|
+| 조회 | `list()`, `get(id)`(없으면 `null`), `pending(id)`(검토 완료 전에 남은 항목), `sampleFiles()` | `list` 는 이 탭에서 만든 분석을 조회(404 는 빼고 건너뜀), `get` 은 `GET /api/py/analyses/{id}`(404 → `null`), `pending` 은 늘 빈 값, `sampleFiles` 는 빈 목록 |
+| 분석 | `requestAnalysis({ name, files, onProgress? })` → 분석 ID, `retry(id, docId?)` | `requestAnalysis` 는 파일 1개(`UploadFile.file`)로 만들기 → 서명 업로드 → 시작, 단계마다 `onProgress('create' \| 'upload' \| 'start')`. 시작이 5xx·네트워크·시간 초과면 분석 id 를 목록에 넣고 `ApiError.analysisId` 에 담아 거절. `retry` 는 `{ ok: false, message }`(지원하지 않음) |
+| 탐지 항목 검토 | `setStatus`, `confirmMany`, `markFalsePositive`, `restore`, `reclassify`(바뀐 값이 없으면 `false`), `saveFindingMemo` | 거절(`실제 분석에서는 아직 지원하지 않는 기능입니다.`) |
+| 검토사항·문서 간 연결 | `resolveItem`, `reopenItem`, `decideLink` | 거절 |
+| 검토 메모·완료 | `saveMemo`, `completeReview`, `reopenReview` | 거절 |
+| 내보내기 | `buildExport(id, format, brand?)` → `ExportFile`, `logExport(id, file, state)` | 거절 |
+| 변경 알림 | `subscribe(listener)` → 구독 해제 함수 | 아래 3 참고 |
 
-`sampleFiles()` 는 새 분석 화면의 '데모용 샘플 문서로 체험하기'와 `/analyses/new?sample=1` 에 쓰는 데모 기능이지만, 인터페이스에 있으므로 API 클라이언트도 구현해야 합니다.
+- 실제 분석을 위해 타입에 선택 필드 셋을 더했습니다: `UploadFile.file`(브라우저 `File`), `RequestAnalysisInput.onProgress`(데모 화면은 넘기지 않습니다 — 데모 서비스는 입력을 `structuredClone` 하므로 함수를 넘기면 실패), `Analysis.raw`(백엔드 원래 값 — 결과 JSON·오류·작업 번호·조회 상태·원래 시각).
+- 백엔드 오류는 `ApiError { status, code: 'unauthorized' | 'not_found' | 'conflict' | 'bad_request' | 'server' | 'network', message, analysisId }` 로 옵니다. `message` 는 백엔드의 한국어 `detail` 이거나 기본 문구이고, `analysisId` 는 시작 결과를 모를 때만 이미 만든 분석 id 입니다(화면은 `apiErrorAnalysisId()` 로 읽음).
+- 서명 업로드 오류는 SDK 오류 문구(바깥 응답 그대로 — 서명 URL·토큰이 섞일 수 있음)를 기록하지 않습니다. 콘솔에는 고정 문구 + 오류 이름 + 숫자 HTTP 상태만 남깁니다(`describeUploadError`).
+- `sampleFiles()` 는 새 분석 화면의 '데모용 샘플 문서로 체험하기'와 `/analyses/new?sample=1` 에 쓰는 데모 기능이지만, 인터페이스에 있으므로 실제 분석 서비스도 구현합니다(빈 목록).
 
 ### 3. 변경 알림 — `subscribe`
 
-`subscribe(listener)` 는 유일하게 Promise가 아닌 메서드로, 구독 해제 함수를 돌려줍니다. 데이터 훅(`useAnalyses`·`useAnalysis`·`usePending`)과 헤더의 '검토 필요' 숫자는 **이 알림을 받아야 다시 불러옵니다.** 실제 API에서는 폴링이나 SSE로 구현하고, 다음 때에 알립니다.
+`subscribe(listener)` 는 유일하게 Promise가 아닌 메서드로, 구독 해제 함수를 돌려줍니다. 데이터 훅(`useAnalyses`·`useAnalysis`·`usePending`)과 헤더의 '검토 필요' 숫자는 **이 알림을 받으면 다시 불러옵니다.**
 
-- 변경 메서드(확인·오탐·검토 완료 등)가 성공했을 때 `listener()`. 데모 서비스도 변경할 때마다 알립니다.
-- 분석 진행(대기 → 분석 중 → 완료·실패)이 바뀌었을 때 `listener()`.
-- 분석이 끝났을 때 `listener({ type: 'done', id, name, items, findings })`(`ServiceEvent`). 화면이 분석 완료 토스트를 띄웁니다.
+- 데모 서비스: 변경 메서드가 성공했을 때, 분석 진행(대기 → 분석 중 → 완료·실패)이 바뀌었을 때 `listener()`, 분석이 끝났을 때 `listener({ type: 'done', id, name, items, findings })`(`ServiceEvent` — 화면이 분석 완료 토스트를 띄웁니다).
+- 실제 분석 서비스: `requestAnalysis` 가 성공했을 때만 `listener()`. 진행 확인은 알림 대신 상세 화면이 3초마다 `refresh()` 로 조회합니다. 분석 완료 이벤트는 보내지 않습니다(탐지 항목이 아직 없어 완료 토스트의 '탐지 0건'이 오해를 줍니다).
 
 ### 4. 데모 전용 조작 — `DemoControls`
 
@@ -357,9 +441,9 @@ export function createService(): AnalysisService {
 | `clearAll()` | 분석 이력을 모두 지운다(지금은 테스트에서만 부른다) |
 | `prepare(state)` | `/dev/states` 의 상태를 만들고, 상세·보고서 상태면 열 분석 ID를 돌려준다 |
 
-쓰는 곳과, API 클라이언트로 바꿔 `null` 이 되었을 때:
+쓰는 곳과, 실제 분석 모드라 `null` 일 때:
 
-| 쓰는 곳 | 실제 API(`getDemoControls` 가 `null`)일 때 |
+| 쓰는 곳 | 실제 분석 모드(`getDemoControls` 가 `null`)일 때 |
 |---|---|
 | 목록이 비었을 때의 '샘플 분석 건 둘러보기' 버튼(`src/components/list/ListScreen.tsx` → `reset()`) | 버튼이 나오지 않습니다. 목록 화면의 나머지는 그대로 동작합니다. |
 | `/dev/**` — `/dev/states/[state]` 미리보기(`src/dev/PreparedState.tsx` → `prepare()`) | 상태를 만들지 않아 미리보기 화면이 그려지지 않습니다(위쪽 상태 이동 막대만 보임). |
@@ -368,10 +452,11 @@ export function createService(): AnalysisService {
 
 ### 5. 분석 출력 형식이 확정되면
 
-이 두 파일만 바꿉니다. 타입은 ② 표시 규칙의 목록에서 뽑아 쓰므로, 바꾼 뒤 `npm run typecheck` 가 고칠 곳을 알려 줍니다.
+이 파일들을 바꿉니다. 타입은 ② 표시 규칙의 목록에서 뽑아 쓰므로, 바꾼 뒤 `npm run typecheck` 가 고칠 곳을 알려 줍니다.
 
 - **`src/display/rules.ts`** — 위험등급(`RISK`), 분석·검토·탐지 상태(`ASTATUS`·`RSTATUS`·`FSTATUS`), 검토사항 종류(`RTYPE`), 연결 상태(`LSTATUS`), 규칙 ID 예시(`RULES`), 이력 구분(`HKIND`), 정보 종류(`CATS`), 정보 주체(`SUBJECTS`), 노출 상태(`EXPOSURES`), 오탐 사유(`FP_REASONS`), 내보내기 형식(`EXPORT_FORMATS`)의 키·라벨·아이콘·색 토큰.
 - **`src/services/types.ts`** — 분석 건(`Analysis`), 문서(`AnalysisDoc`), 탐지 항목(`Finding`), 검토사항(`ReviewItem`), 문서 간 연결(`DocLink`), 이력(`HistoryEntry`), 업로드 파일(`UploadFile`), 내보내기 파일(`ExportFile`)의 모양.
+- **`src/services/api/mapping.ts`** — 백엔드 응답(`AnalysisOut`)을 `Analysis` 로 바꾸는 순수 함수(`toAnalysis`). 지금은 상태·위험도·문서·시각만 옮기고 탐지 항목 등은 빈 목록이며, 결과 원래 값은 `Analysis.raw.result` 에 둡니다. Upstage 결과에서 탐지 항목·검토사항을 만들게 되면 여기를 고칩니다.
 
 ---
 
@@ -400,16 +485,16 @@ export function createService(): AnalysisService {
 - 위쪽 막대 `← 상태 목록 · n / 23 · 상태 이름 · 이전 · 다음` 으로 목록에 돌아가거나 이전·다음 상태로 옮겨 갑니다. 키보드로는 `[`(이전)·`]`(다음)을 누릅니다(입력칸에 글자를 쓰는 중에는 무시). 상태를 바꿀 때마다 데모 서비스를 그 상태로 다시 준비합니다.
 - **휴대폰 전용 상태 2개는 목록에 없고 주소로만 엽니다**: `/dev/states/detail-docs`(문서 탭), `/dev/states/detail-results`(탐지 결과 탭). 막대에 번호 대신 '휴대폰 전용'이 나오며, 휴대폰 폭(768px 미만)으로 봅니다.
 - 상태를 열 때마다 데모 데이터를 샘플로 되돌린 뒤 그 상태를 만듭니다. 같은 탭에서 실제 화면으로 넘어가면 그 데이터가 이어지므로, 처음 샘플로 돌아가려면 새로 고침합니다.
-- 실제 API로 바꾸면 `DemoControls` 가 없어 상태를 만들지 못합니다(데모 서비스 전용).
+- 실제 분석 모드에서는 `DemoControls` 가 없어 상태를 만들지 못합니다(데모 서비스 전용).
 
 ---
 
 ## 이번 단계에서 하지 않은 것
 
-- **실제 업로드·분석·저장·로그인·백엔드 연결.** 필요한 곳은 데모 서비스가 가짜로 응답하고, 업로드·분석 진행은 `CONFIG.sim` 의 지연 시간으로 흉내 냅니다. 담당자(`CONFIG.user`)는 로그인 전 단계의 데모 값입니다. 내보내기 파일만 브라우저 다운로드(Blob)로 저장합니다.
-- **실제 PDF 뷰어.** 원문은 프로토타입처럼 샘플 문서 화면(블록으로 그린 가상 문서)입니다.
+- **로그인, 실제 분석 결과의 검토.** 실제 분석 모드는 업로드·분석·진행 상태·결과 JSON 보기까지입니다. 탐지 항목·검토사항·문서 간 연결·검토 기록·보고서·내보내기는 데모 서비스에만 있고(업로드·분석 진행은 `CONFIG.sim` 의 지연 시간으로 흉내 냄), Upstage 결과를 이 화면 모양으로 바꾸는 일은 다음 단계입니다. 담당자(`CONFIG.user`)는 로그인 전 단계의 데모 값입니다. 내보내기 파일은 브라우저 다운로드(Blob)로 저장합니다.
+- **실제 PDF 뷰어·마스킹.** 데모의 원문은 프로토타입처럼 샘플 문서 화면(블록으로 그린 가상 문서)이고, 실제 분석 모드에는 원문 보기가 없습니다.
 - **규칙 ID(`PII-ID-001` 등)와 위험 판정은 디자인용 예시입니다.** 실제 기준처럼 늘리지 않습니다.
-- **`next.config.ts` 의 `cacheComponents`·`partialPrefetching` 은 껐습니다.** 데이터가 모두 브라우저의 데모 서비스라 이득이 없기 때문입니다. 실제 API 단계에서 서버에서 데이터를 가져오게 되면 다시 검토합니다.
+- **`next.config.ts` 의 `cacheComponents`·`partialPrefetching` 은 껐습니다.** 데이터를 모두 브라우저에서 가져오기 때문입니다(데모 서비스, 또는 실제 분석 모드에서 브라우저가 부르는 `/api/py`). 서버 컴포넌트에서 데이터를 가져오게 되면 다시 검토합니다.
 
 ---
 

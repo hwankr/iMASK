@@ -1,18 +1,25 @@
 /* ==========================================================================
-   실제 API로 바꿀 때 이 함수만 바꾼다(FastAPI 백엔드 클라이언트를 같은 인터페이스로 구현).
-   - createService(): 화면이 쓰는 데이터 서비스를 만든다. 지금은 데모 서비스(메모리 상태)다.
+   서비스 고르기 — 화면이 쓰는 데이터 서비스를 모드에 따라 만든다(src/services/mode.ts).
+   - createService(): NEXT_PUBLIC_IMASK_SERVICE=api 면 실제 분석 서비스(FastAPI 백엔드 + Upstage 워크플로우),
+     그 밖(기본)은 데모 서비스(브라우저 메모리의 샘플 데이터).
    - getDemoControls(): 데모 서비스일 때만 데모 전용 조작(샘플 다시 불러오기 · /dev/states)을 준다.
-     실제 API 클라이언트에서는 null 이 되어 데모 버튼 · 개발용 화면이 저절로 빠진다.
+     실제 분석 서비스에서는 null 이 되어 데모 버튼 · 개발용 화면이 저절로 빠진다.
+   - 실제 분석 화면이 쓰는 접근 코드 저장 함수와 오류 판별도 여기서 다시 내보낸다
+     (화면은 데이터를 서비스 인터페이스로만 다루고, 이 둘만 예외로 가져다 쓴다).
    ========================================================================== */
 
 import type { AnalysisService, DemoControls } from './analysis-service';
+import { createApiService } from './api';
 import { createDemoService, isDemoService } from './demo';
+import { SERVICE_MODE } from './mode';
 
 export type { AnalysisService, DemoControls } from './analysis-service';
+export { SERVICE_MODE, type ServiceMode } from './mode';
+export { readAccessCode, saveAccessCode, clearAccessCode, subscribeAccessCode, apiErrorAnalysisId, apiErrorCode, type ApiErrorCode } from './api';
 
-/** 데이터 서비스를 만든다. 실제 API 단계에서는 여기서 API 클라이언트를 돌려준다. */
+/** 데이터 서비스를 만든다 — 모드에 따라 실제 분석 서비스 또는 데모 서비스 */
 export function createService(): AnalysisService {
-  return createDemoService();
+  return SERVICE_MODE === 'api' ? createApiService() : createDemoService();
 }
 
 /** 데모 서비스일 때만 데모 조작 객체를 돌려준다(그 밖에는 null). */

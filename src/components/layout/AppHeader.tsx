@@ -6,6 +6,7 @@ import { Suspense } from 'react';
 import { listHomeHref, listNavHref, reviewNeededHref, useRememberedListQuery } from '@/components/list/listReturn';
 import { cx } from '@/components/ui/cx';
 import { Icon } from '@/components/ui/Icon';
+import { SERVICE_MODE } from '@/services/mode';
 import { DemoBadge } from './DemoBadge';
 import styles from './AppHeader.module.css';
 
@@ -23,6 +24,9 @@ export interface AppHeaderProps {
 }
 
 type NavKey = 'analyses' | 'review';
+
+/** 실제 분석 모드(NEXT_PUBLIC_IMASK_SERVICE=api)의 헤더 표시 — 데모 모드는 DemoBadge 기본값('데모 데이터') */
+const LIVE_BADGE = { label: '실제 분석', title: 'Upstage 워크플로우로 실제 분석합니다. 합성 자료만 올려 주세요.' } as const;
 
 /** 주 메뉴 활성 — `/` 이고 `review=needed` 면 '검토 필요', 그 밖에는 '문서 분석' */
 export function activeNav(pathname: string | null, review: string | null): NavKey {
@@ -68,7 +72,7 @@ function NavFallback({ count }: { count: number | null }) {
 
 /**
  * 헤더 — Main 98–112. 로고 버튼(첫 화면), 브랜드 글자(폭 480 이상), 주 메뉴(문서 분석 · 검토 필요 + 건수),
- * 오른쪽 데모 표시와 사용자 칩(폭 960 이상: 첫 글자 동그라미 · 이름 · 팀).
+ * 오른쪽 데모 표시(실제 분석 모드면 '실제 분석')와 사용자 칩(폭 960 이상: 첫 글자 동그라미 · 이름 · 팀).
  * 선택 밑줄은 scaleX 로 움직인다(.32s).
  */
 export function AppHeader({ brandName, user, reviewNeededCount }: AppHeaderProps) {
@@ -87,7 +91,7 @@ export function AppHeader({ brandName, user, reviewNeededCount }: AppHeaderProps
         </Suspense>
       </nav>
       <div className={styles.right}>
-        <DemoBadge />
+        {SERVICE_MODE === 'api' ? <DemoBadge label={LIVE_BADGE.label} title={LIVE_BADGE.title} /> : <DemoBadge />}
         <div className={styles.user}>
           <span aria-hidden="true" className={styles.avatar}>
             {user.name.slice(0, 1)}

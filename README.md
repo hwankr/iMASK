@@ -143,24 +143,28 @@ DB 구조를 바꿀 때는 **항상 `supabase/migrations/` 에 SQL 파일을 남
 | 파일 | 내용 |
 |---|---|
 | `20261102003443_init_analyses_documents.sql` | `analyses`(분석 건)·`documents`(문서) 테이블, `documents` 비공개 버킷(파일당 20MB, PDF·PNG·JPG) |
+| `20261102024252_grant_service_role_tables.sql` | `service_role`(서버 비밀 키)에 두 테이블의 읽기·쓰기 권한(select·insert·update·delete)과 `public` 스키마 사용 권한을 명시. `imask` 에는 이미 같은 권한이 있어 적용해도 바뀐 것은 없음 |
 
 - **이미 적용한 파일은 고치지 않습니다.** 바꿀 것이 있으면 새 파일을 추가합니다.
 - **두 테이블 모두 RLS를 켜고 정책은 두지 않았습니다.** 브라우저는 DB에 직접 접근하지 않고, FastAPI가 비밀 키로만 읽고 씁니다. 파일은 FastAPI가 만든 서명된 업로드 주소(2시간 유효)로 브라우저가 버킷에 바로 올립니다. Vercel 함수가 받는 요청은 4.5MB까지라 파일을 서버로 보내지 않기 때문입니다.
-- **`analyses.status` 값은 화면 표기와 같습니다**: `queued`·`running`·`done`·`partial`·`failed`.
+- **새 테이블을 만드는 마이그레이션에는 `service_role` 용 GRANT를 직접 적습니다.** `service_role` 은 RLS를 건너뛰지만, 테이블 권한(GRANT)은 따로 있어야 합니다. 2026-11-02에 확인했을 때 `imask` 에는 예전 기본 권한이 남아 있어, 새 `public` 테이블에 API 역할 권한이 자동으로 붙습니다. 하지만 Supabase가 이 자동 권한을 없애는 중이라 새 환경에서는 붙지 않을 수 있습니다([공식 공지](https://supabase.com/changelog/45329-breaking-change-tables-not-exposed-to-data-and-graphql-api-automatically)). 적는 방법은 `20261102024252_grant_service_role_tables.sql` 을 따릅니다. 브라우저용 역할(`anon`·`authenticated`)은 DB에 직접 접근하지 않으므로, 지금 설계에서는 정책이나 권한을 더하지 않습니다.
+- **`analyses.status` 값은 화면 코드의 상태 키(`src/display/rules.ts` 의 `ASTATUS`)와 같습니다**: `queued`·`running`·`done`·`partial`·`failed`. DB에는 이 키를 저장하고, 화면에는 키에 붙은 한국어 라벨(대기·분석 중·완료·일부 실패·실패)이 보입니다.
 - `analyses.result` 에는 Upstage 원본 결과를 그대로 둡니다. 분석 출력 형식이 확정되면 탐지 항목·검토 기록 테이블을 새 마이그레이션으로 추가합니다.
 
 ```bash
+npx supabase login                                     # 처음 한 번. Supabase 계정 로그인(DB 비밀번호와 별개)
 npx supabase link --project-ref wanmwoohjkdutzsrdwnf   # 처음 한 번. DB 비밀번호를 묻는다
 npx supabase migration list                            # Local·Remote 양쪽에 같은 번호가 보이면 정상
 
 # 구조를 바꿀 때
-npx supabase migration new add_findings                # supabase/migrations/<번호>_add_findings.sql 생성
+npx supabase migration new add_findings                # 빈 파일 supabase/migrations/<번호>_add_findings.sql 생성. SQL을 쓰고 검토한 뒤 db push
 npx supabase db push                                   # 아직 적용 안 된 파일을 DB에 적용
 ```
 
-- DB 비밀번호는 프로젝트를 만들 때 자동으로 정해졌습니다. 모르면 Supabase 대시보드 > Project Settings > Database 에서 재설정합니다.
+- **Supabase 커넥터(MCP `apply_migration`)로 적용했다면 DB에 기록된 번호로 파일 이름을 만듭니다.** 커넥터로 적용하면 번호가 적용한 시각(UTC)으로 정해집니다. 그러니 적용한 뒤 `npx supabase migration list` 나 DB의 `supabase_migrations.schema_migrations` 에서 기록된 번호를 확인하고, 그 번호로 파일 이름을 만듭니다. CLI `db push` 로 적용할 때는 파일 이름의 번호가 그대로 기록됩니다.
+- DB 비밀번호를 모르면 Supabase 대시보드의 Database > Settings 에서 재설정합니다([공식 안내](https://supabase.com/kb/troubleshooting/how-do-i-reset-my-supabase-database-password-oTs5sB)).
 - 필요한 환경변수 이름은 `.env.example` 에 있습니다. Supabase 비밀 키(`SUPABASE_SECRET_KEY`)와 Upstage 키는 서버 전용이라 `NEXT_PUBLIC_` 을 붙이지 않습니다.
-- `supabase/config.toml` 은 `supabase init` 이 만든 로컬 개발용 설정입니다. 원격 DB에는 영향이 없습니다.
+- `supabase/config.toml` 은 `supabase init` 이 만든 로컬 개발용 설정입니다. 이 파일을 커밋하거나 앱을 배포하는 것만으로는 원격 프로젝트 설정이 바뀌지 않습니다. 다만 `npx supabase config push` 는 이 파일의 설정을 연결된 원격 프로젝트에 올리므로, 따로 검토한 뒤에만 씁니다.
 
 ---
 

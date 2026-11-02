@@ -84,6 +84,9 @@ MSG_RESULT_FETCH_FAILED = "Upstage 결과를 받지 못했습니다: {reason}"
 MSG_POLL_NO_STATUS = "Upstage 응답에 상태가 없습니다."
 MSG_SAVE_FAILED = "분석 상태를 저장하지 못했습니다. 다음 조회에서 다시 시도합니다."
 MSG_JOB_NOT_FOUND = "Upstage 작업을 찾을 수 없습니다. 새 분석으로 다시 올려 주세요."
+# 조건부 갱신에 져서(다른 요청이 먼저 저장) 최신 행을 다시 읽어야 하는데 그것도 실패했을 때
+MSG_REREAD_FAILED = "분석 상태를 다시 읽지 못했습니다. 다음 조회에서 다시 확인합니다."
+MSG_START_REREAD_FAILED = "분석 시작 결과를 확인하지 못했습니다. 잠시 후 분석 건을 다시 조회해 주세요."
 
 
 class ApiError(Exception):
@@ -210,12 +213,21 @@ def _load(store: Store, analysis_id: str) -> dict[str, Any]:
     return row
 
 
-def _reread(store: Store, analysis_id: str, fallback: Mapping[str, Any]) -> dict[str, Any]:
-    """갱신 뒤 다시 읽는다. 읽지 못하면 아는 값으로 합친 행(갱신은 이미 끝났으므로)."""
+def _read_latest(store: Store, analysis_id: str) -> dict[str, Any] | None:
+    """최신 행. 읽지 못했거나 없으면 None."""
     try:
-        row = store.get_analysis(analysis_id)
+        return store.get_analysis(analysis_id)
     except StoreError:
-        row = None
+        return None
+
+
+def _reread(store: Store, analysis_id: str, fallback: Mapping[str, Any]) -> dict[str, Any]:
+    """**갱신에 이긴 뒤** 다시 읽는다. 읽지 못하면 저장에 성공한 값으로 만든 대체 행(갱신은 이미 끝났으므로).
+
+    조건부 갱신에 **진** 경우에는 쓰지 않는다 — 반영하지 못한 값을 확정된 것처럼 내보내지 않게
+    _read_latest 로 승자의 행을 읽고, 그것도 실패하면 조회는 poll_error, 시작은 502 로 다시 확인하게 한다.
+    """
+    row = _read_latest(store, analysis_id)
     return row if row is not None else dict(fallback)
 
 
@@ -449,13 +461,23 @@ def start_analysis(
             recorded = store.update_analysis(analysis_id, {"status": FAILED, "error": error}, expect_status=RUNNING)
         except StoreError:
             raise ApiError(502, MSG_START_RECORD_FAILED) from None
-        fallback = {**base, **(recorded or {"status": FAILED, "error": error})}
+        if recorded is None:  # 실패 기록에 짐 — 다른 요청(만료 처리)이 먼저 행을 바꿨다
+            return _latest_or_502(store, analysis_id)
+        fallback = {**base, **recorded}
     elif progress.job_row is not None:
         fallback = {**base, **progress.job_row}  # running + upstage_job_id
-    else:  # progress.lost_race — job id 저장 전에 만료 처리가 이 분석을 실패로 바꿨다
-        fallback = {**base, "status": FAILED, "error": MSG_START_STALE}
+    else:  # progress.lost_race — job id 저장 전에 만료 처리가 이 분석을 바꿨다
+        return _latest_or_502(store, analysis_id)
     fallback["documents"] = base["documents"]
     return _reread(store, analysis_id, fallback)
+
+
+def _latest_or_502(store: Store, analysis_id: str) -> dict[str, Any]:
+    """조건부 갱신에 진 시작: 승자가 저장한 최신 행. 다시 읽지 못하면 상태를 지어내지 않고 502."""
+    latest = _read_latest(store, analysis_id)
+    if latest is None:
+        raise ApiError(502, MSG_START_REREAD_FAILED)
+    return latest
 
 
 # --- 3. 조회 -----------------------------------------------------------------------
@@ -503,8 +525,15 @@ def _finish(
         return PollResult(row, shown_status, MSG_SAVE_FAILED)  # 파일은 두고 다음 조회에서 다시 처리한다
     # 반영했든(바뀐 행 1) 다른 조회가 먼저 했든(0) 작업은 끝났다 — 파일을 지운다(두 번째 삭제의 404 는 성공)
     _delete_upstage_files(client, _file_ids(row.get("documents") or []), secrets)
-    # 다시 읽기가 실패하면: 갱신 응답(있으면) 또는 반영하려던 값으로 — 문서 행(file id)은 처음 읽은 것 그대로
-    fallback = {**row, **(updated if updated is not None else values), "documents": row.get("documents") or []}
+    if updated is None:
+        # 조건부 갱신에 짐 — 다른 조회가 먼저 저장했다(그쪽이 본 Upstage 상태가 다를 수 있음).
+        # 반영하지 못한 values 를 확정된 것처럼 내보내지 않는다: 승자의 행, 읽지 못하면 조회 전 running 행 + poll_error.
+        latest = _read_latest(store, analysis_id)
+        if latest is None:
+            return PollResult(row, shown_status, MSG_REREAD_FAILED)
+        return PollResult(latest, shown_status)
+    # 이김: 다시 읽기가 실패하면 갱신 응답 행 + 처음 읽은 문서 행(file id)으로
+    fallback = {**row, **updated, "documents": row.get("documents") or []}
     return PollResult(_reread(store, analysis_id, fallback), shown_status)
 
 
@@ -528,7 +557,11 @@ def _fail_stale_start(
     if saved is None:
         # 그 사이 다른 요청이 행을 바꿨다(예: 시작 요청이 job id 저장에 성공 → 작업이 돌고 있음).
         # 최신 행을 돌려주고 파일은 건드리지 않는다 — 실행 중인 작업의 입력을 지우지 않게.
-        return PollResult(_reread(store, analysis_id, row))
+        # 다시 읽지 못하면 조회 전 running 행 + poll_error(다음 조회에서 다시 확인).
+        latest = _read_latest(store, analysis_id)
+        if latest is None:
+            return PollResult(row, poll_error=MSG_REREAD_FAILED)
+        return PollResult(latest)
     latest = _reread(store, analysis_id, {**row, **saved})
     # 실제로 failed 로 바꾼 경우에만: 시작 요청이 파일만 올리고 멈췄을 수 있다
     file_ids = _file_ids([*(row.get("documents") or []), *(latest.get("documents") or [])])

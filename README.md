@@ -128,7 +128,39 @@ src/
 ├─ lib/                     형식 도우미(format.ts), 브라우저 다운로드(download.ts), 공통 훅(hooks/)
 └─ dev/                     /dev/states 상태 정의(states.ts)와 미리보기
 scripts/check-tokens.mjs    토큰 규칙 검사기(같은 폴더에 검사기·ESLint 경계 테스트)
+supabase/                   DB 변경 기록 — migrations/에 적용한 SQL을 순서대로 둔다(아래 'DB 변경 기록' 참고)
+.env.example                필요한 환경변수 이름(값은 로컬 .env와 Vercel에만)
 ```
+
+---
+
+## DB 변경 기록 (Supabase)
+
+실제 API 단계에서 쓸 DB는 Supabase 프로젝트 `imask`(서울, `ap-northeast-2`)입니다. 아직 화면은 데모 서비스만 쓰고 이 DB를 부르지 않습니다.
+
+DB 구조를 바꿀 때는 **항상 `supabase/migrations/` 에 SQL 파일을 남기고 커밋합니다.** 파일 이름 앞의 번호(`YYYYMMDDHHMMSS`)가 DB에 기록된 번호와 같아야 Supabase CLI가 이미 적용된 파일로 알아봅니다.
+
+| 파일 | 내용 |
+|---|---|
+| `20261102003443_init_analyses_documents.sql` | `analyses`(분석 건)·`documents`(문서) 테이블, `documents` 비공개 버킷(파일당 20MB, PDF·PNG·JPG) |
+
+- **이미 적용한 파일은 고치지 않습니다.** 바꿀 것이 있으면 새 파일을 추가합니다.
+- **두 테이블 모두 RLS를 켜고 정책은 두지 않았습니다.** 브라우저는 DB에 직접 접근하지 않고, FastAPI가 비밀 키로만 읽고 씁니다. 파일은 FastAPI가 만든 서명된 업로드 주소(2시간 유효)로 브라우저가 버킷에 바로 올립니다. Vercel 함수가 받는 요청은 4.5MB까지라 파일을 서버로 보내지 않기 때문입니다.
+- **`analyses.status` 값은 화면 표기와 같습니다**: `queued`·`running`·`done`·`partial`·`failed`.
+- `analyses.result` 에는 Upstage 원본 결과를 그대로 둡니다. 분석 출력 형식이 확정되면 탐지 항목·검토 기록 테이블을 새 마이그레이션으로 추가합니다.
+
+```bash
+npx supabase link --project-ref wanmwoohjkdutzsrdwnf   # 처음 한 번. DB 비밀번호를 묻는다
+npx supabase migration list                            # Local·Remote 양쪽에 같은 번호가 보이면 정상
+
+# 구조를 바꿀 때
+npx supabase migration new add_findings                # supabase/migrations/<번호>_add_findings.sql 생성
+npx supabase db push                                   # 아직 적용 안 된 파일을 DB에 적용
+```
+
+- DB 비밀번호는 프로젝트를 만들 때 자동으로 정해졌습니다. 모르면 Supabase 대시보드 > Project Settings > Database 에서 재설정합니다.
+- 필요한 환경변수 이름은 `.env.example` 에 있습니다. Supabase 비밀 키(`SUPABASE_SECRET_KEY`)와 Upstage 키는 서버 전용이라 `NEXT_PUBLIC_` 을 붙이지 않습니다.
+- `supabase/config.toml` 은 `supabase init` 이 만든 로컬 개발용 설정입니다. 원격 DB에는 영향이 없습니다.
 
 ---
 

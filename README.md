@@ -49,6 +49,7 @@
 
 - **Node.js 22.12 이상**(24 LTS 권장). Next.js 16.4는 Node 20.9 이상이면 되지만, 테스트 도구 Vitest 5가 `^22.12.0 || ^24.0.0 || >=26.0.0` 을 요구합니다. 이 저장소는 Node 24.19, npm 11.17로 만들었습니다.
 - npm(저장소에 `package-lock.json` 이 있습니다).
+- **FastAPI 백엔드(`api/`)를 돌릴 때만**: [uv](https://docs.astral.sh/uv/)와 Python 3.12(`.python-version`). Python 이 없으면 uv 가 내려받아 `.venv` 를 만듭니다([아래](#fastapi-백엔드-api) 참고).
 - 네트워크: 개발 서버와 빌드가 고정폭 글꼴 IBM Plex Mono를 Google Fonts에서 받습니다(`next/font/google`). Pretendard는 npm 패키지에서 읽습니다.
 
 ### 설치와 개발 서버
@@ -93,6 +94,7 @@ npm run start        # next start — 빌드한 뒤에 실행, 기본 포트 300
 | `npm run lint` | `eslint` — Next 권장 규칙(core-web-vitals·typescript)과 샘플 데이터 import 금지 규칙(`eslint.config.mjs`) |
 | `npm run check:tokens` | `node scripts/check-tokens.mjs` — 색·크기 값이 토큰으로만 쓰였는지 검사([디자인 규칙](#디자인-규칙) 참고). 위반이 있으면 파일:줄과 이유를 출력합니다. |
 | `npm test` | `vitest run --passWithNoTests` — `src/**/*.test.{ts,tsx}` 와 `scripts/**/*.test.mjs` 단위 테스트(Node 환경) |
+| `.venv\Scripts\python.exe -m pytest -q` | FastAPI 백엔드·Upstage 코드의 Python 테스트(`tests/`, 네트워크 없음). macOS·Linux 는 `.venv/bin/python -m pytest -q`. `npm run check` 에는 들어 있지 않습니다. |
 
 ---
 
@@ -128,15 +130,150 @@ src/
 ├─ lib/                     형식 도우미(format.ts), 브라우저 다운로드(download.ts), 공통 훅(hooks/)
 └─ dev/                     /dev/states 상태 정의(states.ts)와 미리보기
 scripts/check-tokens.mjs    토큰 규칙 검사기(같은 폴더에 검사기·ESLint 경계 테스트)
+scripts/upstage_smoke.py    Upstage 워크플로우 직접 호출 확인 · scripts/api_e2e.py 백엔드 끝까지 확인
+api/index.py                FastAPI 백엔드 진입점(Vercel Python 함수) — 아래 'FastAPI 백엔드' 참고
+imask_backend/              백엔드 Python 코드(설정·Supabase·Upstage·결과 파싱·업무 로직)
+tests/                      백엔드 Python 테스트(pytest)
+vercel.json                 Vercel 설정(프레임워크 nextjs 고정, 지역 icn1, Python 함수 maxDuration·묶음 제외)
 supabase/                   DB 변경 기록 — migrations/에 적용한 SQL을 순서대로 둔다(아래 'DB 변경 기록' 참고)
 .env.example                필요한 환경변수 이름(값은 로컬 .env와 Vercel에만)
 ```
 
 ---
 
+## FastAPI 백엔드 (`api/`)
+
+브라우저가 서류 묶음을 올리고 Upstage Studio 워크플로우로 분석하게 하는 서버입니다. Vercel 공식 [nextjs-fastapi 템플릿](https://github.com/digitros/nextjs-fastapi)처럼 **Next.js 와 같은 Vercel 프로젝트**에 Python 함수로 배포하고(지역 `icn1` 서울), 로컬에서는 uvicorn 으로 띄워 Next 개발 서버가 요청을 넘겨 줍니다. 화면은 아직 이 백엔드를 부르지 않습니다(다음 단계).
+
+### 구조
+
+| 위치 | 내용 |
+|---|---|
+| `api/index.py` | FastAPI 앱 진입점. 경로·의존성·접근 코드 검사·오류 모양만 다룹니다. Vercel 은 `api/` 의 `.py` 파일마다 함수를 만들므로 이 폴더에는 이 파일 하나만 둡니다 |
+| `imask_backend/settings.py` | 환경변수. 요청 때 읽어서, 값이 빠져도 import 는 실패하지 않고 필요한 순간에 500 으로 이름만 알립니다 |
+| `imask_backend/files.py` | 파일 이름·형식·크기 검사, Storage 용 안전한 이름, 내용 첫 바이트 검사 |
+| `imask_backend/store.py` | Supabase 테이블·Storage 접근(`supabase==2.33.0`, `create_client(SUPABASE_URL, SUPABASE_SECRET_KEY)`)과 조건부 갱신 |
+| `imask_backend/analyses.py` | 만들기·시작·조회 업무 로직(FastAPI 와 무관) |
+| `imask_backend/upstage.py` · `results.py` · `redaction.py` · `config.py` | Upstage Agent API 클라이언트, 응답 파싱·요약, 비밀값 가림, Upstage 설정 |
+| `tests/` | pytest. 네트워크를 쓰지 않습니다(저장소는 메모리 가짜, Upstage 는 `httpx.MockTransport`) |
+| `scripts/upstage_smoke.py` | Upstage 워크플로우를 직접 한 번 돌려 응답 모양을 확인합니다 |
+| `scripts/api_e2e.py` | 로컬·배포 백엔드를 브라우저처럼 끝까지(만들기 → 올리기 → 시작 → 조회) 돌려 봅니다 |
+
+### 환경변수
+
+이름과 설명은 `.env.example` 에 있습니다. 값은 로컬 `.env`(커밋 안 됨)와 Vercel 프로젝트 환경변수에만 넣습니다. 백엔드는 `.env` 를 직접 읽지 않고 환경변수로 받습니다(로컬은 `uvicorn --env-file .env`).
+
+| 이름 | 쓰는 곳 |
+|---|---|
+| `SUPABASE_URL`, `SUPABASE_SECRET_KEY` | DB·Storage. 새 형식 서버 비밀 키(`sb_secret_…`)가 supabase-py 2.33 에서 그대로 동작합니다 |
+| `UPSTAGE_API_KEY`, `UPSTAGE_AGENT_ID`, `UPSTAGE_CONFIG_ID` | Upstage 작업. `UPSTAGE_CONFIG_ID` 가 비면 작업을 만들지 않습니다(빼면 Studio 최신 설정이 돌아 결과가 바뀜) |
+| `DEMO_ACCESS_CODE` | 공개 주소 보호용 접근 코드. 비면 분석 경로가 모두 500 입니다 |
+| `UPSTAGE_BASE_URL`(선택) | 기본 `https://api.upstage.ai/v2` |
+| `IMASK_API_DEV_URL`(선택, Next 개발 서버만) | `next dev` 가 `/api/py/*` 를 넘길 주소. 기본 `http://127.0.0.1:8000` |
+
+`GET /api/py/health` 의 `configured` 로 값이 들어 있는지(값 없이 참·거짓만) 확인할 수 있습니다.
+
+### 로컬 실행
+
+```bash
+# 처음 한 번 — 저장소 루트에서. uv 가 .python-version(3.12)을 보고 .venv 를 만든다
+uv venv
+uv pip install -r requirements-dev.txt     # 실행용 requirements.txt + uvicorn·pytest
+
+# 백엔드(포트 8000)
+.venv\Scripts\python.exe -m uvicorn api.index:app --port 8000 --env-file .env    # Windows
+.venv/bin/python -m uvicorn api.index:app --port 8000 --env-file .env            # macOS·Linux
+
+# 다른 터미널에서 화면(포트 3000)
+npm run dev
+```
+
+`npm run dev` 와 함께 띄우면 `http://localhost:3000/api/py/*` 가 `next.config.ts` 의 rewrites 로 uvicorn 에 연결됩니다(배포에서는 같은 프로젝트의 Python 함수 `/api/` 로 갑니다). 브라우저는 늘 같은 출처의 `/api/py/...` 만 부르므로 CORS 설정이 없습니다. 개발용 API 문서는 `http://127.0.0.1:8000/api/py/docs` 에 있습니다.
+
+끝까지 확인하기(정상 경로는 Upstage 를 실제로 1번 돌립니다 — 크레딧 사용, 합성 묶음만):
+
+```bash
+.venv\Scripts\python.exe scripts\api_e2e.py                                           # 정상 경로(기본 testdocs/iMASK_smoke_bundle.pdf, 기대 done)
+.venv\Scripts\python.exe scripts\api_e2e.py --skip-upload --expect failed             # 올리지 않고 시작 → 실패 경로
+.venv\Scripts\python.exe scripts\api_e2e.py --content-file <가짜 내용> --expect failed  # 형식 불일치 → 실패 경로
+.venv\Scripts\python.exe scripts\api_e2e.py --file <파일> --no-start                    # 만들기·올리기까지만
+.venv\Scripts\python.exe scripts\api_e2e.py --base-url https://<배포 주소>              # 배포 사이트 확인
+```
+
+접근 코드는 환경변수 `IMASK_DEMO_CODE`, 없으면 `.env` 의 `DEMO_ACCESS_CODE` 를 씁니다(출력하지 않음). 배포 사이트에 Vercel 보호가 켜져 있으면 `VERCEL_PROTECTION_BYPASS` 환경변수를 `x-vercel-protection-bypass` 헤더로 보냅니다. 종료 코드는 기대대로면 0(done 이면 서류 6·추출 5·위험도 상까지 맞아야 함), 아니면 1 입니다. 어떻게 끝나든(시간 초과·Ctrl+C·연결 오류 포함) 마지막에 이번 실행이 Upstage 에 남겼을 수 있는 파일을 `UPSTAGE_API_KEY` 로 지우고(404 = 이미 지움), 정리를 못 하면 종료 코드 1 입니다.
+
+### 경로
+
+모든 요청·응답은 JSON(UTF-8)이고, 오류 본문은 늘 `{"detail": "<짧은 한국어 문장>"}` 입니다.
+
+| 요청 | 하는 일 | 응답 |
+|---|---|---|
+| `GET /api/py/health` | 접근 코드 없이. 설정이 있는지만 | 200 `{"ok": true, "configured": {"supabase", "upstage", "access_code"}}` |
+| `POST /api/py/analyses` | 본문 `{"name"?, "filename", "size", "mime_type"}`. `analyses`(queued)·`documents` 행과 서명 업로드 URL 을 만든다 | 201 `{"analysis": 분석 건, "upload": {"bucket", "path", "token", "signed_url"}}` · 400 검사 실패 · 502 준비 실패(만든 행은 지움) |
+| `POST /api/py/analyses/{id}/start` | 올린 파일을 Upstage 에 넘겨 작업을 만든다(완료를 기다리지 않음) | 200 분석 건(`running`, 선점 뒤 실패면 `failed` + `error`) · 404 · 409 이미 시작함 · 502 실패 기록도 못 함 |
+| `GET /api/py/analyses/{id}` | 분석 건 조회. `running` 이면 Upstage 상태를 **한 번** 확인 | 200 분석 건 · 404 |
+
+- 검사(400): 형식은 `application/pdf`·`image/png`·`image/jpeg` 이고 확장자가 형식과 맞아야 합니다(pdf, png, jpg·jpeg). 크기는 1바이트~20MB(20,971,520) 정수, 파일 이름은 경로를 뗀 뒤 1~200자, 분석명은 앞뒤 공백을 지운 뒤 60자 이하입니다(비면 파일 이름). 본문이 JSON 이 아니거나 필드 타입이 틀리면 `요청 형식이 올바르지 않습니다.` 입니다(FastAPI 기본 422 대신 400).
+- **분석 건**(`AnalysisOut`): `id`, `name`, `status`, `upstage_job_id`, `error`, `result`(아래 형식에서 `response` 를 뺀 것 — Vercel 응답 4.5MB 제한 때문), `created_at`, `updated_at`(ISO 8601, 시간대 포함), `documents[]`(`id`, `filename`, `size_bytes`, `mime_type`, `upstage_file_id`, `created_at`), `upstage_status`·`poll_error`(GET 에서 이번 조회에 본 Upstage 상태와 확인 실패 문구. DB 에는 저장하지 않음). `agent_id`·`storage_path` 는 응답에 넣지 않습니다.
+- **Storage 경로**는 `analyses/{분석 id}/{안전한 이름}` 입니다. Supabase Storage 키는 일부 ASCII 만 받으므로(한글 이름은 'Invalid key') 원래 이름의 줄기에서 `[A-Za-z0-9._-]` 밖 글자 묶음을 `_` 로 바꾸고 앞뒤 `._-` 를 지운 뒤 80자까지, 비면 `document` 로 합니다. 확장자는 소문자입니다. 예: `대출 서류.pdf` → `document.pdf`, `김 2024 묶음.PDF` → `2024.pdf`. 원래 이름은 `documents.filename` 에 남습니다.
+- 브라우저는 `@supabase/supabase-js` 의 `storage.from(bucket).uploadToSignedUrl(path, token, file)` 로 올립니다. 공개 키로 충분합니다(서명 토큰이 권한).
+
+### 접근 코드
+
+`/api/py/analyses` 로 시작하는 모든 요청은 **본문 검사·404 판정보다 먼저** `X-Demo-Code` 헤더를 `DEMO_ACCESS_CODE` 와 `hmac.compare_digest` 로 비교합니다(미들웨어). 없거나 다르면 401 `접근 코드가 맞지 않습니다.`, 서버에 값이 없으면 500 `서버에 접근 코드가 설정되지 않았습니다.` 입니다. 로그인이 아니라 공개 주소를 아무나 쓰지 못하게 막는 장치입니다.
+
+### 상태 흐름
+
+```
+queued ──(start: 원자적 선점)──▶ running ──(GET 이 Upstage 완료를 봄)──▶ done
+   │                               ├──(Upstage 실패·취소·incomplete)──▶ failed
+   │                               ├──(job 404, job id 저장 뒤 2분 지남)─▶ failed
+   │                               └──(job id 없이 5분 지남)──────────▶ failed
+   └──(start 선점 뒤 실패: 파일 없음·형식 불일치·Upstage 시작 실패)──▶ failed
+```
+
+- **선점**: `update analyses set status='running' where id=? and status='queued'`. 바뀐 행이 없으면 409 입니다. 같은 분석을 두 번 시작해 Upstage 작업이 둘 생기지 않습니다.
+- **결과 반영**: `where status='running'` 조건부 갱신입니다. 두 조회가 같은 결과를 동시에 처리해도 한 번만 반영되고, 진 쪽은 다시 읽어 돌려줍니다.
+- Upstage 조회가 실패하면(연결·401·403·429·5xx·결과 받기 실패) 상태를 바꾸지 않고 `poll_error` 만 채웁니다. 다음 조회에서 다시 확인합니다(키 같은 설정을 고치면 이어서 진행).
+- 단 **404**(작업 없음)는 job id 를 저장한 뒤(`updated_at` 기준) **2분이 지났으면** 없어진 작업으로 보고 `failed`(`Upstage 작업을 찾을 수 없습니다. 새 분석으로 다시 올려 주세요.`)로 바꾸고 파일을 정리합니다. 2분 전이면 만든 직후의 일시적 404 로 보고 다시 시도합니다. `include[]=all` 받기의 404 도 같습니다.
+- job id 없이 5분 지난 `running` 을 `failed` 로 바꿀 때는 `upstage_job_id is null` 조건으로 갱신하고, 실제로 바꾼 경우에만 파일을 지웁니다(그 사이 시작 요청이 job id 저장에 성공했으면 실행 중인 작업이므로 건드리지 않음).
+- `partial` 은 DB·화면 상태 키로만 있고 백엔드는 아직 쓰지 않습니다(분석 1건 = 묶음 파일 1개 = Upstage 작업 1개).
+
+### Upstage 호출 순서
+
+1. 시작: Storage 에서 파일 받기 → 내용 검사(20MB 이하, 첫 바이트: PDF 는 앞 1024바이트 안 `%PDF-`, PNG `\x89PNG\r\n\x1a\n`, JPEG `\xff\xd8\xff`) → `POST /v2/files`(안전한 이름) → `documents.upstage_file_id` 저장 → `POST /v2/responses`(`model` = 에이전트 id, `config_id`, `include: ["all"]`) → `analyses.upstage_job_id`·`agent_id` 저장.
+2. 조회(화면이 3초마다 부름): `GET /v2/responses/{job}?include[]=last` 한 번. `completed` 면 `?include[]=all` 로 한 번 더 받아 `analyses.result` 에 저장합니다. 끝나면(완료·실패) `DELETE /v2/files/{id}` 로 Upstage 파일을 지웁니다(404 는 이미 지움). 지우기 실패는 결과를 바꾸지 않습니다(로그만).
+3. 바깥에서 온 문구(`analyses.error`·`poll_error`·`upstage_status`·로그)는 `imask_backend.redaction` 으로 서버 비밀값 전체(Upstage 키·에이전트 id·Supabase 비밀 키·접근 코드), 인증 문구, Supabase 서명 URL·`token=` 값·JWT 를 가린 **뒤에** 길이를 자릅니다. 정상 만들기 응답의 `upload.token`·`upload.signed_url` 은 브라우저 업로드에 필요하므로 그대로 줍니다.
+
+### `analyses.result` 형식
+
+```json
+{
+  "format": "imask-upstage-v1",
+  "job": { "id": "job_…", "status": "completed", "config_id": "3", "created_at": 1700000000, "usage": { "input_tokens": 0, "output_tokens": 0, "total_tokens": 0 } },
+  "summary": { "stage_names": [], "stage_counts": {}, "document_count": 6, "document_types": ["loan_application", "…"], "extracted_document_count": 5, "risk_level": "상", "final_stage": "권장_조치", "other_document_count": 1 },
+  "stages": [ { "name": "Instruct - 위험도_판정", "key": "위험도_판정", "step_type": "instruct", "status": "completed", "data": "…", "additional_values": {}, "contents": [] } ],
+  "response": { "…": "include[]=all 원본 응답(최상위 model 만 뺌)" }
+}
+```
+
+- `summary` 는 `imask_backend.results.summarize`, `stages` 는 `parse_stages` 결과입니다. 요약값을 못 읽으면(모양이 다름) 그 값이 `null` 일 뿐 분석은 `done` 입니다.
+- 서류 종류는 영문 분류 코드(`loan_application` 등) 그대로입니다. 한국어 이름은 화면이 붙입니다.
+- API 응답의 `result` 에는 `response` 가 없습니다. 합성 6쪽 묶음 기준으로 DB 의 `result` 는 약 560KB, API 응답 전체는 약 320KB 입니다.
+
+### 제한과 알아 둘 점
+
+- **Vercel 함수의 요청·응답 본문은 4.5MB 까지**입니다. 그래서 파일은 서버를 거치지 않고 서명 업로드 URL 로 Storage 에 바로 올리고, 응답에서는 원본(`response`)을 뺍니다. 쪽 수가 아주 많은 묶음은 `stages` 의 서류-인식 결과(단어 좌표)가 커져 응답이 4.5MB 에 가까워질 수 있습니다.
+- **`maxDuration` 60초**(`vercel.json`). 한 요청 안에서 분석 완료를 기다리지 않습니다. 시작은 작업만 만들고, **상태는 조회(GET)가 올 때만 나아갑니다.** 아무도 조회하지 않으면 Upstage 작업이 끝나도 DB 는 `running` 으로 남고 Upstage 파일도 지워지지 않습니다. 백그라운드 작업·워커는 쓰지 않습니다.
+- **실제 단계 이름이 Studio 노드 이름과 다릅니다**(`step_1_parse`, `Instruct - 위험도_판정` 등). 이름 문자열을 직접 비교하지 말고 `imask_backend.results.stage_key`·`stages_for` 를 씁니다.
+- `vercel.json` 에서 `"framework": "nextjs"` 로 고정합니다. 루트 `requirements.txt` 에 FastAPI 가 있으면 Vercel 이 Python 프레임워크 프리셋을 잡아 `api/` 파일 함수 대신 앱 전체를 Python 으로 돌리기 때문입니다([공식 문서](https://vercel.com/docs/functions/runtimes/python/api-directory)). Python 함수 묶음에서는 `excludeFiles` 로 `node_modules`·`src`·`tests` 등을 뺍니다.
+- 앞 단계가 Upstage 캐시를 쓰면 30초 안팎에 끝나지만, 처음 보는 파일은 1~3분 걸릴 수 있습니다.
+
+---
+
 ## DB 변경 기록 (Supabase)
 
-실제 API 단계에서 쓸 DB는 Supabase 프로젝트 `imask`(서울, `ap-northeast-2`)입니다. 아직 화면은 데모 서비스만 쓰고 이 DB를 부르지 않습니다.
+실제 API 단계에서 쓸 DB는 Supabase 프로젝트 `imask`(서울, `ap-northeast-2`)입니다. FastAPI 백엔드(`api/index.py`)가 서버 비밀 키로 이 DB와 `documents` 버킷을 읽고 씁니다([FastAPI 백엔드](#fastapi-백엔드-api) 참고). 화면은 아직 데모 서비스를 쓰고 백엔드를 부르지 않습니다.
 
 DB 구조를 바꿀 때는 **항상 `supabase/migrations/` 에 SQL 파일을 남기고 커밋합니다.** 파일 이름 앞의 번호(`YYYYMMDDHHMMSS`)가 DB에 기록된 번호와 같아야 Supabase CLI가 이미 적용된 파일로 알아봅니다.
 
@@ -149,7 +286,8 @@ DB 구조를 바꿀 때는 **항상 `supabase/migrations/` 에 SQL 파일을 남
 - **두 테이블 모두 RLS를 켜고 정책은 두지 않았습니다.** 브라우저는 DB에 직접 접근하지 않고, FastAPI가 비밀 키로만 읽고 씁니다. 파일은 FastAPI가 만든 서명된 업로드 주소(2시간 유효)로 브라우저가 버킷에 바로 올립니다. Vercel 함수가 받는 요청은 4.5MB까지라 파일을 서버로 보내지 않기 때문입니다.
 - **새 테이블을 만드는 마이그레이션에는 `service_role` 용 GRANT를 직접 적습니다.** `service_role` 은 RLS를 건너뛰지만, 테이블 권한(GRANT)은 따로 있어야 합니다. 2026-11-02에 확인했을 때 `imask` 에는 예전 기본 권한이 남아 있어, 새 `public` 테이블에 API 역할 권한이 자동으로 붙습니다. 하지만 Supabase가 이 자동 권한을 없애는 중이라 새 환경에서는 붙지 않을 수 있습니다([공식 공지](https://supabase.com/changelog/45329-breaking-change-tables-not-exposed-to-data-and-graphql-api-automatically)). 적는 방법은 `20261102024252_grant_service_role_tables.sql` 을 따릅니다. 브라우저용 역할(`anon`·`authenticated`)은 DB에 직접 접근하지 않으므로, 지금 설계에서는 정책이나 권한을 더하지 않습니다.
 - **`analyses.status` 값은 화면 코드의 상태 키(`src/display/rules.ts` 의 `ASTATUS`)와 같습니다**: `queued`·`running`·`done`·`partial`·`failed`. DB에는 이 키를 저장하고, 화면에는 키에 붙은 한국어 라벨(대기·분석 중·완료·일부 실패·실패)이 보입니다.
-- `analyses.result` 에는 Upstage 원본 결과를 그대로 둡니다. 분석 출력 형식이 확정되면 탐지 항목·검토 기록 테이블을 새 마이그레이션으로 추가합니다.
+- `analyses.result` 에는 분석이 끝났을 때 백엔드가 `imask-upstage-v1` 형식 JSON 을 저장합니다: 요약(`summary`), 단계별로 푼 결과(`stages`), Upstage 원본 응답(`response`, 최상위 `model` 만 뺌). 자세한 모양은 [`analyses.result` 형식](#analysesresult-형식)에 있습니다. 탐지 항목·검토 기록 테이블은 화면에서 쓸 모양이 정해지면 새 마이그레이션으로 추가합니다.
+- `analyses.agent_id`·`upstage_job_id` 와 `documents.upstage_file_id` 는 백엔드가 분석을 시작할 때 채웁니다. `documents.filename` 은 올린 원래 이름, `storage_path` 는 버킷 안 경로(`analyses/<분석 id>/<ASCII 로 바꾼 이름>`)입니다.
 
 ```bash
 npx supabase login                                     # 처음 한 번. Supabase 계정 로그인(DB 비밀번호와 별개)

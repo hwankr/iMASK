@@ -123,6 +123,8 @@ class UpstageClient:
     """Upstage Agent API 동기 클라이언트. with 문으로 쓰거나 close() 를 부른다.
 
     agent_id 를 주면(또는 create_job 을 한 번 부르면) 그 값도 오류 메시지에서 가린다.
+    extra_secrets(값 → 자리표시자)를 주면 그 값들도 가린다 — 서버는 Supabase 비밀 키·접근 코드까지
+    넘겨, 300자로 자르기 **전에** 모든 서버 비밀값이 가려지게 한다.
     """
 
     def __init__(
@@ -131,6 +133,7 @@ class UpstageClient:
         base_url: str = "https://api.upstage.ai/v2",
         *,
         agent_id: str | None = None,
+        extra_secrets: Mapping[str, str] | None = None,
         timeout: httpx.Timeout | float | None = DEFAULT_TIMEOUT,
         transport: httpx.BaseTransport | None = None,
     ):
@@ -138,6 +141,9 @@ class UpstageClient:
             raise ValueError("api_key 가 비었습니다")
         # 가릴 값 → 자리표시자. create_job 으로 보낸 에이전트 id 도 여기에 더한다.
         self._secrets: dict[str, str] = upstage_secrets(api_key, agent_id)
+        for value, placeholder in (extra_secrets or {}).items():
+            if isinstance(value, str) and value and isinstance(placeholder, str):
+                self._secrets.setdefault(value, placeholder)
         self._base_url = base_url.rstrip("/")
         self._client = httpx.Client(
             base_url=self._base_url,

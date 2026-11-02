@@ -22,6 +22,7 @@ from api_fakes import (
     FakeStore,
     FakeUpstageServer,
 )
+from fake_tokens import fake_jwt
 from fastapi.testclient import TestClient
 
 from api.index import app, get_store, get_upstage
@@ -36,7 +37,7 @@ JOB_GONE = "Upstage 작업을 찾을 수 없습니다. 새 분석으로 다시 �
 
 # 가짜 서명 정보(실제 값 아님)
 FAKE_TOKEN = "FAKE_SIGNED_" + "Q" * 64
-FAKE_JWT = "eyJhbGciOiJIUzI1NiJ9.eyJmYWtlIjoicHJvYmUifQ.ZmFrZS1zaWduYXR1cmUtdmFsdWU"
+FAKE_JWT = fake_jwt({"fake": "probe"}, signature=b"fake-signature-value")
 SIGNED_FORMS = {
     "absolute_url": f"cannot read https://p.supabase.co/storage/v1/object/upload/sign/documents/a.pdf?token={FAKE_TOKEN}",
     "relative_url": f"url=/object/upload/sign/documents/a.pdf?token={FAKE_TOKEN}&x=1",

@@ -5,7 +5,7 @@
 #    fail 에 메서드 이름을 넣으면 그 메서드가 StoreError 를 던진다. before_update 로 경쟁을 흉내 낸다.
 #  - FakeUpstageServer 는 httpx.MockTransport 처리기다. 진짜 UpstageClient 를 그대로 쓰게 해서
 #    요청 본문(config_id·include)까지 확인한다. 네트워크는 쓰지 않는다.
-#  값은 모두 지어낸 가짜다(FAKE_*).
+#  값은 모두 지어낸 가짜다(FAKE_*). JWT·Supabase 키 꼴 값은 fake_tokens 가 실행 중에 만든다.
 # ==========================================================================
 
 from __future__ import annotations
@@ -19,13 +19,14 @@ from typing import Any
 
 import httpx
 from fake_responses import build_response
+from fake_tokens import fake_jwt, fake_supabase_secret
 
 from imask_backend.store import StoreError
 
 FAKE_UPSTAGE_KEY = "up-test-FAKE-KEY-0123456789"
 FAKE_AGENT_ID = "agt-test-FAKE-AGENT-4242"
 FAKE_CONFIG_ID = "7"
-FAKE_SUPABASE_KEY = "sb_secret_FAKE-supabase-key-9876"
+FAKE_SUPABASE_KEY = fake_supabase_secret()  # Supabase 새 형식 비밀 키 꼴(실행 중에 만든다)
 FAKE_ACCESS_CODE = "demo-FAKE-code-5555"
 UPSTAGE_BASE = "https://api.upstage.ai/v2"
 
@@ -164,7 +165,7 @@ class FakeStore:
     def create_signed_upload_url(self, path: str) -> dict[str, str]:
         self._call("create_signed_upload_url")
         # 진짜처럼 JWT 꼴 토큰(가림 규칙에 걸리는 모양 — 정상 응답에서는 가리지 않아야 한다)
-        token = "eyJhbGciOiJIUzI1NiJ9.eyJmYWtlIjoi" + uuid.uuid4().hex + "In0.ZmFrZS1zaWduYXR1cmU"
+        token = fake_jwt({"fake": uuid.uuid4().hex})
         signed = {
             "signed_url": f"https://fake-project.supabase.co/storage/v1/object/upload/sign/documents/{path}?token={token}",
             "token": token,

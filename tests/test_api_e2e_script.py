@@ -15,6 +15,7 @@ from unittest.mock import patch
 import httpx
 import pytest
 from api_fakes import FAKE_ACCESS_CODE, FAKE_UPSTAGE_KEY, FakeUpstageServer
+from fake_tokens import fake_jwt
 from fastapi.testclient import TestClient
 
 from imask_backend.upstage import UpstageClient
@@ -252,9 +253,9 @@ def test_detail_of_non_json_response_is_redacted_before_truncation(script: Any, 
 
 
 def test_detail_of_json_response_is_redacted(script: Any) -> None:
-    jwt = "eyJhbGciOiJIUzI1NiJ9.eyJmYWtlIjoieCJ9.c2lnbmF0dXJlLWZha2U"
+    jwt = fake_jwt({"fake": "x"}, signature=b"signature-fake")
     detail = script._detail(httpx.Response(400, json={"detail": "x" * 190 + jwt}))
-    assert jwt[:10] not in detail
+    assert jwt[:9] not in detail  # 자르면 JWT 자리로 9자만 남는다 — 그 9자를 본다(JWT 규칙이 없으면 실패)
 
 
 # --- R2-M1: 시작 응답에 file id 가 없을 때(fix2) ---------------------------------------

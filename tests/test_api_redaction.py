@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from fake_tokens import fake_jwt
 
 from imask_backend.redaction import (
     JWT_PLACEHOLDER,
@@ -18,7 +19,7 @@ from imask_backend.redaction import (
 )
 
 TOKEN = "FAKE_SIGNED_" + "Q" * 40
-JWT = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJmYWtlIn0.ZmFrZS1zaWduYXR1cmU"
+JWT = fake_jwt({"sub": "fake"})  # 실행 중에 만든다(소스에 JWT 꼴 글자를 두지 않음)
 
 
 @pytest.mark.parametrize(
@@ -77,8 +78,8 @@ def test_redaction_happens_before_truncation() -> None:
     out = redact(text, limit=200)
     assert len(out) <= 200
     assert TOKEN[:8] not in out
-    jwt_text = "y" * 195 + JWT
-    assert JWT[:10] not in redact(jwt_text, limit=200)
+    jwt_text = "y" * 195 + JWT  # 자르면 JWT 자리로 4자만 남는다 — 그 4자를 본다(JWT 규칙이 없으면 실패)
+    assert JWT[:4] not in redact(jwt_text, limit=200)
 
 
 def test_redact_value_keeps_json_structure_with_token_fields() -> None:

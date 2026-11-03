@@ -36,6 +36,7 @@ from view_contract import assert_view
 from api.index import app, get_store, get_upstage
 from imask_backend import analyses as analyses_module
 from imask_backend import findings as findings_module
+from imask_backend import reviews as reviews_module
 from imask_backend import textsafe
 from imask_backend.analyses import MAX_STAGES_DEPTH, nesting_exceeds
 from imask_backend.results import parse_stages
@@ -489,13 +490,17 @@ def test_clean_unicode_response_keeps_the_normal_path(ctx: Ctx) -> None:
 
 
 def test_real_shaped_response_bytes_are_the_normal_serialization(ctx: Ctx) -> None:
-    # 정상 경로 그대로: 본문 = analysis_out 을 FastAPI 기본(ensure_ascii=False, separators) 로 직렬화한 바이트
+    # 정상 경로 그대로: 본문 = 조회 응답(analysis_out + 검토 블록)을 FastAPI 기본(ensure_ascii=False, separators) 로 직렬화한 바이트
     analysis_id = _done(ctx)
     row = ctx.store.get_analysis(analysis_id)
     assert row is not None
     for params, include in ((None, False), ({"include": "stages"}, True)):
         response = ctx.get(analysis_id, params=params)
-        expected = json.dumps(analyses_module.analysis_out(row, include_stages=include), ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+        out = reviews_module.analysis_read_out(ctx.store, row, include_stages=include)
+        assert out["review"] is not None and out["review"]["version"] == 0  # 검토 행 없는 완료 분석 → 기본 블록
+        # 검토 블록을 빼면 analysis_out 그대로(build_view 를 한 번만 계산해도 같은 값)
+        assert {**out, "review": None} == analyses_module.analysis_out(row, include_stages=include)
+        expected = json.dumps(out, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
         assert response.content == expected.encode("utf-8")
 
 

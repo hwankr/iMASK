@@ -7,6 +7,12 @@
 #    보내고 바뀐 행이 없으면 None. 같은 분석을 두 요청이 동시에 처리해도 한 번만 반영된다.
 #  - 오류는 StoreError 하나로 감싼다. 메시지는 redaction.redact 로 가린 짧은 문구(로그용)이고,
 #    화면에는 업무 로직이 정한 한국어 문장만 내보낸다.
+#  - 검토 행(analysis_reviews, 분석 1건당 1행 — imask_backend.reviews 가 쓴다). analyses 행은 건드리지 않는다.
+#    get_review: 행 하나(없으면 None). insert_review: upsert(on_conflict=analysis_id, ignore_duplicates) =
+#    `insert … on conflict (analysis_id) do nothing` — 이미 행이 있으면 빈 응답 → None(예외로 흐름을 가르지 않는다).
+#    update_review: `update … where analysis_id=? and version=?` — 바뀐 행이 없으면 None(다른 요청이 먼저 씀).
+#    검토 행 오류(_review_error)는 값 없이: 동작 이름 + 예외 종류 + 영숫자 오류 코드만(바깥 오류 원문·메모·분석 id 없음).
+#    분석·문서·파일 경로의 _error(가린 짧은 이유 포함)는 그대로다.
 #  - 서명 다운로드 URL(create_signed_download_url): storage3 2.33 의 create_signed_url(path, expires_in) 은
 #    {'signedURL', 'signedUrl'} 에 이미 절대 주소(Storage 기준 주소 + /object/sign/…?token=…)를 담아 준다.
 #    다른 버전·가짜가 상대 경로를 주면 Storage 기준 주소(client.storage_url)에 붙인다. 없는 객체는 None.
@@ -16,6 +22,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from collections.abc import Mapping
 from typing import Any, Protocol
@@ -28,7 +35,13 @@ logger = logging.getLogger("imask.store")
 # 응답에 쓰는 열만 고른다(agent_id·storage_path 는 DB 에만 — 업무 로직이 쓰므로 읽기는 한다)
 ANALYSIS_COLUMNS = "id,name,status,agent_id,upstage_job_id,result,error,created_at,updated_at"
 DOCUMENT_COLUMNS = "id,analysis_id,filename,storage_path,size_bytes,mime_type,upstage_file_id,created_at"
+REVIEW_TABLE = "analysis_reviews"
+REVIEW_COLUMNS = (
+    "analysis_id,status,memo,memo_at,reviewer,reviewed_at,completion_note,findings,history,version,created_at,updated_at"
+)
 MAX_ERROR_DETAIL = 300
+# 검토 행 오류 로그에 남겨도 되는 오류 코드(PostgREST PGRST205·Postgres SQLSTATE 23514 등 — 영숫자만, 16자까지)
+_ERROR_CODE = re.compile(r"[A-Za-z0-9]{1,16}")
 
 
 class StoreError(Exception):
@@ -83,6 +96,20 @@ class Store(Protocol):
         """버킷 객체의 서명 다운로드 URL(절대 주소, expires_in 초 유효). 객체가 없으면 None, 그 밖 실패는 StoreError."""
         ...
 
+    def get_review(self, analysis_id: str) -> dict[str, Any] | None:
+        """analysis_reviews 행(REVIEW_COLUMNS). 없으면 None."""
+        ...
+
+    def insert_review(self, values: Mapping[str, Any]) -> dict[str, Any] | None:
+        """insert … on conflict (analysis_id) do nothing → 만든 행. 이미 행이 있으면 None."""
+        ...
+
+    def update_review(
+        self, analysis_id: str, values: Mapping[str, Any], *, expect_version: int
+    ) -> dict[str, Any] | None:
+        """update … where analysis_id=? and version=expect_version → 바뀐 행. 바뀐 행이 없으면 None."""
+        ...
+
 
 def _first(data: Any) -> dict[str, Any] | None:
     if isinstance(data, list):
@@ -121,6 +148,20 @@ class SupabaseStore:
         """예외 종류와 짧은 이유만(가린 뒤). 원래 예외는 끊는다(요청 정보를 품을 수 있어서)."""
         detail = getattr(exc, "message", None) or str(exc)
         text = redact(f"{action}: {type(exc).__name__}: {detail}", self._secrets, limit=MAX_ERROR_DETAIL)
+        logger.warning("%s", text)
+        return StoreError(text)
+
+    @staticmethod
+    def _review_error(action: str, exc: BaseException) -> StoreError:
+        """검토 행 오류(BRIEF §5.3): 값 없이 — 고정 동작 이름 + 예외 종류 + 영숫자만인 짧은 오류 코드(있으면).
+
+        바깥 오류 원문(exc.message·str(exc) — PostgREST·Postgres 문구·요청 주소에는 메모·분석 id 가 섞일 수 있다)은
+        로그에도 StoreError 문구에도 넣지 않는다. api 의 StoreError 처리기도 이 문구만 본다. 원래 예외는 끊는다.
+        """
+        code = getattr(exc, "code", None)
+        text = f"{action}: {type(exc).__name__}"
+        if isinstance(code, str) and _ERROR_CODE.fullmatch(code):
+            text += f" ({code})"
         logger.warning("%s", text)
         return StoreError(text)
 
@@ -214,6 +255,43 @@ class SupabaseStore:
             self._table("documents").update(dict(values)).eq("id", document_id).execute()
         except Exception as exc:
             raise self._error("문서 갱신", exc) from None
+
+    # --- 검토 행(analysis_reviews) ---------------------------------------------
+
+    def get_review(self, analysis_id: str) -> dict[str, Any] | None:
+        try:
+            response = (
+                self._table(REVIEW_TABLE).select(REVIEW_COLUMNS).eq("analysis_id", analysis_id).limit(1).execute()
+            )
+        except Exception as exc:
+            raise self._review_error("검토 행 읽기", exc) from None
+        return _first(response.data)
+
+    def insert_review(self, values: Mapping[str, Any]) -> dict[str, Any] | None:
+        # Prefer: return=representation,resolution=ignore-duplicates + ?on_conflict=analysis_id
+        # = insert … on conflict (analysis_id) do nothing returning * — 충돌이면 빈 목록
+        try:
+            response = (
+                self._table(REVIEW_TABLE).upsert(dict(values), on_conflict="analysis_id", ignore_duplicates=True).execute()
+            )
+        except Exception as exc:
+            raise self._review_error("검토 행 만들기", exc) from None
+        return _first(response.data)
+
+    def update_review(
+        self, analysis_id: str, values: Mapping[str, Any], *, expect_version: int
+    ) -> dict[str, Any] | None:
+        try:
+            response = (
+                self._table(REVIEW_TABLE)
+                .update(dict(values))
+                .eq("analysis_id", analysis_id)
+                .eq("version", expect_version)
+                .execute()
+            )
+        except Exception as exc:
+            raise self._review_error("검토 행 갱신", exc) from None
+        return _first(response.data)
 
     # --- Storage --------------------------------------------------------------
 

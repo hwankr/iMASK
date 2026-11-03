@@ -8,8 +8,13 @@
 #    POST /api/py/analyses                 분석 건 + 서명 업로드 URL 만들기 → 201
 #    POST /api/py/analyses/{id}/start      Upstage 작업 시작(완료를 기다리지 않음) → 200
 #    GET  /api/py/analyses/{id}            조회. running 이면 Upstage 상태를 한 번 확인 → 200
-#                                          result 는 documents·findings·overall(?include=stages 면 stages 도)
+#                                          result 는 documents·findings·overall(?include=stages 면 stages 도),
+#                                          review 는 검토 블록(검토할 수 있는 분석만, 검토 행을 읽지 못하면 null)
 #    GET  /api/py/analyses/{id}/file       원본 파일 서명 다운로드 URL(10분) → 200, Cache-Control: no-store
+#    POST /api/py/analyses/{id}/review-actions
+#                                          검토 동작 하나 저장(imask_backend.reviews) → 200 {"analysis", "changed"}
+#                                          본문은 직접 읽는다: 65,536 바이트를 넘으면 그 자리에서 413(Content-Length 없이도),
+#                                          JSON·필드 검사 400. Upstage 를 부르지 않는다(의존성도 받지 않음).
 #  분석 건·원본 파일 응답은 _json_out 한 곳을 지난다 — 짝 없는 서로게이트가 있을 때만 ASCII escape JSON(이름·값 원문
 #  그대로), 없으면 정상 경로 그대로(바이트 불변). 상태 코드·헤더는 같다.
 #  접근 코드(X-Demo-Code)는 받지 않는다(2026-11-03 없앰 — 팀만 아는 주소, 대회용 API). 오류 본문은 늘 {"detail": "<짧은 한국어 문장>"}.
@@ -38,7 +43,9 @@ from fastapi import Depends, FastAPI, Query, Request  # noqa: E402
 from fastapi.exceptions import RequestValidationError  # noqa: E402
 from fastapi.responses import JSONResponse, Response  # noqa: E402
 from pydantic import BaseModel, Field, StrictInt, StrictStr  # noqa: E402
+from starlette.concurrency import run_in_threadpool  # noqa: E402
 from starlette.exceptions import HTTPException as StarletteHTTPException  # noqa: E402
+from starlette.requests import ClientDisconnect  # noqa: E402
 
 from imask_backend.analyses import (  # noqa: E402
     ApiError,
@@ -51,6 +58,13 @@ from imask_backend.analyses import (  # noqa: E402
 )
 from imask_backend.config import ConfigError  # noqa: E402
 from imask_backend.redaction import redact  # noqa: E402
+from imask_backend.reviews import (  # noqa: E402
+    MAX_BODY_BYTES,
+    MSG_BODY_TOO_LARGE,
+    analysis_read_out,
+    parse_action,
+    review_action_out,
+)
 from imask_backend.settings import Settings, get_settings  # noqa: E402
 from imask_backend.store import Store, StoreError, cached_store  # noqa: E402
 from imask_backend.textsafe import escaped_json_bytes, has_unpaired_surrogates  # noqa: E402
@@ -252,8 +266,10 @@ def read(
     include: Annotated[list[str] | None, Query()] = None,
 ) -> Any:
     polled = poll_analysis(store, upstage, settings, analysis_id)
+    # review 블록: 검토할 수 있는 분석만 검토 행을 읽는다(실패하면 review: null — 조회는 그대로 200)
     return _json_out(
-        analysis_out(
+        analysis_read_out(
+            store,
             polled.row,
             include_stages="stages" in _include_tokens(include),
             upstage_status=polled.upstage_status,
@@ -266,3 +282,44 @@ def read(
 def original_file(analysis_id: str, store: StoreDep) -> Response:
     # 서명 URL 은 10분짜리 권한이라 캐시에 남기지 않는다(로그에도 쓰지 않음)
     return _json_out(file_link(store, analysis_id), headers={"Cache-Control": "no-store"})
+
+
+_DIGITS = frozenset("0123456789")
+
+
+def _declared_too_large(length: str | None, limit: int) -> bool:
+    """Content-Length(십진 숫자만)가 limit 을 넘는지. 앞 0 을 떼고 자릿수·값으로 비교한다(아주 긴 숫자도 정수로 바꾸지 않음).
+
+    숫자가 아니면(없음·빈 값·다른 글자) False — 실제로 읽은 바이트로 판단한다.
+    """
+    if not length or not set(length) <= _DIGITS:
+        return False
+    digits = length.lstrip("0") or "0"
+    bound = str(limit)
+    return len(digits) > len(bound) or (len(digits) == len(bound) and digits > bound)
+
+
+async def _read_body(request: Request, limit: int = MAX_BODY_BYTES) -> bytes:
+    """본문을 limit 바이트까지만 읽는다. Content-Length 가 넘거나 실제로 읽은 바이트가 넘으면 그 자리에서 413.
+
+    Content-Length 가 없어도(chunked) 다 읽기 전에 끊는다. 클라이언트가 끊으면 400.
+    """
+    if _declared_too_large(request.headers.get("content-length"), limit):
+        raise ApiError(413, MSG_BODY_TOO_LARGE)
+    body = bytearray()
+    try:
+        async for chunk in request.stream():
+            body += chunk
+            if len(body) > limit:
+                raise ApiError(413, MSG_BODY_TOO_LARGE)
+    except ClientDisconnect:
+        raise ApiError(400, MSG_BAD_REQUEST) from None
+    return bytes(body)
+
+
+@app.post("/api/py/analyses/{analysis_id}/review-actions", response_model=dict[str, Any])
+async def review_action(analysis_id: str, request: Request, store: StoreDep) -> Any:
+    # 오류 순서: 413(본문 크기) → 400(본문) → 404·409(imask_backend.reviews). Upstage 의존성은 받지 않는다.
+    action = parse_action(await _read_body(request))
+    # 저장소 호출은 블로킹이라 스레드 풀에서(조회 경로처럼)
+    return _json_out(await run_in_threadpool(review_action_out, store, analysis_id, action))

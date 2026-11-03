@@ -24,6 +24,8 @@
 #  10 안쪽 — 응답 직렬화기 한도 약 97 보다 충분히 낮게)를 넘으면 값 없는 경고 후 stages: [] (조회가 500 이 되지 않게).
 #  짝 없는 서로게이트가 든 문자열·키도 여기서는 원문 그대로 둔다 — api/index.py 의 응답 도우미가 그런 응답만
 #  ASCII escape JSON 으로 보낸다(imask_backend.textsafe, 코디네이터 결정 T1-fix5).
+#  AnalysisOut 에는 review 키가 늘 있다(검토 블록 또는 null). 블록은 imask_backend.reviews 가 만들어 넘기고(조회·검토
+#  동작 — build_view 결과도 함께 넘겨 한 번만 계산), 만들기·시작 응답은 null 이다(검토 행을 읽지 않음).
 #  원본 파일 주소(file_link): 문서 행의 storage_path 로 10분짜리 서명 다운로드 URL. 서명 URL 은 로그에 남기지 않는다.
 # ==========================================================================
 
@@ -185,14 +187,16 @@ def response_stages(result: Mapping[str, Any]) -> list[Any]:
         return []
 
 
-def result_out(result: Mapping[str, Any], *, include_stages: bool = False) -> dict[str, Any]:
+def result_out(
+    result: Mapping[str, Any], *, include_stages: bool = False, view: Mapping[str, Any] | None = None
+) -> dict[str, Any]:
     """저장된 result → 응답의 result. 원본(response)·stages 를 빼고 documents·findings·overall 을 더한다.
 
     format·job·summary 등 나머지 키는 그대로. include_stages 면 stages(response_stages — 저장된 것, 없으면 response 에서
-    parse_stages, 너무 깊거나 만들지 못하면 []).
+    parse_stages, 너무 깊거나 만들지 못하면 []). view 를 주면(같은 result 로 이미 계산한 build_view) 다시 계산하지 않는다.
     """
     out = {key: value for key, value in result.items() if key not in ("response", "stages")}
-    out.update(build_view(result))
+    out.update(view if view is not None else build_view(result))
     if include_stages:
         out["stages"] = response_stages(result)
     return out
@@ -204,13 +208,17 @@ def analysis_out(
     include_stages: bool = False,
     upstage_status: str | None = None,
     poll_error: str | None = None,
+    review: Mapping[str, Any] | None = None,
+    view: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """analyses 행 → AnalysisOut. agent_id 는 빼고, result 는 result_out(원본·stages 없이 화면용 값).
 
+    review 는 늘 있는 키(검토 블록 객체 또는 null — imask_backend.reviews 가 만든다. 만들기·시작 응답은 null).
+    view 는 이 행의 result 로 이미 계산한 build_view(조회·검토 경로가 한 번만 계산하게).
     문자열·키는 원문 그대로(짝 없는 서로게이트 포함) — 응답으로 보내는 방식은 api/index.py 의 _json_out 이 정한다.
     """
     result = row.get("result")
-    result = result_out(result, include_stages=include_stages) if isinstance(result, Mapping) else None
+    result = result_out(result, include_stages=include_stages, view=view) if isinstance(result, Mapping) else None
     documents = row.get("documents")
     return {
         "id": row.get("id"),
@@ -226,6 +234,7 @@ def analysis_out(
         else [],
         "upstage_status": upstage_status,
         "poll_error": poll_error,
+        "review": dict(review) if review is not None else None,
     }
 
 

@@ -53,6 +53,7 @@ ANALYSIS_KEYS = {
     "documents",
     "upstage_status",
     "poll_error",
+    "review",  # 검토 블록(검토할 수 있는 분석만 객체, 그 밖은 null)
 }
 DOCUMENT_KEYS = {"id", "filename", "size_bytes", "mime_type", "upstage_file_id", "created_at"}
 LEAKY = f"Authorization: Bearer {FAKE_UPSTAGE_KEY}; bad agent {FAKE_AGENT_ID}"

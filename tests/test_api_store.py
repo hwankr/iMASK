@@ -5,6 +5,8 @@
 #  Storage '파일 없음'(HTTP 400 + 본문 statusCode 404) → None, 오류 문구 가림.
 #  서명 다운로드 URL(T1 findings-api): 진짜 storage3 의 요청·반환(절대 주소), 가짜 storage 클라이언트로
 #  반환 키 변형(signedURL·signedUrl·signed_url)·상대 경로·없는 객체 → None·그 밖 오류 → 가린 StoreError.
+#  검토 행(T1 review-actions): get_review(select·analysis_id·limit), insert_review(on_conflict=analysis_id +
+#  resolution=ignore-duplicates, 빈 응답 → None), update_review(version 조건, 바뀐 행 없음 → None), 오류 → 가린 StoreError.
 # ==========================================================================
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ from api_fakes import FAKE_ENV, FAKE_SUPABASE_KEY
 from storage3.exceptions import StorageApiError
 
 from imask_backend.settings import load_settings
-from imask_backend.store import StoreError, SupabaseStore
+from imask_backend.store import REVIEW_COLUMNS, StoreError, SupabaseStore
 
 BASE = FAKE_ENV["SUPABASE_URL"]
 
@@ -296,3 +298,97 @@ def test_signed_download_url_other_errors_are_redacted_store_errors(exc: BaseExc
     assert FAKE_SUPABASE_KEY not in info.value.message
     assert "FAKE-download" not in info.value.message  # 서명 URL 의 token 값도 가린다
     assert info.value.__cause__ is None and info.value.__suppress_context__
+
+
+# --- 검토 행(analysis_reviews) — T1 review-actions -----------------------------------------------------
+
+
+def test_get_review_reads_one_row_by_analysis_id(mocked: tuple[SupabaseStore, Recorder]) -> None:
+    store, rec = mocked
+    rec.reply = (200, [{"analysis_id": "a1", "version": 2}])
+    assert store.get_review("a1") == {"analysis_id": "a1", "version": 2}
+    (req,) = rec.requests
+    assert (req.method, req.url.path) == ("GET", "/rest/v1/analysis_reviews")
+    params = dict(httpx.QueryParams(req.url.query))
+    assert params == {"select": REVIEW_COLUMNS, "analysis_id": "eq.a1", "limit": "1"}
+    assert req.headers["apikey"] == FAKE_SUPABASE_KEY
+    rec.reply = (200, [])
+    assert store.get_review("a1") is None
+
+
+def test_insert_review_is_insert_on_conflict_do_nothing(mocked: tuple[SupabaseStore, Recorder]) -> None:
+    store, rec = mocked
+    # 저장 키는 ASCII escape(storage_key) — 진짜 서로게이트는 보내지 않는다(아래 시험)
+    values = {"analysis_id": "a1", "status": "needed", "findings": {"0:\\ud800": {"status": "open"}}, "history": [], "version": 1}
+    rec.reply = (201, [{**values, "created_at": "t", "updated_at": "t"}])
+    assert store.insert_review(values) == {**values, "created_at": "t", "updated_at": "t"}
+    (req,) = rec.requests
+    assert (req.method, req.url.path) == ("POST", "/rest/v1/analysis_reviews")
+    assert dict(httpx.QueryParams(req.url.query)) == {"on_conflict": "analysis_id"}
+    prefer = req.headers.get("prefer", "")
+    assert "resolution=ignore-duplicates" in prefer and "return=representation" in prefer
+    assert "merge-duplicates" not in prefer
+    assert json.loads(req.content) == values
+    # 이미 행이 있으면 PostgREST 는 빈 목록 → None(다른 요청이 먼저 만들었다)
+    rec.reply = (201, [])
+    assert store.insert_review(values) is None
+
+
+def test_real_surrogate_in_review_values_cannot_be_sent(mocked: tuple[SupabaseStore, Recorder]) -> None:
+    # 그래서 저장 키는 storage_key(ASCII escape)이고 사용자 글은 400 으로 막는다 — 보내면 가린 StoreError(502)
+    store, rec = mocked
+    with pytest.raises(StoreError):
+        store.insert_review({"analysis_id": "a1", "findings": {"0:" + "\ud800": {}}, "version": 1})
+    assert rec.requests == []
+
+
+def test_update_review_is_conditional_on_version(mocked: tuple[SupabaseStore, Recorder]) -> None:
+    store, rec = mocked
+    rec.reply = (200, [{"analysis_id": "a1", "version": 4}])
+    assert store.update_review("a1", {"memo": "m", "version": 4}, expect_version=3) == {"analysis_id": "a1", "version": 4}
+    (req,) = rec.requests
+    assert (req.method, req.url.path) == ("PATCH", "/rest/v1/analysis_reviews")
+    assert dict(httpx.QueryParams(req.url.query)) == {"analysis_id": "eq.a1", "version": "eq.3"}
+    assert "return=representation" in req.headers.get("prefer", "")
+    assert json.loads(req.content) == {"memo": "m", "version": 4}
+    rec.reply = (200, [])
+    assert store.update_review("a1", {"version": 4}, expect_version=3) is None
+
+
+def test_review_methods_never_touch_the_analyses_table(mocked: tuple[SupabaseStore, Recorder]) -> None:
+    store, rec = mocked
+    rec.reply = (200, [])
+    store.get_review("a1")
+    store.insert_review({"analysis_id": "a1", "version": 1})
+    store.update_review("a1", {"version": 2}, expect_version=1)
+    assert {r.url.path for r in rec.requests} == {"/rest/v1/analysis_reviews"}
+
+
+@pytest.mark.parametrize("call", ["get", "insert", "update"])
+def test_review_errors_become_redacted_store_errors(mocked: tuple[SupabaseStore, Recorder], call: str) -> None:
+    store, rec = mocked
+    rec.reply = (500, {"message": f"boom key={FAKE_SUPABASE_KEY}", "code": "XX000", "details": None, "hint": None})
+    actions = {
+        "get": lambda: store.get_review("a1"),
+        "insert": lambda: store.insert_review({"analysis_id": "a1", "version": 1}),
+        "update": lambda: store.update_review("a1", {"version": 2}, expect_version=1),
+    }
+    with pytest.raises(StoreError) as info:
+        actions[call]()
+    assert FAKE_SUPABASE_KEY not in info.value.message and FAKE_SUPABASE_KEY not in repr(info.value)
+    assert info.value.__cause__ is None and info.value.__suppress_context__
+
+    def down(_request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("down")
+
+    rec.reply = down
+    with pytest.raises(StoreError):
+        actions[call]()
+
+
+def test_missing_review_table_is_a_store_error(mocked: tuple[SupabaseStore, Recorder]) -> None:
+    # 마이그레이션 전 배포: PostgREST 가 없는 테이블을 404 PGRST205 로 알린다 → StoreError(조회는 review: null)
+    store, rec = mocked
+    rec.reply = (404, {"code": "PGRST205", "message": "Could not find the table 'public.analysis_reviews' in the schema cache", "details": None, "hint": None})
+    with pytest.raises(StoreError):
+        store.get_review("a1")

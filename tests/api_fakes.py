@@ -4,6 +4,9 @@
 #    조건부 갱신(expect_status·expect_no_job)과 cascade 삭제, updated_at 갱신을 흉내 낸다.
 #    fail 에 메서드 이름을 넣으면 그 메서드가 StoreError 를 던진다. before_update 로 경쟁을 흉내 낸다.
 #    create_signed_download_url 은 객체가 없으면 None, 있으면 JWT 꼴 토큰을 단 가짜 서명 URL(받은 인자는 기록).
+#    검토 행(analysis_reviews): get_review·insert_review(이미 있으면 None — on conflict do nothing)·update_review(version
+#    조건, 안 맞으면 None)와 updated_at 갱신, 분석 FK·check 제약·jsonb 가 거절하는 값(NUL·짝 없는 서로게이트)을 흉내 낸다.
+#    review_hooks 에 함수를 넣으면 검토 행을 쓰기 직전에 하나씩 꺼내 부른다(다른 요청이 끼어드는 경쟁 흉내).
 #  - FakeUpstageServer 는 httpx.MockTransport 처리기다. 진짜 UpstageClient 를 그대로 쓰게 해서
 #    요청 본문(config_id·include)까지 확인한다. 네트워크는 쓰지 않는다.
 #  값은 모두 지어낸 가짜다(FAKE_*). JWT·Supabase 키 꼴 값은 fake_tokens 가 실행 중에 만든다.
@@ -62,6 +65,10 @@ class FakeStore:
         self.signed_downloads: list[tuple[str, int]] = []  # (path, expires_in)
         self.get_count = 0
         self.fail_get_calls: set[int] = set()  # n 번째 get_analysis 만 실패(예: 마지막 다시 읽기)
+        self.reviews: dict[str, dict[str, Any]] = {}
+        self.review_writes: list[tuple[str, str, dict[str, Any], int | None]] = []  # (메서드, 분석 id, 값, expect_version)
+        self.review_hooks: list[Callable[[FakeStore, str], None]] = []  # 쓰기 직전에 하나씩(경쟁 흉내)
+        self._in_review_hook = False
 
     def _call(self, name: str) -> None:
         self.calls.append(name)
@@ -230,6 +237,114 @@ class FakeStore:
             return None
         token = fake_jwt({"fake": uuid.uuid4().hex, "url": path})
         return f"https://fake-project.supabase.co/storage/v1/object/sign/documents/{path}?token={token}"
+
+    # --- 검토 행(analysis_reviews) ------------------------------------------------
+
+    def put_review(self, analysis_id: str, **values: Any) -> dict[str, Any]:
+        """테스트 준비용: 검토 행을 바로 넣는다(검사 없음 — 틀린 모양도 넣을 수 있다)."""
+        stamp = now_iso()
+        row = {**_review_defaults(), "analysis_id": analysis_id, "version": 1, "created_at": stamp, "updated_at": stamp}
+        row.update(values)
+        self.reviews[analysis_id] = row
+        return copy.deepcopy(row)
+
+    def get_review(self, analysis_id: str) -> dict[str, Any] | None:
+        self._call("get_review")
+        row = self.reviews.get(analysis_id)
+        return copy.deepcopy(row) if row is not None else None
+
+    def _before_review_write(self, analysis_id: str) -> None:
+        # 훅 안에서 다른 요청이 쓰는 동안에는 다음 훅을 꺼내지 않는다(끼어드는 요청 하나 = 훅 하나)
+        if self.review_hooks and not self._in_review_hook:
+            hook = self.review_hooks.pop(0)
+            self._in_review_hook = True
+            try:
+                hook(self, analysis_id)
+            finally:
+                self._in_review_hook = False
+
+    def insert_review(self, values: Mapping[str, Any]) -> dict[str, Any] | None:
+        self._call("insert_review")
+        analysis_id = str(values.get("analysis_id"))
+        self._before_review_write(analysis_id)
+        self.review_writes.append(("insert_review", analysis_id, copy.deepcopy(dict(values)), None))
+        if analysis_id not in self.analyses:
+            raise StoreError("insert_review: 외래 키 위반(가짜)")
+        if analysis_id in self.reviews:
+            return None  # on conflict do nothing
+        stamp = now_iso()
+        row = {**_review_defaults(), **_as_db_json(values), "created_at": stamp, "updated_at": stamp}
+        _check_review(row)
+        self.reviews[analysis_id] = row
+        return copy.deepcopy(row)
+
+    def update_review(
+        self, analysis_id: str, values: Mapping[str, Any], *, expect_version: int
+    ) -> dict[str, Any] | None:
+        self._call("update_review")
+        self._before_review_write(analysis_id)
+        self.review_writes.append(("update_review", analysis_id, copy.deepcopy(dict(values)), expect_version))
+        row = self.reviews.get(analysis_id)
+        if row is None or row.get("version") != expect_version:
+            return None
+        merged = {**row, **_as_db_json(values), "updated_at": now_iso()}
+        _check_review(merged)
+        self.reviews[analysis_id] = merged
+        return copy.deepcopy(merged)
+
+
+def _review_defaults() -> dict[str, Any]:
+    return {
+        "status": "needed",
+        "memo": "",
+        "memo_at": None,
+        "reviewer": "",
+        "reviewed_at": None,
+        "completion_note": "",
+        "findings": {},
+        "history": [],
+    }
+
+
+def _strings(value: Any) -> list[str]:
+    """값 안의 모든 문자열(dict 키 포함) — 반복문."""
+    out: list[str] = []
+    stack = [value]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, str):
+            out.append(node)
+        elif isinstance(node, Mapping):
+            for key, child in node.items():
+                out.append(str(key))
+                stack.append(child)
+        elif isinstance(node, (list, tuple)):
+            stack.extend(node)
+    return out
+
+
+def _as_db_json(values: Mapping[str, Any]) -> dict[str, Any]:
+    """jsonb·text 처럼 저장한다: NUL·짝 없는 서로게이트는 Postgres 가 거절한다(StoreError). JSON 으로 한 번 오간 값."""
+    for text in _strings(values):
+        if "\x00" in text or any("\ud800" <= ch <= "\udfff" for ch in text):
+            raise StoreError("검토 행 쓰기: jsonb 가 거절하는 문자(가짜)")
+    return json.loads(json.dumps(dict(values), ensure_ascii=False))
+
+
+def _check_review(row: Mapping[str, Any]) -> None:
+    """마이그레이션의 not null·check 제약을 흉내 낸다."""
+    version = row.get("version")
+    ok = (
+        row.get("status") in ("needed", "done")
+        and isinstance(row.get("findings"), dict)
+        and isinstance(row.get("history"), list)
+        and isinstance(version, int)
+        and not isinstance(version, bool)
+        and version >= 1
+        and all(isinstance(row.get(name), str) for name in ("memo", "reviewer", "completion_note"))
+    )
+    if not ok:
+        raise StoreError("검토 행 쓰기: 제약 위반(가짜)")
 
 
 class FakeUpstageServer:

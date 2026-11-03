@@ -12,6 +12,7 @@ import pytest
 
 from imask_backend.config import UpstageSettings
 from imask_backend.upstage import (
+    PROJECT_HEADER,
     UpstageClient,
     UpstageError,
     is_success,
@@ -383,3 +384,77 @@ def test_job_failure_message_limit_after_redaction():
     text = job_failure_message(job, SECRETS, limit=300)
     assert len(text) <= 300
     assert FAKE_KEY[:10] not in text
+
+
+# --- 프로젝트 헤더(x-project-id) -----------------------------------------------------
+
+FAKE_PROJECT = "proj_test_FAKE_123"
+
+
+def _project_handler(r: httpx.Request) -> httpx.Response:
+    path = r.url.path
+    if r.method == "POST" and path.endswith("/files"):
+        return httpx.Response(200, json={"id": "file-abc", "object": "file"})
+    if r.method == "POST" and path.endswith("/responses"):
+        return httpx.Response(200, json={"id": "resp_1", "status": "queued"})
+    if r.method == "GET" and "/responses/" in path:
+        return httpx.Response(200, json={"id": "resp_1", "status": "in_progress"})
+    if r.method == "DELETE":
+        return httpx.Response(200, json={"deleted": True})
+    return httpx.Response(200, json={"id": "file-abc", "object": "file"})  # GET /files/{id}
+
+
+def _project_client(**kwargs) -> tuple[UpstageClient, list[httpx.Request]]:
+    seen: list[httpx.Request] = []
+
+    def wrapped(request: httpx.Request) -> httpx.Response:
+        request.read()
+        seen.append(request)
+        return _project_handler(request)
+
+    return UpstageClient(FAKE_KEY, BASE, transport=httpx.MockTransport(wrapped), **kwargs), seen
+
+
+def _every_call(client: UpstageClient) -> None:
+    client.upload_file("a.pdf", b"%PDF-1.7 x", "application/pdf")
+    client.create_job(FAKE_AGENT, "3", "file-abc")
+    client.get_job("resp_1", "last")
+    client.delete_file("file-abc")
+    client.file_exists("file-abc")
+
+
+def test_project_header_on_every_request():
+    client, seen = _project_client(project_id=FAKE_PROJECT)
+    _every_call(client)
+    assert [r.method for r in seen] == ["POST", "POST", "GET", "DELETE", "GET"]
+    for req in seen:
+        assert req.headers[PROJECT_HEADER] == FAKE_PROJECT
+        assert req.headers["authorization"] == f"Bearer {FAKE_KEY}"
+
+
+@pytest.mark.parametrize("project_id", [None, "", "   "])
+def test_no_project_header_without_project_id(project_id):
+    client, seen = _project_client(project_id=project_id)
+    _every_call(client)
+    assert seen and all(PROJECT_HEADER not in req.headers for req in seen)
+
+
+def test_project_id_is_stripped_in_header():
+    client, seen = _project_client(project_id=f"  {FAKE_PROJECT} ")
+    client.upload_file("a.pdf", b"%PDF-1.7 x", "application/pdf")
+    assert seen[0].headers[PROJECT_HEADER] == FAKE_PROJECT
+
+
+@pytest.mark.parametrize("project_id", [FAKE_PROJECT, None])
+def test_from_settings_passes_project_id(project_id):
+    seen: list[httpx.Request] = []
+
+    def wrapped(request: httpx.Request) -> httpx.Response:
+        request.read()
+        seen.append(request)
+        return _project_handler(request)
+
+    settings = UpstageSettings(api_key=FAKE_KEY, agent_id=FAKE_AGENT, config_id="3", project_id=project_id)
+    client = UpstageClient.from_settings(settings, transport=httpx.MockTransport(wrapped))
+    client.upload_file("a.pdf", b"%PDF-1.7 x", "application/pdf")
+    assert seen[0].headers.get(PROJECT_HEADER) == project_id

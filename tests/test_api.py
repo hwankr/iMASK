@@ -130,7 +130,10 @@ def _ago(minutes: float) -> str:
 def test_health_needs_no_code_and_shows_only_booleans(ctx: Ctx) -> None:
     response = ctx.client.get("/api/py/health")
     assert response.status_code == 200
-    assert response.json() == {"ok": True, "configured": {"supabase": True, "upstage": True, "access_code": True}}
+    assert response.json() == {
+        "ok": True,
+        "configured": {"supabase": True, "upstage": True, "access_code": True, "upstage_project": False},
+    }
     _assert_clean(response.text)
     assert FAKE_ENV["SUPABASE_URL"] not in response.text
 
@@ -143,7 +146,12 @@ def test_health_without_env() -> None:
     finally:
         app.dependency_overrides.clear()
     assert response.status_code == 200
-    assert response.json()["configured"] == {"supabase": False, "upstage": False, "access_code": False}
+    assert response.json()["configured"] == {
+        "supabase": False,
+        "upstage": False,
+        "access_code": False,
+        "upstage_project": False,
+    }
 
 
 @pytest.mark.parametrize("headers", [{}, {"X-Demo-Code": "wrong"}, {"X-Demo-Code": ""}, {"X-Demo-Code": FAKE_ACCESS_CODE + "x"}])

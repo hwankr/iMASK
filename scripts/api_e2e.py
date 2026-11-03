@@ -185,6 +185,11 @@ class Run:
     def upstage_base(self) -> str:
         return self.env.get("UPSTAGE_BASE_URL") or "https://api.upstage.ai/v2"
 
+    def upstage_project(self) -> str | None:
+        """에이전트가 속한 Upstage 프로젝트(x-project-id) — 서버가 그 프로젝트에 올린 파일을 확인·정리하려면 같아야 한다."""
+        value = os.environ.get("UPSTAGE_PROJECT_ID") or self.env.get("UPSTAGE_PROJECT_ID") or ""
+        return value.strip() or None
+
 
 def _short(text: Any) -> str:
     """원문 전체를 가린 **뒤에** 200자로 자른다(잘린 비밀값·토큰 조각이 남지 않게)."""
@@ -476,7 +481,7 @@ def _check_upstage_files(run: Run, documents: list[Mapping[str, Any]]) -> bool |
         return None
     _hide(key, "<UPSTAGE_API_KEY>")
     ok = True
-    with UpstageClient(key, run.upstage_base()) as client:
+    with UpstageClient(key, run.upstage_base(), project_id=run.upstage_project()) as client:
         for file_id in file_ids:
             exists = client.file_exists(str(file_id))
             state = {True: "아직 있음", False: "지워짐(404)", None: "확인 실패"}.get(exists, "확인 실패")
@@ -536,7 +541,7 @@ def _cleanup(run: Run) -> bool:
         return False
     _hide(key, "<UPSTAGE_API_KEY>")
     ok = True
-    with UpstageClient(key, run.upstage_base()) as client:
+    with UpstageClient(key, run.upstage_base(), project_id=run.upstage_project()) as client:
         for file_id in run.file_ids:
             try:
                 if not client.delete_file(file_id):

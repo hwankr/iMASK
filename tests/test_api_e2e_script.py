@@ -151,19 +151,23 @@ class FakeApi:
 @pytest.fixture
 def script(monkeypatch: pytest.MonkeyPatch) -> Any:
     module = load_script()
-    for name in ("IMASK_DEMO_CODE", "UPSTAGE_API_KEY", "VERCEL_PROTECTION_BYPASS"):
+    for name in ("IMASK_DEMO_CODE", "UPSTAGE_API_KEY", "UPSTAGE_PROJECT_ID", "VERCEL_PROTECTION_BYPASS"):
         monkeypatch.delenv(name, raising=False)
     module._SECRETS.clear()
     return module
 
 
-def _run(script: Any, api: FakeApi, upstage: FakeUpstageServer, args: list[str], *, key: bool = True) -> int:
+def _run(
+    script: Any, api: FakeApi, upstage: FakeUpstageServer, args: list[str], *, key: bool = True, project: str | None = None
+) -> int:
     env = {"DEMO_ACCESS_CODE": FAKE_ACCESS_CODE}
     if key:
         env["UPSTAGE_API_KEY"] = FAKE_UPSTAGE_KEY
+    if project:
+        env["UPSTAGE_PROJECT_ID"] = project
 
-    def client_factory(api_key: str, base_url: str) -> UpstageClient:
-        return UpstageClient(api_key, base_url, transport=httpx.MockTransport(upstage.handle))
+    def client_factory(api_key: str, base_url: str, **kwargs: Any) -> UpstageClient:
+        return UpstageClient(api_key, base_url, transport=httpx.MockTransport(upstage.handle), **kwargs)
 
     with patch.object(script, "_read_env", return_value=env), patch.object(script, "UpstageClient", client_factory):
         return script.main(["--skip-upload", "--interval", "0", *args], transport=httpx.MockTransport(api.handle))
@@ -189,6 +193,18 @@ def test_abnormal_exit_deletes_upstage_file(script: Any, capsys: Any, poll_mode:
     out = capsys.readouterr().out
     assert "정리: Upstage 파일 1개 삭제 요청 완료" in out
     assert FAKE_UPSTAGE_KEY not in out and FAKE_ACCESS_CODE not in out
+
+
+@pytest.mark.parametrize("project", ["proj_test_FAKE_9", None])
+def test_cleanup_sends_project_header_when_set(script: Any, project: str | None) -> None:
+    # 서버가 프로젝트 안에 올린 파일은 같은 x-project-id 로만 지울 수 있다
+    api = FakeApi(poll_mode="running")
+    upstage = FakeUpstageServer()
+    upstage.files[FILE_ID] = ("x.pdf", b"")
+    assert _run(script, api, upstage, ["--timeout", "0"], project=project) == 1
+    (req,) = _deletes(upstage)
+    assert req.headers.get("x-project-id") == project
+    assert upstage.deleted == [FILE_ID]
 
 
 def test_lost_start_response_rereads_and_deletes(script: Any, capsys: Any) -> None:
@@ -530,8 +546,8 @@ def _integrated(
                 store.objects[upload["path"]] = content
                 return True
 
-            def cleanup_client(api_key: str, base_url: str) -> UpstageClient:
-                return UpstageClient(api_key, base_url, transport=httpx.MockTransport(upstage.handle))
+            def cleanup_client(api_key: str, base_url: str, **kwargs: Any) -> UpstageClient:
+                return UpstageClient(api_key, base_url, transport=httpx.MockTransport(upstage.handle), **kwargs)
 
             env = {"DEMO_ACCESS_CODE": FAKE_ACCESS_CODE, "UPSTAGE_API_KEY": FAKE_UPSTAGE_KEY}
             with (

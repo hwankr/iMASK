@@ -261,7 +261,7 @@ def run(args: argparse.Namespace) -> int:
     uploaded: dict[str, str] = {}  # 올린 파일 id(정리용)
     code = EXIT_FAIL
     cleaned = True
-    with UpstageClient(settings.api_key, settings.base_url) as client:
+    with UpstageClient(settings.api_key, settings.base_url, project_id=settings.project_id) as client:
         try:
             code = _drive(client, settings, args, file_path.name, content, mime_type, out_dir, secrets, start, uploaded)
         except UpstageError as exc:

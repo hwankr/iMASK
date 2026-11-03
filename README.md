@@ -237,7 +237,7 @@ supabase/                   DB 변경 기록 — migrations/에 적용한 SQL을
 
 | 구분 | 이름 |
 |---|---|
-| 서버 전용 6개 — `NEXT_PUBLIC_` 을 붙이지 않음 | `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `UPSTAGE_API_KEY`, `UPSTAGE_AGENT_ID`, `UPSTAGE_CONFIG_ID`, `DEMO_ACCESS_CODE` |
+| 서버 전용 7개 — `NEXT_PUBLIC_` 을 붙이지 않음 | `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `UPSTAGE_API_KEY`, `UPSTAGE_AGENT_ID`, `UPSTAGE_CONFIG_ID`, `UPSTAGE_PROJECT_ID`(에이전트가 Upstage 프로젝트에 속할 때 — 지금 그렇다), `DEMO_ACCESS_CODE` |
 | 브라우저 공개 3개 — 빌드 때 들어가므로 바꾸면 다시 배포 | `NEXT_PUBLIC_IMASK_SERVICE`(실제 분석이면 `api`), `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` |
 
 ---
@@ -272,11 +272,12 @@ supabase/                   DB 변경 기록 — migrations/에 적용한 SQL을
 |---|---|
 | `SUPABASE_URL`, `SUPABASE_SECRET_KEY` | DB·Storage. 새 형식 서버 비밀 키(`sb_secret_…`)가 supabase-py 2.33 에서 그대로 동작합니다 |
 | `UPSTAGE_API_KEY`, `UPSTAGE_AGENT_ID`, `UPSTAGE_CONFIG_ID` | Upstage 작업. `UPSTAGE_CONFIG_ID` 가 비면 작업을 만들지 않습니다(빼면 Studio 최신 설정이 돌아 결과가 바뀜) |
+| `UPSTAGE_PROJECT_ID`(에이전트가 프로젝트에 속하면 필수) | Upstage Studio 코드 패널의 Project ID(`proj_…`). 모든 Upstage 요청(파일 올리기·작업 만들기·조회·지우기)에 `x-project-id` 헤더로 보냅니다. 빠지면 올린 파일이 프로젝트 밖에 저장돼 작업 만들기가 `HTTP 403 — No access to file` 로 실패합니다. 영문·숫자·`_`·`-` 만 받습니다(그 밖은 설정 오류) |
 | `DEMO_ACCESS_CODE` | 공개 주소 보호용 접근 코드. 비면 분석 경로가 모두 500 입니다 |
 | `UPSTAGE_BASE_URL`(선택) | 기본 `https://api.upstage.ai/v2` |
 | `IMASK_API_DEV_URL`(선택, Next 개발 서버만) | `next dev` 가 `/api/py/*` 를 넘길 주소. 기본 `http://127.0.0.1:8000` |
 
-`GET /api/py/health` 의 `configured` 로 값이 들어 있는지(값 없이 참·거짓만) 확인할 수 있습니다.
+`GET /api/py/health` 의 `configured` 로 값이 들어 있는지(값 없이 참·거짓만 — `supabase`·`upstage`·`access_code`·`upstage_project`) 확인할 수 있습니다.
 
 ### 로컬 실행
 
@@ -348,6 +349,8 @@ queued ──(start: 원자적 선점)──▶ running ──(GET 이 Upstage �
 - `partial` 은 DB·화면 상태 키로만 있고 백엔드는 아직 쓰지 않습니다(분석 1건 = 묶음 파일 1개 = Upstage 작업 1개).
 
 ### Upstage 호출 순서
+
+모든 호출에 `Authorization: Bearer <UPSTAGE_API_KEY>` 와, `UPSTAGE_PROJECT_ID` 가 있으면 `x-project-id: <프로젝트 id>` 헤더를 붙입니다(에이전트가 Studio 프로젝트에 속하면 파일·작업이 그 프로젝트 안에 만들어져야 에이전트가 파일을 읽습니다).
 
 1. 시작: Storage 에서 파일 받기 → 내용 검사(20MB 이하, 첫 바이트: PDF 는 앞 1024바이트 안 `%PDF-`, PNG `\x89PNG\r\n\x1a\n`, JPEG `\xff\xd8\xff`) → `POST /v2/files`(안전한 이름) → `documents.upstage_file_id` 저장 → `POST /v2/responses`(`model` = 에이전트 id, `config_id`, `include: ["all"]`) → `analyses.upstage_job_id`·`agent_id` 저장.
 2. 조회(화면이 3초마다 부름): `GET /v2/responses/{job}?include[]=last` 한 번. `completed` 면 `?include[]=all` 로 한 번 더 받아 `analyses.result` 에 저장합니다. 끝나면(완료·실패) `DELETE /v2/files/{id}` 로 Upstage 파일을 지웁니다(404 는 이미 지움). 지우기 실패는 결과를 바꾸지 않습니다(로그만).

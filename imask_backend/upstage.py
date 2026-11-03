@@ -12,6 +12,9 @@
 #    또는 create_job 으로 한 번 보낸 값)를 기억해 모든 UpstageError 메시지에서 가린다.
 #    길이 제한(300자)은 가림 뒤에 적용한다. UpstageError 자체도 인증 문구는 늘 지운다.
 #  - job_failure_message(job, secrets): 실패한 작업의 이유를 가린 짧은 문구로(화면·로그용).
+#  - 에이전트가 Upstage Studio 프로젝트에 속하면 project_id(UPSTAGE_PROJECT_ID)를 넘긴다 — 모든 요청에
+#    x-project-id 헤더가 붙는다. 없으면 올린 파일이 프로젝트 밖에 저장돼 작업 만들기가 403 'No access to file'
+#    (2026-11-03 확인: 같은 키·에이전트·설정에 헤더만 붙이면 성공).
 #  - 테스트는 transport(httpx.MockTransport)를 넣어 네트워크 없이 확인한다.
 # ==========================================================================
 
@@ -34,6 +37,9 @@ SUCCESS_STATUS = "completed"
 
 # 연결 10초, 읽기·쓰기 60초
 DEFAULT_TIMEOUT = httpx.Timeout(60.0, connect=10.0)
+
+# 에이전트가 속한 Studio 프로젝트를 알리는 헤더(파일·작업이 그 프로젝트 안에 만들어진다)
+PROJECT_HEADER = "x-project-id"
 
 # 오류 메시지 최대 길이(응답 본문이 길어도 로그가 넘치지 않게). 가림 뒤에 자른다.
 MAX_MESSAGE = 300
@@ -123,6 +129,7 @@ class UpstageClient:
     """Upstage Agent API 동기 클라이언트. with 문으로 쓰거나 close() 를 부른다.
 
     agent_id 를 주면(또는 create_job 을 한 번 부르면) 그 값도 오류 메시지에서 가린다.
+    project_id 를 주면 모든 요청에 x-project-id 헤더를 붙인다(빈 값·공백이면 붙이지 않는다).
     extra_secrets(값 → 자리표시자)를 주면 그 값들도 가린다 — 서버는 Supabase 비밀 키·접근 코드까지
     넘겨, 300자로 자르기 **전에** 모든 서버 비밀값이 가려지게 한다.
     """
@@ -133,6 +140,7 @@ class UpstageClient:
         base_url: str = "https://api.upstage.ai/v2",
         *,
         agent_id: str | None = None,
+        project_id: str | None = None,
         extra_secrets: Mapping[str, str] | None = None,
         timeout: httpx.Timeout | float | None = DEFAULT_TIMEOUT,
         transport: httpx.BaseTransport | None = None,
@@ -145,16 +153,21 @@ class UpstageClient:
             if isinstance(value, str) and value and isinstance(placeholder, str):
                 self._secrets.setdefault(value, placeholder)
         self._base_url = base_url.rstrip("/")
+        headers = {"Authorization": f"Bearer {api_key}"}
+        project = project_id.strip() if isinstance(project_id, str) else ""
+        if project:
+            headers[PROJECT_HEADER] = project
         self._client = httpx.Client(
             base_url=self._base_url,
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=headers,
             timeout=timeout,
             transport=transport,
         )
 
     @classmethod
     def from_settings(cls, settings: UpstageSettings, **kwargs: Any) -> UpstageClient:
-        """config.UpstageSettings 로 만든다(에이전트 id 가림 포함)."""
+        """config.UpstageSettings 로 만든다(에이전트 id 가림 · 프로젝트 헤더 포함)."""
+        kwargs.setdefault("project_id", settings.project_id)
         return cls(settings.api_key, settings.base_url, agent_id=settings.agent_id, **kwargs)
 
     # --- 수명 -----------------------------------------------------------------

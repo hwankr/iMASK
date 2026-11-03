@@ -17,6 +17,7 @@ from functools import lru_cache
 from types import MappingProxyType
 
 from .config import (
+    PROJECT_ID_ENV,
     REQUIRED_UPSTAGE_ENV,
     ConfigError,
     UpstageSettings,
@@ -26,7 +27,8 @@ from .redaction import AGENT_ID_PLACEHOLDER, API_KEY_PLACEHOLDER
 
 REQUIRED_SUPABASE_ENV = ("SUPABASE_URL", "SUPABASE_SECRET_KEY")
 ACCESS_CODE_ENV = "DEMO_ACCESS_CODE"
-OPTIONAL_ENV = ("UPSTAGE_BASE_URL",)
+# 선택 — 프로젝트 id 는 에이전트가 Upstage 프로젝트에 속하면 필요하다(config.PROJECT_ID_ENV). 여기 없으면 서버가 읽지 못한다
+OPTIONAL_ENV = ("UPSTAGE_BASE_URL", PROJECT_ID_ENV)
 KNOWN_ENV = REQUIRED_SUPABASE_ENV + REQUIRED_UPSTAGE_ENV + (ACCESS_CODE_ENV,) + OPTIONAL_ENV
 
 SUPABASE_KEY_PLACEHOLDER = "<SUPABASE_SECRET_KEY>"
@@ -66,6 +68,7 @@ class Settings:
             "supabase": not self._missing(REQUIRED_SUPABASE_ENV),
             "upstage": not self._missing(REQUIRED_UPSTAGE_ENV),
             "access_code": bool(self._get(ACCESS_CODE_ENV)),
+            "upstage_project": bool(self._get(PROJECT_ID_ENV)),
         }
 
     # --- 값이 필요한 곳 -------------------------------------------------------

@@ -140,7 +140,8 @@ src/
 scripts/check-tokens.mjs    토큰 규칙 검사기(같은 폴더에 검사기·ESLint 경계 테스트)
 scripts/upstage_smoke.py    Upstage 워크플로우 직접 호출 확인 · scripts/api_e2e.py 백엔드 끝까지 확인
 api/index.py                FastAPI 백엔드 진입점(Vercel Python 함수) — 아래 'FastAPI 백엔드' 참고
-imask_backend/              백엔드 Python 코드(설정·Supabase·Upstage·결과 파싱·업무 로직)
+imask_backend/              백엔드 Python 코드(설정·Supabase·Upstage·결과 파싱·화면용 결과 변환·업무 로직)
+docs/                       팀원과 맞출 문서 — field-mapping.md(민감정보_추출 키 → 정보 종류·주체 대응표와 확인 질문)
 tests/                      백엔드 Python 테스트(pytest)
 vercel.json                 Vercel 설정(프레임워크 nextjs 고정, 지역 icn1, Python 함수 maxDuration·묶음 제외)
 supabase/                   DB 변경 기록 — migrations/에 적용한 SQL을 순서대로 둔다(아래 'DB 변경 기록' 참고)
@@ -240,11 +241,15 @@ supabase/                   DB 변경 기록 — migrations/에 적용한 SQL을
 | `imask_backend/settings.py` | 환경변수. 요청 때 읽어서, 값이 빠져도 import 는 실패하지 않고 필요한 순간에 500 으로 이름만 알립니다 |
 | `imask_backend/files.py` | 파일 이름·형식·크기 검사, Storage 용 안전한 이름, 내용 첫 바이트 검사 |
 | `imask_backend/store.py` | Supabase 테이블·Storage 접근(`supabase==2.33.0`, `create_client(SUPABASE_URL, SUPABASE_SECRET_KEY)`)과 조건부 갱신 |
-| `imask_backend/analyses.py` | 만들기·시작·조회 업무 로직(FastAPI 와 무관) |
+| `imask_backend/analyses.py` | 만들기·시작·조회·원본 파일 주소 업무 로직(FastAPI 와 무관), 응답 모양(`analysis_out`) |
 | `imask_backend/upstage.py` · `results.py` · `redaction.py` · `config.py` | Upstage Agent API 클라이언트, 응답 파싱·요약, 비밀값 가림, Upstage 설정 |
+| `imask_backend/findings.py` | 저장된 결과 → 화면용 `documents`·`findings`·`overall`(조회할 때 계산) |
+| `imask_backend/fields.py` · `masking.py` | 민감정보_추출 키 대응표(정보 종류·세부 이름·정보 주체), 노출 상태 추정·가림 미리보기(표시용 — 판별 아님) |
+| `imask_backend/textsafe.py` | 응답 문자열 안전성 — 짝 없는 서로게이트 검사(`has_unpaired_surrogates`)와 ASCII escape JSON 본문(`escaped_json_bytes` — 이름·값 원문 그대로, NaN·inf 는 null) |
+| `docs/field-mapping.md` | 대응표와 스키마 담당 팀원에게 묻는 '확인 필요' 질문(테스트가 `fields.py` 와 같은지 봅니다) |
 | `tests/` | pytest. 네트워크를 쓰지 않습니다(저장소는 메모리 가짜, Upstage 는 `httpx.MockTransport`) |
 | `scripts/upstage_smoke.py` | Upstage 워크플로우를 직접 한 번 돌려 응답 모양을 확인합니다 |
-| `scripts/api_e2e.py` | 로컬·배포 백엔드를 브라우저처럼 끝까지(만들기 → 올리기 → 시작 → 조회) 돌려 봅니다 |
+| `scripts/api_e2e.py` | 로컬·배포 백엔드를 브라우저처럼 끝까지(만들기 → 올리기 → 시작 → 조회 → 원본 파일) 돌려 봅니다 |
 
 ### 환경변수
 
@@ -285,9 +290,10 @@ npm run dev
 .venv\Scripts\python.exe scripts\api_e2e.py --content-file <가짜 내용> --expect failed  # 형식 불일치 → 실패 경로
 .venv\Scripts\python.exe scripts\api_e2e.py --file <파일> --no-start                    # 만들기·올리기까지만
 .venv\Scripts\python.exe scripts\api_e2e.py --base-url https://<배포 주소>              # 배포 사이트 확인
+.venv\Scripts\python.exe scripts\api_e2e.py --analysis-id <분석 id>                     # 이미 끝난 분석 재확인(Upstage 작업 없음)
 ```
 
-접근 코드는 환경변수 `IMASK_DEMO_CODE`, 없으면 `.env` 의 `DEMO_ACCESS_CODE` 를 씁니다(출력하지 않음). 배포 사이트에 Vercel 보호가 켜져 있으면 `VERCEL_PROTECTION_BYPASS` 환경변수를 `x-vercel-protection-bypass` 헤더로 보냅니다. 종료 코드는 기대대로면 0(done 이면 서류 6·추출 5·위험도 상까지 맞아야 함), 아니면 1 입니다. 어떻게 끝나든(시간 초과·Ctrl+C·연결 오류 포함) 마지막에 이번 실행이 Upstage 에 남겼을 수 있는 파일을 `UPSTAGE_API_KEY` 로 지우고(404 = 이미 지움), 정리를 못 하면 종료 코드 1 입니다.
+접근 코드는 환경변수 `IMASK_DEMO_CODE`, 없으면 `.env` 의 `DEMO_ACCESS_CODE` 를 씁니다(출력하지 않음). 배포 사이트에 Vercel 보호가 켜져 있으면 `VERCEL_PROTECTION_BYPASS` 환경변수를 `x-vercel-protection-bypass` 헤더로 보냅니다. 종료 코드는 기대대로면 0, 아니면 1 입니다. done 이면 다음이 모두 맞아야 합니다: 요약(서류 6·추출 5·위험도 상), 화면용 결과(`findings` 29·좌표 있는 항목 28·`documents` 6(extracted 5·other 1, other 에 `other_guide`·extracted 에 `validation`)·`overall` 상/권장_조치·계약 키와 허용 값·id 중복 없음·`document_index` 가 `documents` 에 있음·`boxes` 0~1·`risk` 가 `risk_source` 와 맞음), 기본 응답에 `stages`·`response` 없음, 기본 응답이 `?include=stages` 응답보다 작음, `/file` 의 주소로(접근 코드 없이) 받은 내용이 올린 파일과 같음(sha256). 출력에는 개수·분포·바이트 수만 나오고 원문 값·가림 미리보기·서명 URL 은 나오지 않습니다. `--analysis-id` 는 만들기·올리기·시작 없이 그 분석을 조회해 위 done 확인과 원본 파일 확인만 합니다(비교할 원본은 `--file`, 기본 합성 묶음). 어떻게 끝나든(시간 초과·Ctrl+C·연결 오류 포함) 마지막에 이번 실행이 Upstage 에 남겼을 수 있는 파일을 `UPSTAGE_API_KEY` 로 지우고(404 = 이미 지움), 정리를 못 하면 종료 코드 1 입니다.
 
 ### 경로
 
@@ -298,12 +304,14 @@ npm run dev
 | `GET /api/py/health` | 접근 코드 없이. 설정이 있는지만 | 200 `{"ok": true, "configured": {"supabase", "upstage", "access_code"}}` |
 | `POST /api/py/analyses` | 본문 `{"name"?, "filename", "size", "mime_type"}`. `analyses`(queued)·`documents` 행과 서명 업로드 URL 을 만든다 | 201 `{"analysis": 분석 건, "upload": {"bucket", "path", "token", "signed_url"}}` · 400 검사 실패 · 502 준비 실패(만든 행은 지움) |
 | `POST /api/py/analyses/{id}/start` | 올린 파일을 Upstage 에 넘겨 작업을 만든다(완료를 기다리지 않음) | 200 분석 건(`running`, 선점 뒤 실패면 `failed` + `error`) · 404 · 409 이미 시작함 · 502 실패 기록도 못 함 |
-| `GET /api/py/analyses/{id}` | 분석 건 조회. `running` 이면 Upstage 상태를 **한 번** 확인 | 200 분석 건 · 404 |
+| `GET /api/py/analyses/{id}` | 분석 건 조회. `running` 이면 Upstage 상태를 **한 번** 확인. 쿼리 `include` 에 `stages` 가 있으면(여러 번·쉼표로 줄 수 있음, 모르는 값은 무시) `result.stages` 도 넣는다 | 200 분석 건 · 404 |
+| `GET /api/py/analyses/{id}/file` | 원본 파일의 Storage 서명 다운로드 URL(10분 유효)을 만든다. 상태와 상관없이, Upstage 는 부르지 않음 | 200 `{"url", "mime_type", "filename"}`(`filename` 은 원래 이름, 헤더 `Cache-Control: no-store`) · 404 `분석 건을 찾을 수 없습니다.`(uuid 아님·행 없음) · 404 `원본 파일을 찾을 수 없습니다.`(문서 행 없음·경로 빔·객체 없음) · 502 `원본 파일 주소를 만들지 못했습니다. 잠시 후 다시 시도해 주세요.` |
 
 - 검사(400): 형식은 `application/pdf`·`image/png`·`image/jpeg` 이고 확장자가 형식과 맞아야 합니다(pdf, png, jpg·jpeg). 크기는 1바이트~20MB(20,971,520) 정수, 파일 이름은 경로를 뗀 뒤 1~200자, 분석명은 앞뒤 공백을 지운 뒤 60자 이하입니다(비면 파일 이름). 본문이 JSON 이 아니거나 필드 타입이 틀리면 `요청 형식이 올바르지 않습니다.` 입니다(FastAPI 기본 422 대신 400).
-- **분석 건**(`AnalysisOut`): `id`, `name`, `status`, `upstage_job_id`, `error`, `result`(아래 형식에서 `response` 를 뺀 것 — Vercel 응답 4.5MB 제한 때문), `created_at`, `updated_at`(ISO 8601, 시간대 포함), `documents[]`(`id`, `filename`, `size_bytes`, `mime_type`, `upstage_file_id`, `created_at`), `upstage_status`·`poll_error`(GET 에서 이번 조회에 본 Upstage 상태와 확인 실패 문구. DB 에는 저장하지 않음). `agent_id`·`storage_path` 는 응답에 넣지 않습니다.
+- **분석 건**(`AnalysisOut`): `id`, `name`, `status`, `upstage_job_id`, `error`, `result`(아래 [API 응답의 `result`](#api-응답의-result) — 저장 형식에서 `response`·`stages` 를 빼고 화면용 값을 더한 것), `created_at`, `updated_at`(ISO 8601, 시간대 포함), `documents[]`(`id`, `filename`, `size_bytes`, `mime_type`, `upstage_file_id`, `created_at`), `upstage_status`·`poll_error`(GET 에서 이번 조회에 본 Upstage 상태와 확인 실패 문구. DB 에는 저장하지 않음). `agent_id`·`storage_path` 는 응답에 넣지 않습니다.
 - **Storage 경로**는 `analyses/{분석 id}/{안전한 이름}` 입니다. Supabase Storage 키는 일부 ASCII 만 받으므로(한글 이름은 'Invalid key') 원래 이름의 줄기에서 `[A-Za-z0-9._-]` 밖 글자 묶음을 `_` 로 바꾸고 앞뒤 `._-` 를 지운 뒤 80자까지, 비면 `document` 로 합니다. 확장자는 소문자입니다. 예: `대출 서류.pdf` → `document.pdf`, `김 2024 묶음.PDF` → `2024.pdf`. 원래 이름은 `documents.filename` 에 남습니다.
 - 브라우저는 `@supabase/supabase-js` 의 `storage.from(bucket).uploadToSignedUrl(path, token, file)` 로 올립니다. 공개 키로 충분합니다(서명 토큰이 권한).
+- **원본 파일 주소**(`/file`)는 `documents` 행(분석 1건 = 묶음 파일 1개)의 `storage_path` 로 `storage3` 의 `create_signed_url(path, 600)` 을 부릅니다. `supabase==2.33.0`(storage3 2.33)은 `{"signedURL", "signedUrl"}` 에 Storage 기준 주소를 붙인 **절대 주소**를 돌려줍니다(다른 버전이 상대 경로 `/object/sign/…` 를 주면 `storage_url` 에 붙입니다). 없는 객체는 Storage 가 HTTP 400 + 본문 `statusCode "404"` 로 알려 404 로 답합니다. 서명 URL 은 로그에 남기지 않습니다.
 
 ### 접근 코드
 
@@ -346,11 +354,36 @@ queued ──(start: 원자적 선점)──▶ running ──(GET 이 Upstage �
 
 - `summary` 는 `imask_backend.results.summarize`, `stages` 는 `parse_stages` 결과입니다. 요약값을 못 읽으면(모양이 다름) 그 값이 `null` 일 뿐 분석은 `done` 입니다.
 - 서류 종류는 영문 분류 코드(`loan_application` 등) 그대로입니다. 한국어 이름은 화면이 붙입니다.
-- API 응답의 `result` 에는 `response` 가 없습니다. 합성 6쪽 묶음 기준으로 DB 의 `result` 는 약 560KB, API 응답 전체는 약 320KB 입니다.
+- API 응답의 `result` 에는 `response` 가 없고 `stages` 는 `?include=stages` 일 때만 들어갑니다(아래). 합성 6쪽 묶음 기준으로 DB 의 `result` 는 약 560KB 입니다.
+
+### API 응답의 `result`
+
+조회 응답(`GET /api/py/analyses/{id}`)의 `result` 는 저장된 값에서 `response`·`stages` 를 빼고(`format`·`job`·`summary` 는 그대로) 화면이 바로 쓰는 `documents`·`findings`·`overall` 을 더한 것입니다(값은 지어낸 예).
+
+```json
+{
+  "format": "imask-upstage-v1", "job": { "…": "…" }, "summary": { "…": "…" },
+  "documents": [ { "index": 0, "type": "loan_application", "page_start": 1, "page_end": 1, "kind": "extracted", "other_guide": null, "validation": "green" } ],
+  "findings": [ { "id": "0:applicant_rrn", "document_index": 0, "field": "applicant_rrn", "category": "고유식별정보", "label": "주민등록번호",
+                  "subject": "신청인", "mapping_status": "ok", "value": "800101-1234567", "masked": "800101-1******", "exposure": "전체 노출",
+                  "risk": "unrated", "risk_source": null, "risk_reason": null, "page": 1,
+                  "boxes": [[{ "x": 0.1, "y": 0.2 }, { "x": 0.3, "y": 0.2 }, { "x": 0.3, "y": 0.22 }, { "x": 0.1, "y": 0.22 }]], "confidence": "high" } ],
+  "overall": { "level": "상", "text": "## 위험도 판정 …【†1】", "next_stage": "권장_조치", "next_text": "## 권장 조치 …" }
+}
+```
+
+- **조회할 때 계산합니다**(`imask_backend.findings.build_view`). DB 저장 형식은 그대로라 예전 분석에도 적용됩니다. 단계는 저장된 `response` 를 `parse_stages` 로 풀어(없으면 저장된 `stages`) status 가 `completed`(또는 없음)인 것만 씁니다. 바깥 모양이 달라도 예외를 던지지 않습니다. 탐지 항목 하나를 만들다 예외가 나면 **그 항목만** 안전한 값(`masked` 전부 `*`·`exposure` `전체 노출`·`page` null·`boxes` []·`confidence` null, id·대응표·위험등급은 정상 조회값)으로 두고 항목은 버리지 않습니다 — 값 문자열 만들기가 실패해도 `value` 는 원문 문자열 그대로이고, 원문을 문자열로 만들 수 없을 때만 고정 문구 `(값을 읽지 못했습니다)` 입니다(빈 값은 실패가 아니라 원래 항목이 아님). 그래도 예상 못 한 오류가 나면 빈 값(`documents []`·`findings []`·`overall` 빈 값)으로 200 을 돌려줍니다(로그에는 필드 이름·예외 종류만). `?include=stages` 의 `stages` 도 한 경계를 지나, 만들다 예외가 나거나(깊은 JSON 의 `RecursionError` 등) 중첩이 64단을 넘으면(실제 단계는 10단 안쪽, 응답 직렬화기 한도 약 97단) 경고 후 `[]` 입니다. 응답(분석 건 전체 — 만들기 201·시작·조회와 `/file`)은 `api/index.py` 의 응답 도우미 한 곳(`_json_out`)을 지납니다. 응답 안의 문자열·dict 키에 **짝 없는 서로게이트(U+D800~U+DFFF)가 하나라도 있을 때만** 그 응답을 `json.dumps(…, ensure_ascii=True)` 로 만든 ASCII 본문(서로게이트·비 ASCII 는 `\uXXXX` escape)으로 보냅니다(올바른 유니코드 글자가 아니라 정상 UTF-8 응답이 500 이 되므로 — `imask_backend/textsafe.py`). **이름·값은 원문 그대로**(바꾸지도 새로 짓지도 않음)라 `JSON.parse`·`json.loads` 하면 원래 키·값이 되살아나고, findings·include stages·summary 사이의 이름 대응도 그대로입니다. 상태 코드·헤더(201·`Cache-Control: no-store`)는 같고, escape 경로의 NaN·inf 는 정상 경로처럼 `null` 입니다. 서로게이트가 없으면 정상 경로 그대로라 응답은 바이트까지 같습니다.
+- **`documents`**: 서류-분류 content 를 output 순서대로 훑어 `index`(0부터)를 매깁니다 — 병합 단계 `branch_key` 의 `"<순번>:<코드>"` 와 같은 번호라, 분류 코드를 못 읽은 content 도 순번은 차지합니다. `page_start`·`page_end` 는 `page_ranges` 의 최소 시작·최대 끝(없으면 `null`). `kind` 는 추출 결과가 붙으면 `extracted`, 없고 기타 안내가 붙었거나 코드가 `Other` 면 `other` 입니다.
+- **짝짓기**: 추출·검증(`validation` = verdict)·기타 안내(`other_guide` = 본문 Markdown, 객체·목록이면 JSON 문자열 — 빈 문자열·빈 객체·빈 목록이면 `null`)는 서류 종류 없이 오므로 `additional_values.page_ranges` 로 잇습니다. `[a, b]`(정수, 1 ≤ a ≤ b ≤ 100000)만 남겨 정규화한 범위가 **정확히 같은**, 아직 그 값이 없는 서류 중 index 가 가장 작은 것에 붙입니다(추출 output 순서와 상관없음). **정규화한 범위가 빈 쪽이 있으면(서류든 항목이든) 짝짓지 않습니다** — 범위 없이 output 순서로 짝지어 추출 결과가 `Other` 서류에 붙는 일을 막습니다. 짝 없는 추출 결과(범위가 빈 것 포함)는 버리지 않고 서류(`type` null, index = 분류 content 수 + k, 범위가 없으면 `page_start`·`page_end` null)를 덧붙이고, 짝 없는 검증·기타 안내는 붙이지 않습니다.
+- **`findings`**: 추출 결과가 붙은 서류마다 추출 키 순서대로, 빈 값은 건너뜁니다. `;` 로 여러 값이 와도 한 항목입니다. `category`·`label`·`subject`·`mapping_status` 는 [필드 대응표](docs/field-mapping.md)(`imask_backend/fields.py`, 표에 없는 키는 `unknown`)에서 옵니다. `field`·`id`(`"<document_index>:<field>"`)는 추출의 **원래 키** 그대로이고(다듬지 않음), 대응표·메타·항목별 위험등급도 원래 키로 찾습니다. 표에 없는 키의 `label` 도 원래 키(비었거나 공백만이면 `(이름 없는 항목)`)입니다. `page` 는 `additional_values[키].page`(1 이상 정수 — 관찰상 파일 전체 기준, `-1` 이면 `null`. 쪽 번호는 page·page_ranges 모두 **1~100000**(`MAX_PAGE`)만 인정하고 넘으면 버림 — 아주 큰 정수가 화면 JavaScript 에서 정밀도를 잃지 않게), `boxes` 는 단어별 사각형(`word_coordinates`)을 먼저, 없으면 값 영역(`coordinates`)을 0~1 비율로(`page` 가 없으면 `[]` — 점 4개·좌표가 -0.001~1.001 인 수가 아닌 사각형은 그것만 버림, 아주 큰 정수·inf·nan·문자열에도 예외 없음), `confidence` 는 `high`·`low`.
+- **노출 상태·가림 미리보기**(`imask_backend/masking.py`)는 표시용 가공이고 판별이 아닙니다. `exposure` 는 값 속 가림 문자(`* ＊ ● ○ ■ □ ◆ ◇ ★ ☆`, 숫자 종류에서는 `X x ×` 도) 수로 `전체 노출`·`부분 마스킹`·`마스킹됨` 을 추정합니다. `masked` 는 `;` 조각마다 종류별 규칙(이름 `홍*동`, 주민등록번호 앞 7자리, 전화 앞 3·뒤 4자리, 카드 앞 4·뒤 4자리, 이메일 `@` 앞만, 주소 앞 2토큰, 그 밖은 토큰마다 첫 글자)을 쓰고, 길이는 원문과 같으며 글자는 원문 그대로이거나 `*` 입니다. 규칙 표는 [docs/field-mapping.md](docs/field-mapping.md#2-가림-규칙-화면-미리보기용--판별-아님)에 있습니다.
+- **항목별 위험등급**은 서버가 판별하지 않습니다. `위험도_판정` 노드가 `[{branch_key, field, grade, reason}]` 목록을 낼 때만 옮기며, 찾는 곳은 ① `data` 가 배열이면 그것, 객체면 값 중 배열 ② `additional_values` 의 값 중 배열(예 `items`) ③ `data` Markdown 안의 **닫힌** ```` ```json ````(또는 언어 표시 없는) 코드 블록입니다. 블록 경계는 줄 단위로 읽습니다(여는 줄 = 앞 공백 0~3칸 + 백틱 3개 이상 + 정보 문자열, 닫는 줄 = 같은 개수 이상의 백틱만) — 다른 언어 블록은 닫는 줄까지 건너뛰므로 그 안의 ```` ```json ```` 줄이나 블록 밖 목록은 읽지 않고, 닫히지 않은 블록도 무시합니다. `branch_key`·`field` 는 비어 있는지(공백만 포함)만 보고 **다듬지 않고 정확히** 비교합니다(서류의 `"<index>:<type>"`·추출의 원래 키와 같을 때만 — 공백만 다른 키에 옮겨 가지 않음). `grade` 가 `상`·`중`·`하` 인 것만 `high`·`medium`·`low`(`risk_source` `"workflow"`)로 쓰고 그 밖(`검토 필요`·영어·짝 없는 키)은 무시합니다. 본문·citations 에서 추측하지 않습니다. **지금 워크플로우는 항목별 등급을 내지 않아 모든 항목이 `unrated` 입니다.**
+- **`overall`**: `level` 은 `summary.risk_level`(`상`·`중`·`하`·`검토 필요` 밖이면 `null`), `text` 는 위험도_판정 본문 Markdown(인용 표시 `【†n】` 그대로), `next_stage`·`next_text` 는 `권장_조치`·`검토_안내` 단계와 그 본문입니다.
+- 합성 6쪽 묶음 실측(2026-11-03): `documents` 6, `findings` 29(좌표 있는 항목 28), 기본 조회 응답 **21,008 bytes**, `?include=stages` 응답 **348,712 bytes**.
 
 ### 제한과 알아 둘 점
 
-- **Vercel 함수의 요청·응답 본문은 4.5MB 까지**입니다. 그래서 파일은 서버를 거치지 않고 서명 업로드 URL 로 Storage 에 바로 올리고, 응답에서는 원본(`response`)을 뺍니다. 쪽 수가 아주 많은 묶음은 `stages` 의 서류-인식 결과(단어 좌표)가 커져 응답이 4.5MB 에 가까워질 수 있습니다.
+- **Vercel 함수의 요청·응답 본문은 4.5MB 까지**입니다. 그래서 파일은 서버를 거치지 않고 서명 업로드 URL 로 Storage 에 바로 올리고(원본 보기도 서명 다운로드 URL 로 Storage 에서 바로 받음), 기본 조회 응답에는 원본(`response`)과 단계별 결과(`stages`)를 넣지 않습니다. 합성 6쪽 묶음 실측은 기본 21,008 bytes, `?include=stages` 348,712 bytes 입니다. 쪽 수가 아주 많은 묶음은 `?include=stages` 응답이 서류-인식 결과(단어 좌표) 때문에 4.5MB 에 가까워질 수 있으니 진단용으로만 씁니다. 기본 응답은 탐지 항목 수(항목마다 단어 좌표)에 비례해 커집니다.
 - **`maxDuration` 60초**(`vercel.json`). 한 요청 안에서 분석 완료를 기다리지 않습니다. 시작은 작업만 만들고, **상태는 조회(GET)가 올 때만 나아갑니다.** 아무도 조회하지 않으면 Upstage 작업이 끝나도 DB 는 `running` 으로 남고 Upstage 파일도 지워지지 않습니다. 백그라운드 작업·워커는 쓰지 않습니다.
 - **실제 단계 이름이 Studio 노드 이름과 다릅니다**(`step_1_parse`, `Instruct - 위험도_판정` 등). 이름 문자열을 직접 비교하지 말고 `imask_backend.results.stage_key`·`stages_for` 를 씁니다.
 - `vercel.json` 에서 `"framework": "nextjs"` 로 고정합니다. 루트 `requirements.txt` 에 FastAPI 가 있으면 Vercel 이 Python 프레임워크 프리셋을 잡아 `api/` 파일 함수 대신 앱 전체를 Python 으로 돌리기 때문입니다([공식 문서](https://vercel.com/docs/functions/runtimes/python/api-directory)). Python 함수 묶음에서는 `excludeFiles` 로 `node_modules`·`src`·`tests` 등을 뺍니다.

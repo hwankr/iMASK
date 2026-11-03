@@ -249,3 +249,26 @@ def summarize(response_or_stages: Any) -> dict[str, Any]:
         "final_stage": final_stage,
         "other_document_count": _count_or_none(others),
     }
+
+
+# --- 다른 모듈(findings 등)이 쓰는 공개 도우미 — 위 요약과 같은 규칙을 그대로 쓴다 -----------------
+
+
+def as_stages(response_or_stages: Any) -> list[Mapping[str, Any]]:
+    """응답(Mapping)이면 parse_stages, 단계 목록이면 Mapping 인 것만. 그 밖은 빈 목록."""
+    return _as_stages(response_or_stages)
+
+
+def usable_stages_for(stages: Sequence[Mapping[str, Any]], key: str) -> list[Mapping[str, Any]]:
+    """정규 이름이 key 이고 쓸 수 있는(completed 또는 상태 없음) 단계를 output 순서대로."""
+    return _usable_for(stages, key)
+
+
+def stage_contents(stage: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """단계의 content 목록(Mapping 인 것만). contents 가 없으면 data·additional_values 하나로 본다."""
+    return _contents_of(stage)
+
+
+def document_type(content: Mapping[str, Any]) -> str | None:
+    """서류-분류 content 하나의 분류 코드(document_type._value, 없으면 text). 못 읽으면 None."""
+    return _document_type(content)

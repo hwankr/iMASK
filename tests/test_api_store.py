@@ -3,6 +3,8 @@
 #  supabase 클라이언트의 httpx 세션 전송층을 MockTransport 로 바꿔 네트워크 없이 본다:
 #  조건부 갱신의 쿼리(id·status·upstage_job_id=is.null), 서명 업로드 URL 반환 키,
 #  Storage '파일 없음'(HTTP 400 + 본문 statusCode 404) → None, 오류 문구 가림.
+#  서명 다운로드 URL(T1 findings-api): 진짜 storage3 의 요청·반환(절대 주소), 가짜 storage 클라이언트로
+#  반환 키 변형(signedURL·signedUrl·signed_url)·상대 경로·없는 객체 → None·그 밖 오류 → 가린 StoreError.
 # ==========================================================================
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ from typing import Any
 import httpx
 import pytest
 from api_fakes import FAKE_ENV, FAKE_SUPABASE_KEY
+from storage3.exceptions import StorageApiError
 
 from imask_backend.settings import load_settings
 from imask_backend.store import StoreError, SupabaseStore
@@ -161,3 +164,135 @@ def test_connection_error_is_store_error(mocked: tuple[SupabaseStore, Recorder])
         store.update_document("d1", {"upstage_file_id": "f"})
     with pytest.raises(StoreError):
         store.create_signed_upload_url("analyses/a1/document.pdf")
+
+
+# --- 서명 다운로드 URL -----------------------------------------------------------------
+
+
+def test_signed_download_url_with_real_storage3(mocked: tuple[SupabaseStore, Recorder]) -> None:
+    store, rec = mocked
+    rec.reply = (200, {"signedURL": "/object/sign/documents/analyses/a1/document.pdf?token=tok123"})
+    url = store.create_signed_download_url("analyses/a1/document.pdf", 600)
+    # storage3 2.33 은 Storage 기준 주소에 붙인 절대 주소를 돌려준다
+    assert url == f"{BASE}/storage/v1/object/sign/documents/analyses/a1/document.pdf?token=tok123"
+    (req,) = rec.requests
+    assert req.method == "POST"
+    assert req.url.path == "/storage/v1/object/sign/documents/analyses/a1/document.pdf"
+    assert json.loads(req.content) == {"expiresIn": "600"}
+
+
+def test_signed_download_url_missing_object_is_none(mocked: tuple[SupabaseStore, Recorder]) -> None:
+    store, rec = mocked
+    rec.reply = (400, {"statusCode": "404", "error": "not_found", "message": "Object not found"})
+    assert store.create_signed_download_url("analyses/a1/missing.pdf", 600) is None
+
+
+def test_signed_download_url_error_is_redacted(mocked: tuple[SupabaseStore, Recorder]) -> None:
+    store, rec = mocked
+    rec.reply = (400, {"statusCode": "403", "error": "Unauthorized", "message": f"bad {FAKE_SUPABASE_KEY}"})
+    with pytest.raises(StoreError) as info:
+        store.create_signed_download_url("analyses/a1/document.pdf", 600)
+    assert FAKE_SUPABASE_KEY not in info.value.message
+
+
+class FakeBucket:
+    def __init__(self, reply: Any) -> None:
+        self.reply = reply
+        self.calls: list[tuple[str, int]] = []
+
+    def create_signed_url(self, path: str, expires_in: int) -> Any:
+        self.calls.append((path, expires_in))
+        if isinstance(self.reply, BaseException):
+            raise self.reply
+        return self.reply
+
+
+class FakeStorage:
+    def __init__(self, bucket: FakeBucket) -> None:
+        self.bucket = bucket
+        self.names: list[str] = []
+
+    def from_(self, name: str) -> FakeBucket:
+        self.names.append(name)
+        return self.bucket
+
+
+class FakeClient:
+    def __init__(self, reply: Any, storage_url: str | None = "https://fake-project.supabase.co/storage/v1/") -> None:
+        self.storage = FakeStorage(FakeBucket(reply))
+        if storage_url is not None:
+            self.storage_url = storage_url
+
+
+ABSOLUTE = "https://fake-project.supabase.co/storage/v1/object/sign/documents/a/b.pdf?token=FAKE-download"
+
+
+def _fake_store(reply: Any, **kw: Any) -> tuple[SupabaseStore, FakeClient]:
+    client = FakeClient(reply, **kw)
+    return SupabaseStore(client, {FAKE_SUPABASE_KEY: "<SUPABASE_SECRET_KEY>"}), client
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        {"signedURL": ABSOLUTE, "signedUrl": ABSOLUTE},
+        {"signedURL": None, "signedUrl": ABSOLUTE},
+        {"signedUrl": ABSOLUTE},
+        {"signed_url": ABSOLUTE},
+        {"signedURL": f"  {ABSOLUTE}  "},
+    ],
+)
+def test_signed_download_url_key_variants(reply: Any) -> None:
+    store, client = _fake_store(reply)
+    assert store.create_signed_download_url("a/b.pdf", 600) == ABSOLUTE
+    assert client.storage.bucket.calls == [("a/b.pdf", 600)]
+    assert client.storage.names == ["documents"]
+
+
+@pytest.mark.parametrize("relative", ["/object/sign/documents/a/b.pdf?token=FAKE-download", "object/sign/documents/a/b.pdf?token=FAKE-download"])
+def test_signed_download_url_relative_becomes_absolute(relative: str) -> None:
+    store, _ = _fake_store({"signedURL": relative})
+    assert store.create_signed_download_url("a/b.pdf", 600) == ABSOLUTE
+
+
+def test_signed_download_url_relative_without_base_is_error() -> None:
+    store, _ = _fake_store({"signedURL": "/object/sign/x?token=FAKE"}, storage_url=None)
+    with pytest.raises(StoreError):
+        store.create_signed_download_url("a/b.pdf", 600)
+
+
+@pytest.mark.parametrize("reply", [{}, {"signedURL": None, "signedUrl": None}, {"signedURL": ""}, {"signedURL": 5}, "x", None, []])
+def test_signed_download_url_without_url_is_error(reply: Any) -> None:
+    store, _ = _fake_store(reply)
+    with pytest.raises(StoreError):
+        store.create_signed_download_url("a/b.pdf", 600)
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
+        StorageApiError("Object not found", "not_found", "404"),
+        StorageApiError("Object not found", "InvalidKey", 400),
+        StorageApiError("missing", "NoSuchKey", 400),
+    ],
+)
+def test_signed_download_url_not_found_is_none(exc: BaseException) -> None:
+    store, _ = _fake_store(exc)
+    assert store.create_signed_download_url("a/b.pdf", 600) is None
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
+        StorageApiError(f"denied {FAKE_SUPABASE_KEY}", "Unauthorized", "403"),
+        RuntimeError(f"boom {FAKE_SUPABASE_KEY} {ABSOLUTE}"),
+        httpx.ConnectError("down"),
+    ],
+)
+def test_signed_download_url_other_errors_are_redacted_store_errors(exc: BaseException) -> None:
+    store, _ = _fake_store(exc)
+    with pytest.raises(StoreError) as info:
+        store.create_signed_download_url("a/b.pdf", 600)
+    assert FAKE_SUPABASE_KEY not in info.value.message
+    assert "FAKE-download" not in info.value.message  # 서명 URL 의 token 값도 가린다
+    assert info.value.__cause__ is None and info.value.__suppress_context__

@@ -7,6 +7,10 @@
 #    보내고 바뀐 행이 없으면 None. 같은 분석을 두 요청이 동시에 처리해도 한 번만 반영된다.
 #  - 오류는 StoreError 하나로 감싼다. 메시지는 redaction.redact 로 가린 짧은 문구(로그용)이고,
 #    화면에는 업무 로직이 정한 한국어 문장만 내보낸다.
+#  - 서명 다운로드 URL(create_signed_download_url): storage3 2.33 의 create_signed_url(path, expires_in) 은
+#    {'signedURL', 'signedUrl'} 에 이미 절대 주소(Storage 기준 주소 + /object/sign/…?token=…)를 담아 준다.
+#    다른 버전·가짜가 상대 경로를 주면 Storage 기준 주소(client.storage_url)에 붙인다. 없는 객체는 None.
+#    서명 URL 은 로그에 남기지 않는다.
 # ==========================================================================
 
 from __future__ import annotations
@@ -73,6 +77,10 @@ class Store(Protocol):
 
     def download(self, path: str) -> bytes | None:
         """버킷에서 파일 내용. 파일이 없으면 None."""
+        ...
+
+    def create_signed_download_url(self, path: str, expires_in: int) -> str | None:
+        """버킷 객체의 서명 다운로드 URL(절대 주소, expires_in 초 유효). 객체가 없으면 None, 그 밖 실패는 StoreError."""
         ...
 
 
@@ -231,6 +239,31 @@ class SupabaseStore:
             if _is_not_found(exc):
                 return None
             raise self._error("파일 받기", exc) from None
+
+    def create_signed_download_url(self, path: str, expires_in: int) -> str | None:
+        action = "서명 다운로드 URL 만들기"
+        try:
+            data = self._storage().create_signed_url(path, expires_in)
+        except Exception as exc:
+            # 없는 객체: Storage 는 HTTP 400 + 본문 statusCode "404"(download 와 같다)
+            if _is_not_found(exc):
+                return None
+            raise self._error(action, exc) from None
+        url: Any = None
+        if isinstance(data, Mapping):
+            url = data.get("signedURL") or data.get("signedUrl") or data.get("signed_url")
+        if not isinstance(url, str) or not url.strip():
+            raise StoreError(f"{action}: 응답에 URL 이 없습니다")
+        return self._absolute(url.strip(), action)
+
+    def _absolute(self, url: str, action: str) -> str:
+        """상대 경로(/object/sign/…)면 Storage 기준 주소에 붙인다. 이미 절대 주소면 그대로."""
+        if url.startswith(("https://", "http://")):
+            return url
+        base = str(getattr(self._client, "storage_url", "") or "")
+        if not base.startswith(("https://", "http://")):
+            raise StoreError(f"{action}: 상대 경로를 붙일 Storage 주소가 없습니다")
+        return base.rstrip("/") + "/" + url.lstrip("/")
 
 
 # 설정(URL·키)마다 클라이언트 하나를 다시 쓴다(요청마다 만들면 인증 클라이언트까지 새로 만든다)

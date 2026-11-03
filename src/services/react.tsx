@@ -20,8 +20,8 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
-import type { AnalysisService, DemoControls, Pending, ServiceEvent } from './analysis-service';
-import { createService, getDemoControls } from './index';
+import type { AnalysisService, DemoControls, LiveExtras, Pending, ServiceEvent } from './analysis-service';
+import { createService, getDemoControls, getLiveExtras } from './index';
 import type { Analysis } from './types';
 
 /* ---------- 서비스 하나(브라우저 전용) ---------- */
@@ -67,6 +67,11 @@ export function useService(): AnalysisService | null {
 /** 데모 전용 조작. 데모 서비스가 아니거나 아직 서비스가 없으면 null. */
 export function useDemoControls(): DemoControls | null {
   return getDemoControls(useService());
+}
+
+/** 실제 분석 전용 통로(원본 파일 · 단계별 JSON). 실제 분석 서비스가 아니거나 아직 서비스가 없으면 null. */
+export function useLiveExtras(): LiveExtras | null {
+  return getLiveExtras(useService());
 }
 
 /** 서비스 이벤트(분석 완료 등)를 받는다. listener 가 바뀌어도 다시 구독하지 않는다. */

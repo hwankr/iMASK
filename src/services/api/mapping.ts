@@ -3,15 +3,20 @@
    - 분석 번호 code = 'DG-YYYYMMDD-XXXX'(만든 날짜는 서울 시각, XXXX = id 앞 4자 대문자).
    - 시각은 'YYYY-MM-DD HH:mm'(Asia/Seoul — src/lib/format.ts 의 형식과 같다). 한국은 서머타임이 없어
      UTC+9 로 고정 계산한다(브라우저 시간대와 무관하게 같은 값).
-   - 위험도는 result.summary.risk_level: 상 → high · 중 → medium · 하 → low · 그 밖(검토 필요·없음) → unrated.
-   - 실제 분석에는 탐지 항목·검토사항·연결·이력이 아직 없다(빈 목록). 검토 상태는 늘 'none'.
-   - 백엔드가 준 원래 값은 raw 에 둔다(결과 JSON · 오류 · 작업 번호 · 조회 상태 · 원래 시각).
+   - 위험도는 result.overall.level(공통 계약), 없으면 result.summary.risk_level:
+     상 → high · 중 → medium · 하 → low · 그 밖(검토 필요·없음) → unrated.
+   - 완료 + 공통 계약 결과(result.documents 에 유효한 서류 1개 이상 + result.findings 배열)면 detailReady:
+     docs = 분류된 서류, findings = 계약 탐지 항목(contract.ts), riskReasons·recs = overall 의 Markdown 줄.
+     그 밖(대기·분석 중·실패·옛 형식·서류 0개)은 전과 같이 docs = 올린 파일 행, findings = [].
+   - 검토사항·연결·이력은 아직 없다(빈 목록). 검토 상태는 늘 'none'.
+   - 백엔드가 준 원래 값은 raw 에 둔다(결과 JSON · 올린 파일 · detailReady · overall · 오류 · 작업 번호 · 조회 상태 · 원래 시각).
    ========================================================================== */
 
 import { ASTATUS, type AnalysisStatus, type RiskLevel } from '@/display/rules';
 import { pad2 } from '@/lib/format';
 import type { Analysis, AnalysisDoc, DocStatus, RawAnalysisInfo } from '../types';
 import type { AnalysisOut, DocumentOut } from './client';
+import { isDetailReady, markdownLines, readDocSources, readFile, readOverall, toLiveDocs, toLiveFindings } from './contract';
 
 /** 서울 시각 = UTC + 9시간 */
 const SEOUL_OFFSET_MS = 9 * 60 * 60 * 1000;
@@ -120,8 +125,17 @@ export function toAnalysis(out: AnalysisOut): Analysis {
   const error = str(out.error);
   const result = out.result !== undefined && out.result !== null && typeof out.result === 'object' ? out.result : null;
   const terminal = status === 'done' || status === 'failed' || status === 'partial';
+  const analyzedAt = terminal ? seoulDateTime(out.updated_at) : '';
+  const documents = Array.isArray(out.documents) ? out.documents : [];
+  const file = readFile(documents);
+  const overall = readOverall(result);
+  const sources = result ? readDocSources((result as { documents?: unknown }).documents) : [];
+  const detailReady = isDetailReady(status, result, sources);
   const raw: RawAnalysisInfo = {
     result,
+    file,
+    detailReady,
+    overall,
     error,
     jobId: str(out.upstage_job_id),
     upstageStatus: str(out.upstage_status),
@@ -129,25 +143,24 @@ export function toAnalysis(out: AnalysisOut): Analysis {
     createdAt: str(out.created_at),
     updatedAt: str(out.updated_at),
   };
-  const documents = Array.isArray(out.documents) ? out.documents : [];
   return {
     id: str(out.id),
     code: analysisCode(out.id, out.created_at),
     name: str(out.name),
     submittedAt: seoulDateTime(out.created_at),
-    analyzedAt: terminal ? seoulDateTime(out.updated_at) : '',
+    analyzedAt,
     status,
-    risk: riskFromLevel(summaryRiskLevel(result)),
+    risk: riskFromLevel(overall && overall.level.trim() ? overall.level : summaryRiskLevel(result)),
     review: 'none',
-    docs: documents.map((d) => toDoc(d, status, error)),
-    findings: [],
+    docs: detailReady ? toLiveDocs(sources, file, extLabel(file?.mime, file?.name)) : documents.map((d) => toDoc(d, status, error)),
+    findings: detailReady ? toLiveFindings((result as { findings?: unknown }).findings, sources, analyzedAt) : [],
     items: [],
     links: [],
     history: [],
     memo: '',
     memoAt: '',
-    riskReasons: [],
-    recs: [],
+    riskReasons: markdownLines(overall?.text),
+    recs: markdownLines(overall?.nextText),
     limits: '',
     reviewer: '',
     reviewedAt: '',

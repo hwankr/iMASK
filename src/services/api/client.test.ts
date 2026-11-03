@@ -48,6 +48,54 @@ describe('요청 모양', () => {
     expect(seen).toHaveLength(0);
   });
 
+  it('getAnalysis(id, { includeStages: true }) 만 ?include=stages 를 붙인다', async () => {
+    const { fetch, seen } = fakeFetch(() => json(200, analysisOut()));
+    const client = createApiClient({ fetch, getAccessCode: () => 'code-123' });
+    await client.getAnalysis(ID, { includeStages: true });
+    await client.getAnalysis(ID, { includeStages: false });
+    await client.getAnalysis(ID, {});
+    await client.getAnalysis(ID);
+    expect(seen.map((r) => [r.method, r.url])).toEqual([
+      ['GET', `/api/py/analyses/${ID}?include=stages`],
+      ['GET', `/api/py/analyses/${ID}`],
+      ['GET', `/api/py/analyses/${ID}`],
+      ['GET', `/api/py/analyses/${ID}`],
+    ]);
+    for (const r of seen) expect(r.headers['x-demo-code']).toBe('code-123');
+  });
+
+  it('getFile — GET /analyses/{id}/file, X-Demo-Code · JSON 응답을 그대로', async () => {
+    const body = { url: 'https://storage.example.test/object/sign/documents/a.pdf?token=fixture-token', mime_type: 'application/pdf', filename: 'a.pdf' };
+    const { fetch, seen } = fakeFetch(() => json(200, body));
+    const out = await createApiClient({ fetch, getAccessCode: () => ' code-123 ' }).getFile('a/b');
+    expect(out).toEqual(body);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ method: 'GET', url: '/api/py/analyses/a%2Fb/file', body: undefined });
+    expect(seen[0].headers['x-demo-code']).toBe('code-123');
+    expect(seen[0].headers.accept).toBe('application/json');
+  });
+
+  it('getFile 오류 — 401 · 404 는 백엔드 detail 그대로, 네트워크 · 시간 초과는 다른 요청과 같다', async () => {
+    const cases: [number, string, string][] = [
+      [401, 'unauthorized', '접근 코드가 맞지 않습니다.'],
+      [404, 'not_found', '원본 파일을 찾을 수 없습니다.'],
+      [500, 'server', '서버 설정이 빠졌습니다.'],
+    ];
+    for (const [status, code, detail] of cases) {
+      const { fetch } = fakeFetch(() => json(status, { detail }));
+      await expect(createApiClient({ fetch, getAccessCode: () => 'c' }).getFile(ID)).rejects.toMatchObject({ status, code, message: detail });
+    }
+    const down = (async () => {
+      throw new TypeError('Failed to fetch');
+    }) as typeof globalThis.fetch;
+    await expect(createApiClient({ fetch: down, getAccessCode: () => 'c' }).getFile(ID)).rejects.toMatchObject({ status: 0, code: 'network', message: MSG_NETWORK });
+    const hang = ((_: unknown, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+      })) as typeof globalThis.fetch;
+    await expect(createApiClient({ fetch: hang, getAccessCode: () => 'c', timeoutMs: 5 }).getFile(ID)).rejects.toMatchObject({ code: 'network', message: MSG_TIMEOUT });
+  });
+
   it('id 는 주소 조각으로 감싼다 · baseUrl 끝 / 는 뗀다', async () => {
     const { fetch, seen } = fakeFetch(() => json(200, analysisOut()));
     await createApiClient({ fetch, baseUrl: 'http://x/api/py/', getAccessCode: () => 'c' }).getAnalysis('a/b?c');

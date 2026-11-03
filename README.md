@@ -198,7 +198,7 @@ supabase/                   DB 변경 기록 — migrations/에 적용한 SQL을
 
 | 주소 | 실제 분석 모드 |
 |---|---|
-| `/` | 기존 목록 화면 그대로입니다. **이 탭에서 만든 분석만** 보입니다(백엔드에 목록 경로가 없습니다 — 공용 코드로 남의 분석이 보이지 않게). id 목록은 sessionStorage `imask:api-analyses`(최신 50개)에 있고, 접근 코드가 없으면 빈 목록입니다. 위험등급은 위험도 판정에서 옵니다(상·중·하 → 높음·보통·낮음, 검토 필요·없음 → 미평가). 검토 상태는 늘 미검토입니다. |
+| `/` | 기존 목록 화면 그대로입니다. **이 탭에서 만든 분석만** 보입니다(백엔드에 목록 경로가 없습니다 — 공용 코드로 남의 분석이 보이지 않게). id 목록은 sessionStorage `imask:api-analyses`(최신 50개)에 있고, 접근 코드가 없으면 빈 목록입니다. 위험등급은 묶음 전체 위험도 판정에서 옵니다 — 공통 계약의 `result.overall.level`, 없으면 `result.summary.risk_level`(상·중·하 → 높음·보통·낮음, 검토 필요·없음 → 미평가). 탐지 항목별 위험등급은 워크플로우가 판정한 항목(`risk_source: "workflow"`)만 받은 값이고 나머지는 미평가입니다. 검토 상태는 늘 미검토입니다. |
 | `/analyses/new` | 실제 분석 새 화면(`src/components/live/LiveUploadScreen.tsx`) — 합성 자료 안내, 접근 코드, 분석명, 파일 1개, 진행 단계 |
 | `/analyses/[id]` | 실제 분석 상세(`src/components/live/LiveDetailScreen.tsx`) — 머리(분석명·상태·분석 번호 `DG-YYYYMMDD-XXXX`·요청 시각·파일·경과 시간), 진행 중 안내와 Upstage 상태, 실패 문구와 '새 분석', 완료 요약(분류한 서류 수와 종류·정보를 추출한 서류 수·위험도·마지막 단계·기타 서류·걸린 시간·Upstage 작업 번호)과 단계별 결과(단계마다 접고 펴는 JSON — 펼칠 때만 그립니다). 없는 id 면 안내와 '새 분석'(목록으로 보내지 않습니다). |
 | `/analyses/[id]/report` | '실제 분석 보고서는 아직 없습니다' 안내와 상세로 가는 링크 |
@@ -419,7 +419,12 @@ export function createService(): AnalysisService {
 | 내보내기 | `buildExport(id, format, brand?)` → `ExportFile`, `logExport(id, file, state)` | 거절 |
 | 변경 알림 | `subscribe(listener)` → 구독 해제 함수 | 아래 3 참고 |
 
-- 실제 분석을 위해 타입에 선택 필드 셋을 더했습니다: `UploadFile.file`(브라우저 `File`), `RequestAnalysisInput.onProgress`(데모 화면은 넘기지 않습니다 — 데모 서비스는 입력을 `structuredClone` 하므로 함수를 넘기면 실패), `Analysis.raw`(백엔드 원래 값 — 결과 JSON·오류·작업 번호·조회 상태·원래 시각).
+- 실제 분석을 위해 타입에 선택 필드를 더했습니다(데모 서비스·샘플은 넣지 않습니다):
+  - `UploadFile.file`(브라우저 `File`), `RequestAnalysisInput.onProgress`(데모 화면은 넘기지 않습니다 — 데모 서비스는 입력을 `structuredClone` 하므로 함수를 넘기면 실패).
+  - `Analysis.raw`(백엔드 원래 값) — 결과 JSON(`result`, 기본 조회에는 `stages` 가 없음)·올린 파일(`file`)·`detailReady`(공통 계약 결과라 상세 검토 화면으로 보일 수 있는지)·`overall`(묶음 위험도 판정과 다음 단계 Markdown)·오류·작업 번호·조회 상태·원래 시각.
+  - `AnalysisDoc.source`(`DocSource` — 분류된 서류가 묶음 파일 안 어디에 있는지: 분류 순번·코드·파일 기준 쪽 범위·`extracted`/`other`·기타 서류 안내·검증 결과).
+  - `Finding.boxes`(`FindingBox[]` — 위치 ID `a` 와 쪽 크기에 대한 0~1 비율 꼭짓점. 같은 ID 가 `anchors` 에 들어 있습니다), `Finding.live`(`FindingLive` — 계약 id·영문 키·원문 값·매핑 상태·신뢰도·위험등급 출처).
+  - `Finding.rule` 은 `RuleId | ''`(`''` = 적용 규칙 없음 — 실제 분석). 규칙 이름은 `ruleName(rule)`(`src/display/rules.ts`, 없으면 `''`)로 읽습니다.
 - 백엔드 오류는 `ApiError { status, code: 'unauthorized' | 'not_found' | 'conflict' | 'bad_request' | 'server' | 'network', message, analysisId }` 로 옵니다. `message` 는 백엔드의 한국어 `detail` 이거나 기본 문구이고, `analysisId` 는 시작 결과를 모를 때만 이미 만든 분석 id 입니다(화면은 `apiErrorAnalysisId()` 로 읽음).
 - 서명 업로드 오류는 SDK 오류 문구(바깥 응답 그대로 — 서명 URL·토큰이 섞일 수 있음)를 기록하지 않습니다. 콘솔에는 고정 문구 + 오류 이름 + 숫자 HTTP 상태만 남깁니다(`describeUploadError`).
 - `sampleFiles()` 는 새 분석 화면의 '데모용 샘플 문서로 체험하기'와 `/analyses/new?sample=1` 에 쓰는 데모 기능이지만, 인터페이스에 있으므로 실제 분석 서비스도 구현합니다(빈 목록).
@@ -450,13 +455,24 @@ export function createService(): AnalysisService {
 
 화면 4개는 `DemoControls` 없이 `AnalysisService` 만으로 동작합니다.
 
+**실제 분석 전용 통로 — `LiveExtras`.** 같은 방식으로 `getLiveExtras(service)`(`src/services/index.ts`)는 실제 분석 서비스일 때만 `LiveExtras` 를 주고, 데모 서비스(그 밖)면 `null` 입니다. 화면에서는 `useLiveExtras()`(`src/services/react.tsx`, 서비스가 아직 없으면 `null`)로 받습니다.
+
+| 메서드 | 하는 일 |
+|---|---|
+| `loadFile(id)` → `{ bytes: ArrayBuffer, mime, filename }` | 부를 때마다 `GET /api/py/analyses/{id}/file` 로 **새 서명 주소**(10분 유효)를 받고 그 주소에서 원본 파일을 받습니다(캐시는 화면이 합니다). 주소는 `https:`(또는 로컬 가짜 백엔드용 `http://localhost`·`127.0.0.1`)만 받고, 받기 요청에는 `X-Demo-Code` 등 사용자 지정 헤더를 붙이지 않습니다(`credentials: 'omit'`·`cache: 'no-store'`). 시간 제한 60초(본문까지), 2xx 아님·빈 본문·20MB 초과는 오류입니다. 접근 코드 401·없음 404 는 **안전한 백엔드 문구만** 그대로 보이고 주소·서명·키·긴 토큰 모양이 섞이면 고정 안내 문구로 바꾸며, 그 밖 오류(5xx·네트워크·시간 초과·받기 실패 등)는 늘 고정 한국어 문구의 `ApiError` 이고, **서명 주소·토큰은 오류 문구·콘솔 어디에도 남기지 않습니다**(`src/services/api/file-download.ts`). |
+| `loadStages(id)` → `unknown[] \| null` | `GET /api/py/analyses/{id}?include=stages` 의 `result.stages`(배열이 아니면 `null`). 404·401 은 `null` 이 아니라 `ApiError` 로 거절합니다(화면이 문구를 보입니다). |
+
 ### 5. 분석 출력 형식이 확정되면
 
 이 파일들을 바꿉니다. 타입은 ② 표시 규칙의 목록에서 뽑아 쓰므로, 바꾼 뒤 `npm run typecheck` 가 고칠 곳을 알려 줍니다.
 
 - **`src/display/rules.ts`** — 위험등급(`RISK`), 분석·검토·탐지 상태(`ASTATUS`·`RSTATUS`·`FSTATUS`), 검토사항 종류(`RTYPE`), 연결 상태(`LSTATUS`), 규칙 ID 예시(`RULES`), 이력 구분(`HKIND`), 정보 종류(`CATS`), 정보 주체(`SUBJECTS`), 노출 상태(`EXPOSURES`), 오탐 사유(`FP_REASONS`), 내보내기 형식(`EXPORT_FORMATS`)의 키·라벨·아이콘·색 토큰.
 - **`src/services/types.ts`** — 분석 건(`Analysis`), 문서(`AnalysisDoc`), 탐지 항목(`Finding`), 검토사항(`ReviewItem`), 문서 간 연결(`DocLink`), 이력(`HistoryEntry`), 업로드 파일(`UploadFile`), 내보내기 파일(`ExportFile`)의 모양.
-- **`src/services/api/mapping.ts`** — 백엔드 응답(`AnalysisOut`)을 `Analysis` 로 바꾸는 순수 함수(`toAnalysis`). 지금은 상태·위험도·문서·시각만 옮기고 탐지 항목 등은 빈 목록이며, 결과 원래 값은 `Analysis.raw.result` 에 둡니다. Upstage 결과에서 탐지 항목·검토사항을 만들게 되면 여기를 고칩니다.
+- **`src/services/api/mapping.ts`** — 백엔드 응답(`AnalysisOut`)을 `Analysis` 로 바꾸는 순수 함수(`toAnalysis`). 상태·시각·분석 번호와 함께, 완료된 분석의 `result` 가 공통 계약(유효한 `documents` 1개 이상 + `findings` 배열)이면 `raw.detailReady = true` 로 표시하고 공통 계약 읽기(`src/services/api/contract.ts`)로 화면 도메인을 채웁니다. 그 밖(대기·분석 중·실패·옛 형식·서류 0개)은 전처럼 `docs` = 올린 파일 행, `findings` = `[]` 입니다. 결과 원래 값은 `Analysis.raw.result` 에 둡니다.
+  - 서류: `documents[]` → `AnalysisDoc`(`index` 순, id `doc-<index>`, 제목 = 분류 코드의 한국어 이름 `docTypeName` — 같은 이름은 두 번째부터 ` 2`·` 3`, `pageCount`·`source`).
+  - 탐지 항목: `findings[]` → `Finding`. 화면 번호는 `D<서류 목록 순번>-<그 서류 안 순번 두 자리>`(예 `D1-01`)로 새로 만들고 계약 id(`<document_index>:<field>`)는 `live.id` 에 둡니다. 서류 목록 순번은 정렬·중복 제거한 서류 목록(화면의 서류 순서)의 위치(1부터)라 계약 `index` 에 빈 번호가 있어도 `D1`·`D2`·`D3` 으로 이어집니다(계약 `index` 는 `source.index`·서류 id `doc-<index>` 에 남습니다). 짝이 되는 서류가 없는 항목은 버립니다. 정보 종류·주체·노출이 목록 밖이면 `기타 개인정보`·`기타`·`전체 노출`. 항목 위험등급은 `risk_source` 가 `workflow` 일 때만 받은 값이고 그 밖은 미평가(고정 판단 근거 문구). 쪽은 파일 기준 → 서류 안 쪽으로 바꾸고, 쪽을 모르거나 범위 밖이면 1쪽·위치 없음(`anchors: []` — '위치 확인 필요', 원문 값이 근거 문구). 상자는 꼭짓점 2개 이상·모든 좌표가 유한한 수인 것만 `boxes` 로 옮깁니다(위치 ID `<항목 번호>#<순번>`, 값은 자르지 않음).
+  - 분석 건: 위험등급 = `overall.level`(없으면 `summary.risk_level`), `riskReasons` = `overall.text`, `recs` = `overall.next_text`(권장 조치든 검토 안내든 — 단계 이름은 `raw.overall.nextStage`)를 Markdown 줄 목록으로 바꿉니다(`markdownLines` — 제목·빈 줄을 빼고 목록 기호·인용 표시 `【…】`·굵게 `**` 를 지움).
+  - 계약 모양 고정 자료는 `src/services/api/fixtures/done-result.json`(합성 묶음 `testdocs/iMASK_smoke_bundle.pdf` 6쪽 = 서류 6개, `stages` 없음)입니다. 테스트와 가짜 백엔드가 같은 파일을 씁니다.
 
 ---
 

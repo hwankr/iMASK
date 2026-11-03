@@ -1,10 +1,13 @@
 /* ==========================================================================
-   테스트 도우미(실제 분석 서비스) — 메모리 저장소 · 가짜 fetch · AnalysisOut 만들기.
+   테스트 도우미(실제 분석 서비스) — 메모리 저장소 · 가짜 fetch · AnalysisOut 만들기 · 계약 모양 결과(고정 자료).
    앱 코드는 import 하지 않는다(테스트 전용).
+   고정 자료 fixtures/done-result.json = 합성 묶음(testdocs/iMASK_smoke_bundle.pdf, 6쪽 = 서류 6개)의 공통 계약
+   result(stages 없음). 다음 작업의 가짜 백엔드도 같은 파일을 읽는다.
    ========================================================================== */
 
 import type { KeyValueStorage } from './access-code';
 import type { AnalysisOut, DocumentOut } from './client';
+import doneResultFixture from './fixtures/done-result.json';
 
 /** sessionStorage 대신 쓰는 메모리 저장소 */
 export function memoryStorage(init: Record<string, string> = {}): KeyValueStorage & { data: Map<string, string> } {
@@ -91,6 +94,11 @@ export function doneResult(): Record<string, unknown> {
       { name: 'Instruct - 권장_조치', key: null, status: 'failed', data: '문장', additional_values: null, contents: [] },
     ],
   };
+}
+
+/** 공통 계약 모양의 완료 결과(fixtures/done-result.json) — 깊은 복사본이라 고쳐도 다른 테스트에 번지지 않는다 */
+export function contractResult(): Record<string, unknown> {
+  return structuredClone(doneResultFixture) as unknown as Record<string, unknown>;
 }
 
 /** AnalysisOut */

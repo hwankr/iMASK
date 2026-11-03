@@ -185,6 +185,26 @@ export interface AnalysisDoc {
   pageCount?: number | null;
   /** 스캔 이미지(종이색·필터가 다름) */
   scan?: boolean;
+  /** 실제 분석에서만 — 분류된 서류가 올린 묶음 파일 안 어디에 있는지. 데모 문서는 넣지 않는다. */
+  source?: DocSource;
+}
+
+/** 실제 분석의 '분류된 서류' 위치 — 계약 result.documents[] 한 행 */
+export interface DocSource {
+  /** 분류 순번(0부터) */
+  index: number;
+  /** 분류 코드(loan_application · Other 등) */
+  type: string;
+  /** 파일 전체 기준 첫 쪽(1부터) */
+  pageStart: number;
+  /** 파일 전체 기준 끝 쪽(1부터, 포함) */
+  pageEnd: number;
+  /** extracted = 정보를 추출한 서류 / other = 기타 서류 */
+  kind: 'extracted' | 'other';
+  /** 기타 서류 안내 Markdown(없으면 빈 문자열) */
+  otherGuide: string;
+  /** 필수항목 검증 결과(예 'green', 없으면 빈 문자열) */
+  validation: string;
 }
 
 /* ---------- 탐지 항목 ---------- */
@@ -212,8 +232,8 @@ export interface Finding {
   risk: RiskLevel;
   /** 판단 근거 */
   reason: string;
-  /** 적용 규칙(디자인용 예시) */
-  rule: RuleId;
+  /** 적용 규칙(디자인용 예시). '' = 적용 규칙 없음(실제 분석) */
+  rule: RuleId | '';
   docId: string;
   /** 1부터 */
   page: number;
@@ -232,6 +252,36 @@ export interface Finding {
   updatedAt: string;
   /** 최초 AI 결과 */
   ai: FindingAi;
+  /** 실제 분석에서만 — 원문 위치 상자(쪽 크기에 대한 비율). anchors 의 위치 ID 와 짝. 데모는 넣지 않는다. */
+  boxes?: FindingBox[];
+  /** 실제 분석에서만 — 계약이 준 원래 값. 데모는 넣지 않는다. */
+  live?: FindingLive;
+}
+
+/** 원문 위치 상자 하나(실제 분석) */
+export interface FindingBox {
+  /** 위치 ID — 이 항목의 anchors 에 같은 값이 들어 있다 */
+  a: string;
+  /** 쪽 크기에 대한 0~1 비율 꼭짓점(2개 이상). 범위 밖 값도 그대로 둔다(화면 변환이 자른다) */
+  points: { x: number; y: number }[];
+}
+
+/** 계약 매핑 상태 — ok 대응됨 / needs_review 대응 확인 필요 / unknown 대응표에 없음 */
+export type FindingMappingStatus = 'ok' | 'needs_review' | 'unknown';
+
+/** 실제 분석 탐지 항목의 원래 값(계약 findings[] 한 행에서) */
+export interface FindingLive {
+  /** 계약 id '<document_index>:<field>' */
+  id: string;
+  /** 워크플로우 영문 키(applicant_name 등) */
+  field: string;
+  /** 원문 값 */
+  value: string;
+  mappingStatus: FindingMappingStatus;
+  /** 추출 신뢰도(모르면 null) */
+  confidence: 'high' | 'low' | null;
+  /** 항목 위험등급을 워크플로우가 판정했으면 'workflow', 아니면 null(미평가) */
+  riskSource: 'workflow' | null;
 }
 
 /* ---------- 검토사항 ---------- */
@@ -361,8 +411,17 @@ export interface Analysis {
 
 /** 실제 분석의 원래 값 — 빈 값은 '' / null */
 export interface RawAnalysisInfo {
-  /** analyses.result(imask-upstage-v1 — format·job·summary·stages). 아직 없으면 null */
+  /**
+   * analyses.result(imask-upstage-v1 — format·job·summary, 공통 계약이면 documents·findings·overall).
+   * 기본 조회에는 stages 가 없다(단계별 JSON 은 LiveExtras.loadStages). 아직 없으면 null
+   */
   result: unknown | null;
+  /** 올린 파일(documents 첫 행). 없으면 null */
+  file: RawFileInfo | null;
+  /** result 가 공통 계약(서류 1개 이상 + findings 배열)을 담은 완료 분석이라 상세 검토 화면으로 보일 수 있는지 */
+  detailReady: boolean;
+  /** 계약 overall(묶음 전체 위험도 판정 · 다음 단계 안내). 없으면 null, 빠진 값은 '' */
+  overall: RawOverall | null;
   /** 실패 이유(백엔드 문구 그대로) */
   error: string;
   /** Upstage 작업 번호(job_…) */
@@ -375,6 +434,29 @@ export interface RawAnalysisInfo {
   createdAt: string;
   /** 마지막으로 바뀐 시각(ISO 8601 원문) */
   updatedAt: string;
+}
+
+/** 실제 분석에 올린 파일 */
+export interface RawFileInfo {
+  id: string;
+  /** 파일 이름 */
+  name: string;
+  /** MIME 형식 */
+  mime: string;
+  /** 바이트 */
+  size: number;
+}
+
+/** 계약 overall — 빈 값은 '' */
+export interface RawOverall {
+  /** 위험도 판정 원문(상·중·하·검토 필요) */
+  level: string;
+  /** 위험도 판정 Markdown */
+  text: string;
+  /** 다음 단계 이름(권장_조치 · 검토_안내) */
+  nextStage: string;
+  /** 다음 단계 Markdown */
+  nextText: string;
 }
 
 /* ---------- 업로드 파일 ---------- */

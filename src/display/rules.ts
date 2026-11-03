@@ -6,6 +6,7 @@
    - 색은 모두 tokens.css 의 var(--토큰)이다(리터럴 없음). 색은 항상 글자·아이콘과 함께 쓴다.
    - 규칙 ID(PII-ID-001 등)와 위험 판정은 디자인용 예시다. 실제 기준처럼 늘리지 않는다.
    - 등급 라벨·정보 종류·정보 주체·노출 상태·오탐 사유·이력 구분 목록은 이 파일에만 둔다.
+   - 실제 분석의 서류 종류 이름(DOC_TYPE_NAMES)도 여기 둔다 — 서비스 계층(매핑)과 실제 분석 화면이 함께 쓴다.
    ========================================================================== */
 
 import type { IconName } from './icon-names';
@@ -155,6 +156,19 @@ export const RULES = {
 
 export type RuleId = keyof typeof RULES;
 
+/* ---------- 실제 분석 서류 종류 ---------- */
+
+/** 워크플로우 분류 코드 → 한국어 이름(실제 분석). 모르는 코드는 docTypeName 이 그대로 돌려준다 */
+export const DOC_TYPE_NAMES: Record<string, string> = {
+  loan_application: '대출신청서',
+  consent_form: '동의서',
+  income_proof: '소득 증빙',
+  power_of_attorney: '위임장',
+  debt_transaction: '채무내역',
+  Other: '기타',
+  other: '기타',
+};
+
 /* ---------- 검토 이력 구분 ---------- */
 
 export const HKIND = {
@@ -221,6 +235,16 @@ export function analysisStatusView(status: string | null | undefined): AnalysisS
 /** 검토 상태 표기. 모르는 값은 '미검토'. (원본 rvV) */
 export function reviewStatusView(status: string | null | undefined): ReviewStatusView {
   return hasKey(RSTATUS, status) ? RSTATUS[status] : RSTATUS.none;
+}
+
+/** 적용 규칙 이름. 규칙이 없거나('' — 실제 분석) 모르는 값이면 ''. */
+export function ruleName(rule: string | null | undefined): string {
+  return hasKey(RULES, rule) ? RULES[rule] : '';
+}
+
+/** 서류 종류 코드 → 한국어 이름(실제 분석). 모르는 코드는 그대로 */
+export function docTypeName(code: string): string {
+  return hasKey(DOC_TYPE_NAMES, code) ? DOC_TYPE_NAMES[code] : code;
 }
 
 /** 위험 높은 순 정렬 비교 함수. (원본 byRisk) */

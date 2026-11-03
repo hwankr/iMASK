@@ -6,6 +6,7 @@
    - 오류는 ApiError { status, code, message }. message 는 서버가 준 detail(한국어) 또는 기본 문구.
      네트워크 오류·시간 초과도 한국어 문구의 ApiError(code 'network', status 0)다.
    - 시간 제한(기본 60초)은 응답 헤더가 아니라 본문을 다 읽을 때까지 걸린다.
+   - getFile 이 주는 서명 다운로드 주소는 권한이다 — 이 파일도, 받는 쪽(file-download.ts)도 기록·출력하지 않는다.
    ========================================================================== */
 
 import { accessCodeForHeader } from './access-code';
@@ -121,6 +122,22 @@ export interface CreateAnalysisOut {
   upload: UploadTicket;
 }
 
+/**
+ * GET /analyses/{id}/file 응답 — 원본 파일의 서명 다운로드 주소(10분 유효).
+ * url 은 권한이 담긴 주소다 — 기록·출력·오류 문구에 넣지 않는다.
+ */
+export interface FileOut {
+  url: string;
+  mime_type: string;
+  filename: string;
+}
+
+/** getAnalysis 선택 */
+export interface GetAnalysisOptions {
+  /** 참이면 ?include=stages — result.stages(단계별 JSON)를 함께 받는다(기본 응답에는 없다) */
+  includeStages?: boolean;
+}
+
 /** POST /analyses 요청 */
 export interface CreateAnalysisIn {
   name: string;
@@ -147,8 +164,10 @@ export interface ApiClient {
   createAnalysis(input: CreateAnalysisIn): Promise<CreateAnalysisOut>;
   /** POST /api/py/analyses/{id}/start → 200(실패해도 failed 행) */
   startAnalysis(id: string): Promise<AnalysisOut>;
-  /** GET /api/py/analyses/{id} → 200 */
-  getAnalysis(id: string): Promise<AnalysisOut>;
+  /** GET /api/py/analyses/{id}(includeStages 면 ?include=stages) → 200 */
+  getAnalysis(id: string, options?: GetAnalysisOptions): Promise<AnalysisOut>;
+  /** GET /api/py/analyses/{id}/file → 200 서명 다운로드 주소 */
+  getFile(id: string): Promise<FileOut>;
 }
 
 export const DEFAULT_BASE_URL = '/api/py';
@@ -239,6 +258,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
   return {
     createAnalysis: (input) => request<CreateAnalysisOut>('POST', '/analyses', input),
     startAnalysis: (id) => request<AnalysisOut>('POST', idPath(id) + '/start'),
-    getAnalysis: (id) => request<AnalysisOut>('GET', idPath(id)),
+    getAnalysis: (id, options) => request<AnalysisOut>('GET', idPath(id) + (options?.includeStages ? '?include=stages' : '')),
+    getFile: (id) => request<FileOut>('GET', idPath(id) + '/file'),
   };
 }

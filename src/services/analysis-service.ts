@@ -153,6 +153,30 @@ export interface AnalysisService {
   subscribe(listener: (event?: ServiceEvent) => void): () => void;
 }
 
+/** 실제 분석의 원본 파일 내용 */
+export interface LiveFile {
+  /** 파일 내용 */
+  bytes: ArrayBuffer;
+  /** MIME 형식(application/pdf · image/png · image/jpeg) */
+  mime: string;
+  /** 파일 이름(없으면 빈 문자열) */
+  filename: string;
+}
+
+/**
+ * 실제 분석 전용 통로 — 서비스 인터페이스 밖의 실제 분석 기능. 화면은 useLiveExtras() 로 받는다(데모면 null).
+ * 오류는 한국어 문구의 ApiError.
+ * - loadFile: 접근 코드 401 · 없음 404 는 안전한 백엔드 문구만 보이고, 주소 · 서명 · 키 · 긴 토큰 모양이 섞이면
+ *   고정 안내 문구로 바꾼다. 그 밖 오류(5xx · 네트워크 · 시간 초과 · 받기 실패 등)는 늘 고정 문구다.
+ * - loadStages: 다른 조회와 같은 규칙(401 · 404 는 백엔드 문구 그대로).
+ */
+export interface LiveExtras {
+  /** 원본 파일 내용을 받는다. 부를 때마다 새 서명 주소를 받는다(10분 만료 대비 — 캐시는 화면이 한다). 실제: GET /analyses/{id}/file → 서명 주소 */
+  loadFile(id: string): Promise<LiveFile>;
+  /** 단계별 결과 JSON(result.stages). 없으면 null. 실제: GET /analyses/{id}?include=stages */
+  loadStages(id: string): Promise<unknown[] | null>;
+}
+
 /** 데모 전용 조작 — 화면 컴포넌트는 쓰지 않는다(예외: '샘플 다시 불러오기' 버튼, /dev/**). */
 export interface DemoControls {
   /** 샘플 분석 6건과 미리 해 둔 검토 동작으로 되돌린다. */

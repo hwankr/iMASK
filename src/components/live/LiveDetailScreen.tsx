@@ -54,7 +54,8 @@ function LiveView({ a, unauthorized, refreshError, onRetry }: { a: Analysis; una
   const polling = isPolling(a.status);
   const now = useClock(polling);
   const elapsed = polling && raw && now ? elapsedText(raw.createdAt, now) : '';
-  const doc = a.docs[0];
+  // 올린 파일은 raw.file 에서 — 완료 뒤 docs 가 분류된 서류로 바뀌어도 머리는 올린 파일 하나를 보인다
+  const file = raw?.file ?? null;
   const failed = a.status === 'failed' || a.status === 'partial';
 
   return (
@@ -77,9 +78,9 @@ function LiveView({ a, unauthorized, refreshError, onRetry }: { a: Analysis; una
               <span className={styles.mono}>{a.code}</span>
             </span>
             <span className={styles.metaItem}>요청 {fmtDT(a.submittedAt)}</span>
-            {doc ? (
+            {file ? (
               <span className={styles.metaItem}>
-                {doc.name} · {fmtSize(doc.size)}
+                {file.name} · {fmtSize(file.size)}
               </span>
             ) : null}
             {elapsed ? (

@@ -6,7 +6,7 @@
    ========================================================================== */
 
 import { CONFIG } from '@/config/app';
-import type { AnalysisStatus } from '@/display/rules';
+import { DOC_TYPE_NAMES, docTypeName, type AnalysisStatus } from '@/display/rules';
 import { fmtSize, pad2 } from '@/lib/format';
 import type { RequestStep } from '@/services/analysis-service';
 
@@ -134,20 +134,8 @@ export function durationText(fromIso: string | null | undefined, toIso: string |
 
 /* ---------- 라벨 ---------- */
 
-/** 서류 종류 코드 → 한국어 이름. 모르는 코드는 그대로 */
-export const DOC_TYPE_NAMES: Record<string, string> = {
-  loan_application: '대출신청서',
-  consent_form: '동의서',
-  income_proof: '소득 증빙',
-  power_of_attorney: '위임장',
-  debt_transaction: '채무내역',
-  Other: '기타',
-  other: '기타',
-};
-
-export function docTypeName(code: string): string {
-  return Object.prototype.hasOwnProperty.call(DOC_TYPE_NAMES, code) ? DOC_TYPE_NAMES[code] : code;
-}
+/** 서류 종류 코드 → 한국어 이름 — 표시 규칙(rules.ts)에 있다(서비스 매핑과 함께 쓴다). 여기서는 다시 내보내기만 한다 */
+export { DOC_TYPE_NAMES, docTypeName };
 
 /** 위험도 판정 문구 — 상·중·하·검토 필요, 없으면 '판정 없음' */
 export function riskText(level: unknown): string {

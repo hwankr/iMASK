@@ -141,6 +141,7 @@ describe('requestAnalysis', () => {
         throw new ApiError(0, 'network', '서버 응답이 너무 늦습니다. 잠시 후 다시 시도해 주세요.');
       },
       getAnalysis: async () => analysisOut(),
+      getFile: async () => ({ url: '', mime_type: '', filename: '' }),
     };
     const service = createApiService({ client: base, upload: async () => {}, storage });
     const err = await service.requestAnalysis({ name: 'x', files: [pdfUpload()] }).catch((e: unknown) => e);

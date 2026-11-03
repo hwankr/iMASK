@@ -17,10 +17,10 @@
 #    documents 6(kind extracted 5·other 1, other 에 other_guide·extracted 에 validation)·overall 상/권장_조치·
 #    risk 분포(허용 값·risk_source 와 맞는지만 — unrated 를 강제하지 않음)·계약 키·id 중복·document_index·
 #    boxes 0~1, 기본 응답에 stages·response 없음, 응답 크기(기본 GET vs ?include=stages GET 바이트 — 기본이 작아야 함).
-#    원본 파일: GET /analyses/{id}/file 200·키 {url, mime_type, filename} → url 로(접근 코드 없이) 받아 올린 내용과
+#    원본 파일: GET /analyses/{id}/file 200·키 {url, mime_type, filename} → url 로(사용자 지정 헤더 없이) 받아 올린 내용과
 #    sha256 비교. 원문 값(value·masked)·서명 URL 은 출력하지 않는다(개수·분포·바이트 수만).
 #
-#  비밀값(BRIEF §2): 접근 코드는 환경변수 IMASK_DEMO_CODE, 없으면 루트 .env 의 DEMO_ACCESS_CODE.
+#  비밀값(BRIEF §2): 접근 코드는 없다(2026-11-03 없앰). Upstage 키 등은 출력하지 않는다.
 #    서명 URL·토큰·키는 출력하지 않는다(모든 출력은 _say() 를 지나며 알려진 값을 가린다).
 #    배포 사이트의 Vercel 보호를 넘기려면 선택 환경변수 VERCEL_PROTECTION_BYPASS 를
 #    x-vercel-protection-bypass 헤더로 보낸다.
@@ -137,11 +137,9 @@ class Run:
     def __init__(self, args: argparse.Namespace, env: Mapping[str, str], transport: httpx.BaseTransport | None = None):
         self.args = args
         self.env = env
-        self.transport = transport  # 원본 파일 받기(접근 코드 없는 클라이언트)도 같은 전송층을 쓴다(테스트)
+        self.transport = transport  # 원본 파일 받기(사용자 지정 헤더 없는 클라이언트)도 같은 전송층을 쓴다(테스트)
         self.start = time.monotonic()
-        code = os.environ.get("IMASK_DEMO_CODE") or env.get("DEMO_ACCESS_CODE") or ""
-        _hide(code, "<DEMO_ACCESS_CODE>")
-        headers = {"X-Demo-Code": code} if code else {}
+        headers: dict[str, str] = {}
         bypass = os.environ.get("VERCEL_PROTECTION_BYPASS")
         if bypass:
             _hide(bypass, "<VERCEL_PROTECTION_BYPASS>")
@@ -150,7 +148,6 @@ class Run:
             _hide(env.get(name), f"<{name}>")
         _hide(os.environ.get("UPSTAGE_API_KEY"), "<UPSTAGE_API_KEY>")
         _hide(env.get("UPSTAGE_AGENT_ID"), "<UPSTAGE_AGENT_ID>")
-        self.has_code = bool(code)
         self.http = httpx.Client(
             base_url=args.base_url.rstrip("/"),
             headers=headers,
@@ -432,7 +429,7 @@ def _verify_done(run: Run, analysis_id: str) -> bool:
 
 
 def _check_file(run: Run, analysis_id: str, content: bytes) -> bool:
-    """원본 파일 주소를 받아 그 주소로(접근 코드 없이) 내려받고 올린 내용과 sha256 을 비교한다. URL 은 출력하지 않는다."""
+    """원본 파일 주소를 받아 그 주소로(사용자 지정 헤더 없이) 내려받고 올린 내용과 sha256 을 비교한다. URL 은 출력하지 않는다."""
     response = run.call("GET", f"/api/py/analyses/{analysis_id}/file")
     if response.status_code != 200:
         run.log(f"원본 파일: HTTP {response.status_code} {_detail(response)}")
@@ -465,7 +462,7 @@ def _check_file(run: Run, analysis_id: str, content: bytes) -> bool:
         run.log(f"원본 파일 받기 실패: HTTP {downloaded.status_code}")
         return False
     same = hashlib.sha256(downloaded.content).digest() == hashlib.sha256(content).digest()
-    run.log(f"원본 파일 받기(접근 코드 없이): HTTP 200 · {len(downloaded.content):,} bytes · 올린 내용과 sha256 {_mark(same)}")
+    run.log(f"원본 파일 받기(사용자 지정 헤더 없이): HTTP 200 · {len(downloaded.content):,} bytes · 올린 내용과 sha256 {_mark(same)}")
     return same and no_store
 
 
@@ -565,9 +562,6 @@ def _flow(run: Run, args: argparse.Namespace) -> int:
     content = content_path.read_bytes()
     role = "비교할 원본" if args.analysis_id else "올릴 내용"
     _say(f"대상: {args.base_url} · 파일 {filename}({mime_type}) · {role} {content_path.name} {len(content):,} bytes")
-    if not run.has_code:
-        _say("접근 코드가 없습니다(IMASK_DEMO_CODE 또는 .env 의 DEMO_ACCESS_CODE).")
-        return EXIT_FAIL
     if args.analysis_id:
         return _flow_existing(run, args.analysis_id, content)
     _say(f"기대: {args.expect}" + (" · 올리지 않음" if args.skip_upload else "") + (" · 시작하지 않음" if args.no_start else ""))

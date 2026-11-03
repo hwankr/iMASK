@@ -242,18 +242,7 @@
   overflow-x: auto;
 }
 
-/* ---------- 접근 코드 · 오류 ---------- */
-.gateForm {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-14);
-}
-.gateLead {
-  margin: 0;
-  font-size: var(--fs-14);
-  line-height: var(--lh-160);
-  color: var(--ink-2);
-}
+/* ---------- 오류 ---------- */
 .alert {
   display: flex;
   gap: var(--space-10);

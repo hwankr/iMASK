@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ACCESS_CODE_KEY } from './access-code';
-import { ApiError, MSG_NETWORK, MSG_TIMEOUT, MSG_UNAUTHORIZED, createApiClient } from './client';
+import { ApiError, MSG_NETWORK, MSG_TIMEOUT, createApiClient } from './client';
 import { FILE_MAX_BYTES, MSG_FILE_BAD_URL, MSG_FILE_DOWNLOAD, MSG_FILE_EMPTY, MSG_FILE_NOT_FOUND, MSG_FILE_TIMEOUT, MSG_FILE_TOO_LARGE, isAllowedFileUrl } from './file-download';
 import { createApiService } from './service';
 import { analysisOut, contractResult, documentOut, fakeFetch, json, memoryStorage, type SeenRequest } from './testing';
@@ -33,7 +32,7 @@ interface SetupOptions {
 function setup(opts: SetupOptions = {}) {
   const order: string[] = [];
   const downloads: { url: string; init: RequestInit | undefined }[] = [];
-  const storage = memoryStorage({ [ACCESS_CODE_KEY]: 'code-123' });
+  const storage = memoryStorage();
   let fileCalls = 0;
   const backend = fakeFetch((req) => {
     order.push('backend ' + req.method + ' ' + req.url.replace('/api/py', ''));
@@ -49,7 +48,7 @@ function setup(opts: SetupOptions = {}) {
     downloads.push({ url, init });
     return opts.download ? opts.download(url, init) : new Response(PDF, { status: 200, headers: { 'Content-Type': 'application/pdf' } });
   }) as typeof fetch;
-  const client = createApiClient({ fetch: backend.fetch, getAccessCode: () => (storage.getItem(ACCESS_CODE_KEY) ?? '').trim(), timeoutMs: opts.clientTimeoutMs });
+  const client = createApiClient({ fetch: backend.fetch, timeoutMs: opts.clientTimeoutMs });
   const service = createApiService({ client, upload: async () => {}, storage, fileFetch, fileTimeoutMs: opts.fileTimeoutMs });
   return { service, order, downloads, seen: backend.seen };
 }
@@ -127,7 +126,7 @@ describe('loadFile — 원본 파일 받기', () => {
     expect(downloads.map((d) => d.url)).toEqual([signed(1), signed(2)]);
   });
 
-  it('받기 요청 — X-Demo-Code 등 사용자 지정 헤더 없음 · credentials omit · cache no-store, /file 요청에만 접근 코드', async () => {
+  it('받기 요청 — 사용자 지정 헤더 없음 · credentials omit · cache no-store', async () => {
     const { service, downloads, seen } = setup();
     await service.loadFile(ID);
     const init = downloads[0].init;
@@ -139,7 +138,7 @@ describe('loadFile — 원본 파일 받기', () => {
     const headers: string[] = [];
     new Headers(init?.headers).forEach((_v, k) => headers.push(k));
     expect(headers).toEqual([]);
-    expect(seen[0].headers['x-demo-code']).toBe('code-123');
+    expect(seen[0].headers).not.toHaveProperty('x-demo-code');
   });
 
   it('주소 검사 — https · http://localhost · http://127.0.0.1 만 받는다(그 밖은 요청하지 않고 오류)', async () => {
@@ -274,9 +273,8 @@ describe('loadFile — 원본 파일 받기', () => {
     for (const spy of spies) expect(spy).not.toHaveBeenCalled();
   });
 
-  it('/file 의 401 · 404 는 백엔드 detail 그대로 전달하고 받지 않는다', async () => {
+  it('/file 의 404 는 백엔드 detail 그대로 전달하고 받지 않는다', async () => {
     for (const [status, code, detail] of [
-      [401, 'unauthorized', '접근 코드가 맞지 않습니다.'],
       [404, 'not_found', '분석 건을 찾을 수 없습니다.'],
     ] as const) {
       const { service, downloads } = setup({ file: () => json(status, { detail }) });
@@ -326,16 +324,15 @@ describe('loadFile — 오류에 서명 주소 · 토큰이 남지 않는다(V-T
   it('/file 401 · 404 detail 에 주소 · 토큰 · JWT · sb_ 키가 섞이면 고정 문구', async () => {
     for (const detail of [sensitive, `토큰 ${TOKEN} 만료`, `인증 실패 ${JWT_LIKE}`, `키 ${SB_KEY}`, 'x'.repeat(30)]) {
       const unauthorized = setup({ file: () => json(401, { detail }) });
-      expect(await expectSafeRejection(() => unauthorized.service.loadFile(ID))).toMatchObject({ status: 401, code: 'unauthorized', message: MSG_UNAUTHORIZED });
+      expect(await expectSafeRejection(() => unauthorized.service.loadFile(ID))).toMatchObject({ status: 401, code: 'bad_request', message: MSG_FILE_BAD_URL });
       const notFound = setup({ file: () => json(404, { detail }) });
       expect(await expectSafeRejection(() => notFound.service.loadFile(ID))).toMatchObject({ status: 404, code: 'not_found', message: MSG_FILE_NOT_FOUND });
       expect(unauthorized.downloads.length + notFound.downloads.length).toBe(0);
     }
   });
 
-  it('/file 401 · 404 의 깨끗한 detail 은 그대로 보인다', async () => {
+  it('/file 404 의 깨끗한 detail 은 그대로 보인다', async () => {
     for (const [status, code, detail] of [
-      [401, 'unauthorized', '접근 코드가 맞지 않습니다.'],
       [404, 'not_found', '원본 파일을 찾을 수 없습니다.'],
       [404, 'not_found', '분석 건을 찾을 수 없습니다.'],
     ] as const) {
@@ -412,11 +409,10 @@ describe('loadFile — 오류에 서명 주소 · 토큰이 남지 않는다(V-T
 });
 
 describe('loadStages — 단계별 JSON', () => {
-  it('GET …?include=stages(접근 코드 포함)의 result.stages', async () => {
+  it('GET …?include=stages 의 result.stages', async () => {
     const { service, seen } = setup();
     await expect(service.loadStages(ID)).resolves.toEqual([{ key: '서류-인식' }, { key: '민감정보_추출' }]);
     expect(seen.map((r) => [r.method, r.url])).toEqual([['GET', `/api/py/analyses/${ID}?include=stages`]]);
-    expect(seen[0].headers['x-demo-code']).toBe('code-123');
   });
 
   it('stages 가 없거나 배열이 아니면 null', async () => {
@@ -428,10 +424,9 @@ describe('loadStages — 단계별 JSON', () => {
     await expect(service.loadStages(ID)).resolves.toBeNull();
   });
 
-  it('404 는 null 이 아니라 오류(백엔드 detail) — 화면이 문구를 보인다, 401 도 같다', async () => {
+  it('404 는 null 이 아니라 오류(백엔드 detail) — 화면이 문구를 보인다', async () => {
     for (const [status, code, detail] of [
       [404, 'not_found', '분석 건을 찾을 수 없습니다.'],
-      [401, 'unauthorized', '접근 코드가 맞지 않습니다.'],
     ] as const) {
       const { service } = setup({ analysis: () => json(status, { detail }) });
       await expect(service.loadStages(ID)).rejects.toMatchObject({ status, code, message: detail });

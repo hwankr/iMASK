@@ -15,7 +15,6 @@ import httpx
 import pytest
 from api_fakes import (
     ALL_SECRETS,
-    FAKE_ACCESS_CODE,
     FAKE_ENV,
     FakeStore,
     FakeUpstageServer,
@@ -34,8 +33,7 @@ from imask_backend.redaction import redact
 from imask_backend.settings import get_settings, load_settings
 from imask_backend.upstage import MAX_MESSAGE, UpstageClient, job_failure_message
 
-CODE = {"X-Demo-Code": FAKE_ACCESS_CODE}
-SECRET_IDS = ["upstage_key", "agent_id", "supabase_key", "access_code"]
+SECRET_IDS = ["upstage_key", "agent_id", "supabase_key"]
 SETTINGS = load_settings(FAKE_ENV)
 SECRETS = SETTINGS.secrets()
 OUTER_LIMIT = 500  # analyses.MAX_ERROR_LENGTH
@@ -125,7 +123,7 @@ def test_upstage_errors_are_redacted_with_all_secrets_before_truncation(real_dep
     for pad in _positions(prefix, secret):
         message = "x" * pad + secret + " tail"
         method, url = _arrange(path, store, server, message)
-        body = client.request(method, url, headers=CODE).json()
+        body = client.request(method, url).json()
         shown = body["error"] if path == "start" else body["poll_error"]
         assert shown == _expected(path, message), f"pad={pad}"
         _assert_no_fragment(shown, secret)
@@ -142,7 +140,7 @@ def test_failed_job_reason_is_redacted_with_all_secrets_before_truncation(real_d
         server.files["file_up1"] = ("document.pdf", b"")
         analysis_id = store.put(status="running", job_id="job_up1", upstage_file_id="file_up1")
         server.last_extra = {"error": {"message": message}}
-        body = client.get(f"/api/py/analyses/{analysis_id}", headers=CODE).json()
+        body = client.get(f"/api/py/analyses/{analysis_id}").json()
         reason = job_failure_message({"status": "failed", "error": {"message": message}}, SECRETS)
         expected = redact(MSG_UPSTAGE_FAILED.format(reason=reason), SECRETS, limit=OUTER_LIMIT)
         assert body["error"] == expected, f"pad={pad}"

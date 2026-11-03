@@ -4,7 +4,7 @@
    ④ 데이터 서비스 — React 연결. 화면은 이 파일의 훅(또는 useService())으로만 데이터를 다룬다.
    - 모드는 주소 기준이다: ServiceProvider 가 usePathname() 으로 모드(modeForPath — `/demo` 아래는 언제나 데모,
      그 밖은 빌드 모드 SERVICE_MODE)와 기준 경로(routeBaseFor — '' 또는 '/demo')를 한 번 계산해 내린다.
-     화면은 useServiceMode() · useRouteBase() 로 받는다(SERVICE_MODE 를 직접 읽지 않는다). 모드 · 기준 경로는
+     화면은 useServiceMode() · useRouteBase()(빌드 모드가 필요하면 useBuildMode())로 받는다(SERVICE_MODE 를 직접 읽지 않는다). 모드 · 기준 경로는
      서버에서도 주소로 정해지므로 첫 그림부터 맞다(하이드레이션 불일치 없음).
    - 서비스는 모드별 브라우저 싱글턴(데모 하나 · 실제 분석 하나 — createServiceCache)이다. 그 모드를 처음 쓸 때 만들고
      화면을 옮겨도 그대로 쓰므로 상태가 이어진다(상세에서 검토 완료 → 목록 숫자에 반영, 실제 모드 빌드에서 `/demo` 를
@@ -50,10 +50,12 @@ const getServerService = () => null;
 /** undefined = Provider 밖(설정 실수) / null = 아직 서비스 없음(서버 렌더 · 하이드레이션) */
 const ServiceContext = createContext<AnalysisService | null | undefined>(undefined);
 
-/** 주소로 정한 모드 · 기준 경로. undefined = Provider 밖 */
+/** 주소로 정한 모드 · 기준 경로와 이 빌드의 모드. undefined = Provider 밖 */
 interface RouteInfo {
   mode: ServiceMode;
   base: RouteBase;
+  /** 이 빌드의 모드(SERVICE_MODE) — 루트 주소가 쓰는 모드. `/demo` 에서 실제 분석으로 돌아갈 곳이 있는지 알 때 쓴다 */
+  buildMode: ServiceMode;
 }
 const RouteContext = createContext<RouteInfo | undefined>(undefined);
 
@@ -73,7 +75,7 @@ export function ServiceProvider({ children, service }: ServiceProviderProps) {
      서비스를 직접 넣었으면 브라우저 싱글턴을 만들지 않는다. */
   const getSnapshot = useCallback(() => (service ? null : getBrowserService(mode)), [service, mode]);
   const shared = useSyncExternalStore(noSubscribe, getSnapshot, getServerService);
-  const route = useMemo<RouteInfo>(() => ({ mode, base }), [mode, base]);
+  const route = useMemo<RouteInfo>(() => ({ mode, base, buildMode: SERVICE_MODE }), [mode, base]);
   return (
     <RouteContext.Provider value={route}>
       <ServiceContext.Provider value={service ?? shared}>{children}</ServiceContext.Provider>
@@ -105,6 +107,14 @@ export function useServiceMode(): ServiceMode {
 /** 지금 화면의 기준 경로 — `/demo` 아래는 '/demo', 그 밖은 ''. 이동 주소는 src/lib/routes.ts 함수에 넘겨 만든다. */
 export function useRouteBase(): RouteBase {
   return useRouteInfo('useRouteBase').base;
+}
+
+/**
+ * 이 빌드의 모드(루트 주소의 모드) — 화면은 SERVICE_MODE 를 직접 읽지 않고 이 값을 쓴다.
+ * 'api' 면 실제 분석이 있는 빌드(운영)라 `/demo` 에서 실제 분석으로 돌아갈 수 있다. 서버 렌더에서도 같은 값이다.
+ */
+export function useBuildMode(): ServiceMode {
+  return useRouteInfo('useBuildMode').buildMode;
 }
 
 /** 데모 전용 조작. 데모 서비스가 아니거나 아직 서비스가 없으면 null. */

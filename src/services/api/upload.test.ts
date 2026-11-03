@@ -81,7 +81,7 @@ describe('createSupabaseUploader — 실제 supabase-js 로(가짜 fetch)', () =
     expect(leaks(lines.join(' ') + (err as Error).message)).toEqual([]);
   });
 
-  it('성공 — 공개 키만 쓰고 X-Demo-Code 는 없다, 형식을 붙여 보낸다', async () => {
+  it('성공 — 공개 키만 쓰고 형식을 붙여 보낸다', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const seen: { url: string; headers: Headers; body: unknown }[] = [];
     const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -91,7 +91,6 @@ describe('createSupabaseUploader — 실제 supabase-js 로(가짜 fetch)', () =
     await createSupabaseUploader({ url: FAKE_URL, key: FAKE_KEY, fetch })(TICKET, new File(['%PDF'], 'bundle.pdf', { type: '' }), 'application/pdf');
     expect(seen).toHaveLength(1);
     expect(seen[0].headers.get('apikey')).toBe(FAKE_KEY);
-    expect(seen[0].headers.has('x-demo-code')).toBe(false);
     const part = (seen[0].body as FormData).get('') as File;
     expect(part.type).toBe('application/pdf');
     expect(warn).not.toHaveBeenCalled();

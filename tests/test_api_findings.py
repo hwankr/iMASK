@@ -18,7 +18,6 @@ import httpx
 import pytest
 from api_fakes import (
     ALL_SECRETS,
-    FAKE_ACCESS_CODE,
     FAKE_ENV,
     FakeStore,
     FakeUpstageServer,
@@ -43,7 +42,6 @@ from imask_backend.results import parse_stages
 from imask_backend.settings import get_settings, load_settings
 from imask_backend.upstage import UpstageClient
 
-CODE = {"X-Demo-Code": FAKE_ACCESS_CODE}
 VIEW_KEYS = {"format", "job", "summary", "documents", "findings", "overall"}
 MSG_NOT_FOUND = "분석 건을 찾을 수 없습니다."
 MSG_ORIGINAL_MISSING = "원본 파일을 찾을 수 없습니다."
@@ -57,10 +55,10 @@ class Ctx:
     server: FakeUpstageServer
 
     def get(self, analysis_id: str, params: Any = None) -> httpx.Response:
-        return self.client.get(f"/api/py/analyses/{analysis_id}", headers=CODE, params=params)
+        return self.client.get(f"/api/py/analyses/{analysis_id}", params=params)
 
     def file(self, analysis_id: str, headers: Any = None) -> httpx.Response:
-        return self.client.get(f"/api/py/analyses/{analysis_id}/file", headers=CODE if headers is None else headers)
+        return self.client.get(f"/api/py/analyses/{analysis_id}/file", headers=headers or {})
 
 
 @pytest.fixture
@@ -195,7 +193,7 @@ def test_odd_stored_results_are_200(ctx: Ctx, result: Any) -> None:
 
 def test_create_and_start_responses_have_no_result(ctx: Ctx) -> None:
     body = {"filename": "묶음.pdf", "size": 10, "mime_type": "application/pdf"}
-    created = ctx.client.post("/api/py/analyses", json=body, headers=CODE).json()
+    created = ctx.client.post("/api/py/analyses", json=body).json()
     assert created["analysis"]["result"] is None
 
 
@@ -224,13 +222,10 @@ def test_file_link(ctx: Ctx, status: str, caplog: pytest.LogCaptureFixture) -> N
     _clean(response.text)
 
 
-@pytest.mark.parametrize("headers", [{}, {"X-Demo-Code": "wrong"}])
-def test_file_link_needs_access_code(ctx: Ctx, headers: dict[str, str]) -> None:
+def test_file_link_needs_no_access_code(ctx: Ctx) -> None:
+    # 접근 코드 없이(헤더 없이) 원본 파일 주소를 준다
     analysis_id = ctx.store.put()
-    response = ctx.file(analysis_id, headers=headers)
-    assert response.status_code == 401
-    assert response.json() == {"detail": "접근 코드가 맞지 않습니다."}
-    assert ctx.store.signed_downloads == []
+    assert ctx.file(analysis_id).status_code == 200
 
 
 @pytest.mark.parametrize("analysis_id", ["not-a-uuid", str(uuid.uuid4())])
@@ -530,7 +525,7 @@ def test_create_keeps_201_on_the_escape_path(ctx: Ctx, monkeypatch: pytest.Monke
 
     monkeypatch.setattr(ctx.store, "insert_analysis", insert)
     body = {"filename": "묶음.pdf", "size": 10, "mime_type": "application/pdf"}
-    response = ctx.client.post("/api/py/analyses", json=body, headers=CODE)
+    response = ctx.client.post("/api/py/analyses", json=body)
     assert response.status_code == 201
     assert response.content.isascii()
     loaded = json.loads(response.content)
@@ -540,7 +535,7 @@ def test_create_keeps_201_on_the_escape_path(ctx: Ctx, monkeypatch: pytest.Monke
 
 def test_start_uses_the_same_boundary(ctx: Ctx) -> None:
     analysis_id = ctx.store.put(name="시작" + HIGH)
-    response = ctx.client.post(f"/api/py/analyses/{analysis_id}/start", headers=CODE)
+    response = ctx.client.post(f"/api/py/analyses/{analysis_id}/start")
     assert response.status_code == 200 and response.content.isascii()
     loaded = json.loads(response.content)
     assert loaded["name"] == "시작" + HIGH and loaded["status"] == "running"

@@ -17,8 +17,8 @@ import httpx
 import pytest
 from api_fakes import (
     ALL_SECRETS,
-    FAKE_ACCESS_CODE,
     FAKE_ENV,
+    FAKE_SUPABASE_KEY,
     FakeStore,
     FakeUpstageServer,
 )
@@ -31,8 +31,7 @@ from imask_backend.settings import get_settings, load_settings
 from imask_backend.store import SupabaseStore
 from imask_backend.upstage import UpstageClient
 
-CODE = {"X-Demo-Code": FAKE_ACCESS_CODE}
-SECRET_IDS = ["upstage_key", "agent_id", "supabase_key", "access_code"]
+SECRET_IDS = ["upstage_key", "agent_id", "supabase_key"]
 JOB_GONE = "Upstage 작업을 찾을 수 없습니다. 새 분석으로 다시 올려 주세요."
 
 # 가짜 서명 정보(실제 값 아님)
@@ -111,7 +110,7 @@ def test_stale_poll_losing_to_start_keeps_running_job_and_file(env: Any) -> None
         store.update_analysis(aid, {"upstage_job_id": "job_now_running"}, expect_status="running", expect_no_job=True)
 
     store.before_update = start_saves_job_first
-    response = client.get(f"/api/py/analyses/{analysis_id}", headers=CODE)
+    response = client.get(f"/api/py/analyses/{analysis_id}")
     body = response.json()
     assert response.status_code == 200
     assert body["status"] == "running"
@@ -125,7 +124,7 @@ def test_stale_poll_winning_fails_and_deletes(env: Any) -> None:
     client, store, server = env
     server.files["file_up1"] = ("document.pdf", b"")
     analysis_id = store.put(status="running", updated_at=_ago(6), upstage_file_id="file_up1")
-    body = client.get(f"/api/py/analyses/{analysis_id}", headers=CODE).json()
+    body = client.get(f"/api/py/analyses/{analysis_id}").json()
     assert body["status"] == "failed"
     assert server.deleted == ["file_up1"]
 
@@ -165,7 +164,7 @@ def test_outside_strings_are_redacted_with_all_server_secrets(
         server.errors[("DELETE", "file")] = (500, {"error": {"message": message}})
 
     with caplog.at_level(logging.INFO, logger="imask"):
-        response = client.get(f"/api/py/analyses/{analysis_id}", headers=CODE)
+        response = client.get(f"/api/py/analyses/{analysis_id}")
     assert response.status_code == 200
     body = response.json()
     stored_error = store.analyses[analysis_id]["error"] or ""
@@ -188,10 +187,10 @@ def test_outside_strings_are_redacted_with_all_server_secrets(
 def test_upstage_status_is_scrubbed(env: Any) -> None:
     client, store, server = env
     analysis_id = _running(store, server)
-    server.last_status = f"weird_{FAKE_ACCESS_CODE}"
-    body = client.get(f"/api/py/analyses/{analysis_id}", headers=CODE).json()
-    assert FAKE_ACCESS_CODE not in (body["upstage_status"] or "")
-    assert FAKE_ACCESS_CODE not in (body["error"] or "")
+    server.last_status = f"weird_{FAKE_SUPABASE_KEY}"
+    body = client.get(f"/api/py/analyses/{analysis_id}").json()
+    assert FAKE_SUPABASE_KEY not in (body["upstage_status"] or "")
+    assert FAKE_SUPABASE_KEY not in (body["error"] or "")
 
 
 def test_real_upstage_dependency_knows_all_server_secrets() -> None:
@@ -217,7 +216,7 @@ def test_signed_url_and_tokens_in_failed_job_are_redacted(env: Any, caplog: pyte
     server.last_extra = {"error": {"message": SIGNED_FORMS[form]}}
     server.errors[("DELETE", "file")] = (500, {"error": {"message": SIGNED_FORMS[form]}})  # 로그 경로도
     with caplog.at_level(logging.INFO, logger="imask"):
-        response = client.get(f"/api/py/analyses/{analysis_id}", headers=CODE)
+        response = client.get(f"/api/py/analyses/{analysis_id}")
     assert response.json()["status"] == "failed"
     for text in (response.text, store.analyses[analysis_id]["error"], _logs(caplog)):
         assert _count(text, SIGNED_NEEDLES) == 0
@@ -228,7 +227,7 @@ def test_signed_url_in_poll_error_is_redacted(env: Any, form: str) -> None:
     client, store, server = env
     analysis_id = _running(store, server)
     server.errors[("GET", "response")] = (502, {"error": {"message": SIGNED_FORMS[form]}})
-    response = client.get(f"/api/py/analyses/{analysis_id}", headers=CODE)
+    response = client.get(f"/api/py/analyses/{analysis_id}")
     assert response.json()["poll_error"]
     assert _count(response.text, SIGNED_NEEDLES) == 0
 
@@ -247,7 +246,7 @@ def test_start_failure_with_signed_url_is_redacted(env: Any) -> None:
     client, store, server = env
     analysis_id = store.put()
     server.errors[("POST", "files")] = (500, {"error": {"message": SIGNED_FORMS["absolute_url"]}})
-    response = client.post(f"/api/py/analyses/{analysis_id}/start", headers=CODE)
+    response = client.post(f"/api/py/analyses/{analysis_id}/start")
     assert response.json()["status"] == "failed"
     assert SIGNED_URL_PLACEHOLDER in response.json()["error"]
     assert _count(response.text, SIGNED_NEEDLES) == 0
@@ -258,7 +257,6 @@ def test_create_response_keeps_signed_upload_values(env: Any) -> None:
     response = client.post(
         "/api/py/analyses",
         json={"filename": "a.pdf", "size": 10, "mime_type": "application/pdf"},
-        headers=CODE,
     )
     assert response.status_code == 201
     upload = response.json()["upload"]
@@ -275,7 +273,7 @@ def test_404_within_grace_keeps_running(env: Any) -> None:
     client, store, server = env
     analysis_id = _running(store, server, minutes_ago=1)
     server.errors[("GET", "response")] = (404, {"error": {"message": "not found"}})
-    body = client.get(f"/api/py/analyses/{analysis_id}", headers=CODE).json()
+    body = client.get(f"/api/py/analyses/{analysis_id}").json()
     assert body["status"] == "running"
     assert body["poll_error"].startswith("Upstage 상태를 확인하지 못했습니다")
     assert store.updates == []
@@ -286,7 +284,7 @@ def test_404_after_grace_fails_and_deletes(env: Any) -> None:
     client, store, server = env
     analysis_id = _running(store, server, minutes_ago=3)
     server.errors[("GET", "response")] = (404, {"error": {"message": "not found"}})
-    body = client.get(f"/api/py/analyses/{analysis_id}", headers=CODE).json()
+    body = client.get(f"/api/py/analyses/{analysis_id}").json()
     assert body["status"] == "failed"
     assert body["error"] == JOB_GONE
     assert body["poll_error"] is None
@@ -307,7 +305,7 @@ def test_404_on_full_result_after_grace_fails(env: Any) -> None:
         return original(request)
 
     server.handle = handle  # type: ignore[method-assign]
-    body = client.get(f"/api/py/analyses/{analysis_id}", headers=CODE).json()
+    body = client.get(f"/api/py/analyses/{analysis_id}").json()
     assert body["status"] == "failed"
     assert body["error"] == JOB_GONE
     assert server.deleted == ["file_up1"]
@@ -325,7 +323,7 @@ def test_404_on_full_result_within_grace_keeps_running(env: Any) -> None:
         return original(request)
 
     server.handle = handle  # type: ignore[method-assign]
-    body = client.get(f"/api/py/analyses/{analysis_id}", headers=CODE).json()
+    body = client.get(f"/api/py/analyses/{analysis_id}").json()
     assert body["status"] == "running"
     assert body["poll_error"].startswith("Upstage 결과를 받지 못했습니다")
     assert server.deleted == []
@@ -336,7 +334,7 @@ def test_other_errors_after_grace_keep_retrying(env: Any, status_code: int) -> N
     client, store, server = env
     analysis_id = _running(store, server, minutes_ago=30)
     server.errors[("GET", "response")] = (status_code, {"error": {"message": "nope"}})
-    body = client.get(f"/api/py/analyses/{analysis_id}", headers=CODE).json()
+    body = client.get(f"/api/py/analyses/{analysis_id}").json()
     assert body["status"] == "running"
     assert body["poll_error"]
     assert store.updates == []
@@ -348,7 +346,7 @@ def test_404_after_grace_save_failure_keeps_file(env: Any) -> None:
     analysis_id = _running(store, server, minutes_ago=3)
     server.errors[("GET", "response")] = (404, {"error": {"message": "not found"}})
     store.fail.add("update_analysis")
-    body = client.get(f"/api/py/analyses/{analysis_id}", headers=CODE).json()
+    body = client.get(f"/api/py/analyses/{analysis_id}").json()
     assert body["status"] == "running"
     assert body["poll_error"] == "분석 상태를 저장하지 못했습니다. 다음 조회에서 다시 시도합니다."
     assert server.deleted == []

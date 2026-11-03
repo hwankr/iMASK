@@ -95,7 +95,7 @@ function ListView({ filters, setFilters }: { filters: ListFilters; setFilters: S
   const errorAnalysis = errorOpen ? data.find((a) => a.id === errorOpen.id) ?? null : null;
 
   return (
-    <ListFrame lead={m.hasData ? { lead: m.heroLead, strong: m.heroStrong, tail: m.heroTail } : 'empty'}>
+    <ListFrame lead={m.hasData ? { lead: m.heroLead, strong: m.heroStrong, tail: m.heroTail } : undefined}>
       {m.hasData ? (
         <>
           <SummaryCards
@@ -133,9 +133,13 @@ function ListView({ filters, setFilters }: { filters: ListFilters; setFilters: S
   );
 }
 
-type Lead = { lead: string; strong: string; tail: string } | 'empty';
+/** 머리말 요약 한 줄(분석 건이 있을 때만) — 앞 · 굵게 · 뒤 */
+type Lead = { lead: string; strong: string; tail: string };
 
-/** 화면 틀 — 머리말(제목 · 안내 · 새 분석) + 본문. 불러오는 중이면 안내 자리와 목록 자리에 뼈대. */
+/**
+ * 화면 틀 — 머리말(제목 · 요약 한 줄 · 새 분석) + 본문. 불러오는 중이면 요약 자리와 목록 자리에 뼈대.
+ * 분석 건이 없으면 요약 줄을 그리지 않는다(실무자 화면이라 원본의 고정 안내 문구는 뺐다).
+ */
 function ListFrame({
   lead,
   loading = false,
@@ -156,9 +160,7 @@ function ListFrame({
         <div className={styles.hero}>
           <div className={styles.heroText}>
             <h1 className={styles.title}>문서 분석</h1>
-            {lead === 'empty' ? (
-              <p className={styles.lead}>금융문서에서 찾은 개인정보와 중요정보의 위험등급·근거를 확인하고 검토합니다.</p>
-            ) : lead ? (
+            {lead ? (
               <p className={styles.lead}>
                 {lead.lead}
                 {lead.strong ? <strong>{lead.strong}</strong> : null}

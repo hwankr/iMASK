@@ -1,10 +1,10 @@
 # ==========================================================================
 #  iMASK FastAPI 백엔드 진입점 — Vercel Python 함수(api/index.py) · 로컬 uvicorn 공용
 #  Vercel 은 api/ 안의 .py 파일마다 함수를 만들므로 이 폴더에는 이 파일 하나만 둔다.
-#  업무 로직은 imask_backend/ 에 있고, 여기는 경로·의존성·접근 코드·오류 모양만 다룬다.
+#  업무 로직은 imask_backend/ 에 있고, 여기는 경로·의존성·오류 모양만 다룬다.
 #
 #  경로(모두 /api/py 아래. Next rewrites 가 /api/py/:path* 를 이 함수로 보낸다):
-#    GET  /api/py/health                   접근 코드 없이. 설정이 있는지만(값은 넣지 않음)
+#    GET  /api/py/health                   설정이 있는지만(값은 넣지 않음)
 #    POST /api/py/analyses                 분석 건 + 서명 업로드 URL 만들기 → 201
 #    POST /api/py/analyses/{id}/start      Upstage 작업 시작(완료를 기다리지 않음) → 200
 #    GET  /api/py/analyses/{id}            조회. running 이면 Upstage 상태를 한 번 확인 → 200
@@ -12,8 +12,7 @@
 #    GET  /api/py/analyses/{id}/file       원본 파일 서명 다운로드 URL(10분) → 200, Cache-Control: no-store
 #  분석 건·원본 파일 응답은 _json_out 한 곳을 지난다 — 짝 없는 서로게이트가 있을 때만 ASCII escape JSON(이름·값 원문
 #  그대로), 없으면 정상 경로 그대로(바이트 불변). 상태 코드·헤더는 같다.
-#  /api/py/analyses 로 시작하는 요청은 본문 검사·404 판정보다 먼저 X-Demo-Code 를 DEMO_ACCESS_CODE 와
-#  hmac.compare_digest 로 비교한다(미들웨어). 오류 본문은 늘 {"detail": "<짧은 한국어 문장>"}.
+#  접근 코드(X-Demo-Code)는 받지 않는다(2026-11-03 없앰 — 팀만 아는 주소, 대회용 API). 오류 본문은 늘 {"detail": "<짧은 한국어 문장>"}.
 #  설정은 요청 때 읽는다(get_settings 캐시) — 환경변수가 빠져도 import 는 실패하지 않는다.
 #
 #  로컬: .venv\Scripts\python.exe -m uvicorn api.index:app --port 8000 --env-file .env
@@ -21,7 +20,6 @@
 
 from __future__ import annotations
 
-import hmac
 import logging
 import sys
 import traceback
@@ -58,11 +56,6 @@ from imask_backend.store import Store, StoreError, cached_store  # noqa: E402
 from imask_backend.textsafe import escaped_json_bytes, has_unpaired_surrogates  # noqa: E402
 from imask_backend.upstage import UpstageClient  # noqa: E402
 
-ACCESS_HEADER = "x-demo-code"
-GUARDED_PREFIX = "/api/py/analyses"
-
-MSG_BAD_ACCESS = "접근 코드가 맞지 않습니다."
-MSG_NO_ACCESS_CODE = "서버에 접근 코드가 설정되지 않았습니다."
 MSG_BAD_REQUEST = "요청 형식이 올바르지 않습니다."
 MSG_CONFIG_MISSING = "서버 설정이 빠졌습니다: {names}"
 MSG_STORE_FAILED = "데이터 저장소에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요."
@@ -110,7 +103,7 @@ def get_upstage(settings: Annotated[Settings, Depends(get_settings)]) -> Iterato
 
     def factory() -> UpstageClient:
         if not clients:
-            # 서버 비밀값 전체(Supabase 비밀 키·접근 코드 포함)를 넘겨 오류 문구를 자르기 전에 가리게 한다
+            # 서버 비밀값 전체(Supabase 비밀 키 포함)를 넘겨 오류 문구를 자르기 전에 가리게 한다
             clients.append(UpstageClient.from_settings(settings.upstage(), extra_secrets=settings.secrets()))
         return clients[0]
 
@@ -134,22 +127,6 @@ def _settings_for(request: Request) -> Settings:
 
 def _detail(status_code: int, detail: str) -> JSONResponse:
     return JSONResponse(status_code=status_code, content={"detail": detail})
-
-
-# --- 접근 코드 (본문 검사·라우팅보다 먼저) ---------------------------------------------
-
-
-@app.middleware("http")
-async def require_access_code(request: Request, call_next: Any) -> Any:
-    if request.url.path.startswith(GUARDED_PREFIX):
-        expected = _settings_for(request).access_code
-        if not expected:
-            return _detail(500, MSG_NO_ACCESS_CODE)
-        given = request.headers.get(ACCESS_HEADER, "")
-        # 헤더는 latin-1 로 풀려 오므로 같은 방식으로 바이트로 되돌려 비교한다(비 ASCII 도 예외 없이)
-        if not hmac.compare_digest(given.encode("latin-1", "replace"), expected.encode("utf-8")):
-            return _detail(401, MSG_BAD_ACCESS)
-    return await call_next(request)
 
 
 # --- 오류 모양 --------------------------------------------------------------------
@@ -193,7 +170,7 @@ def _http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:
 
 @app.middleware("http")
 async def catch_unexpected(request: Request, call_next: Any) -> Any:
-    """처리하지 못한 예외 → 500 JSON. 맨 바깥 미들웨어(나중에 붙인 것이 바깥)라 접근 코드 검사도 감싼다.
+    """처리하지 못한 예외 → 500 JSON. 맨 바깥 미들웨어(나중에 붙인 것이 바깥)라 모든 처리를 감싼다.
 
     Exception 처리기를 쓰면 Starlette 가 응답 뒤 예외를 다시 던져 서버가 가리지 않은 traceback 을
     찍으므로, 여기서 잡아 가린 traceback 만 남긴다(예외 문구에 요청 정보가 섞일 수 있어서).

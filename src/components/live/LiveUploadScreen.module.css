@@ -82,28 +82,6 @@
   color: var(--ink-2);
 }
 
-/* ---------- 합성 자료 안내 ---------- */
-.warn {
-  display: flex;
-  gap: var(--space-10);
-  align-items: flex-start;
-  padding: var(--space-14) var(--space-16);
-  border-radius: var(--radius-16);
-  background: var(--warn-bg);
-  box-shadow: inset 0 0 0 1px var(--warn-line);
-  font-size: var(--fs-14);
-  line-height: var(--lh-160);
-  color: var(--ink-2);
-}
-.warnIcon {
-  display: inline-flex;
-  margin-top: var(--space-2);
-  color: var(--warn);
-}
-.warnStrong {
-  color: var(--ink);
-}
-
 /* ---------- 오류 상자 ---------- */
 .alert {
   display: flex;
@@ -296,10 +274,6 @@
 .step-todo {
   color: var(--ink-3);
 }
-.stepDone {
-  font-weight: var(--fw-regular);
-  color: var(--ink-3);
-}
 
 /* ---------- 하단 버튼 줄(데모 UploadFooter 와 같은 모양) ---------- */
 .bar {
@@ -326,10 +300,22 @@
   font-weight: var(--fw-semibold);
   color: var(--ink-2);
 }
+/* 요청 중이 아니면 글자가 없다 — 알림 영역(aria-live)은 그대로 두고 자리만 차지하지 않게(VisuallyHidden 과 같은 방식).
+   그래서 버튼 묶음은 margin-left:auto 로 늘 오른쪽에 둔다(휴대폰은 한 줄 전체). */
+.barText:empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 .buttons {
   display: flex;
   gap: var(--space-8);
   flex: 0 0 auto;
+  margin-left: auto;
 }
 .buttons .start.start {
   min-width: calc(var(--size-44) * 4);

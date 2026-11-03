@@ -4,7 +4,7 @@
 #    예외를 던지지 않는다 — 앱 import·health 는 늘 돌고, 값이 필요한 순간에만 ConfigError(이름만).
 #  - get_settings(): os.environ 을 처음 한 번 읽어 캐시(FastAPI 의존성으로 쓴다. 테스트는 바꿔 끼운다).
 #    로컬은 `uvicorn --env-file .env`, Vercel 은 프로젝트 환경변수로 들어온다(코드는 .env 를 읽지 않는다).
-#  - 진짜 비밀값(BRIEF §2): SUPABASE_SECRET_KEY · UPSTAGE_API_KEY · DEMO_ACCESS_CODE.
+#  - 진짜 비밀값(BRIEF §2): SUPABASE_SECRET_KEY · UPSTAGE_API_KEY. (접근 코드 DEMO_ACCESS_CODE 는 2026-11-03 없앰)
 #    repr 에 나오지 않고, secrets() 로 가림 사전(값 → 자리표시자)을 만든다. 에이전트 id 도 가린다.
 # ==========================================================================
 
@@ -26,13 +26,11 @@ from .config import (
 from .redaction import AGENT_ID_PLACEHOLDER, API_KEY_PLACEHOLDER
 
 REQUIRED_SUPABASE_ENV = ("SUPABASE_URL", "SUPABASE_SECRET_KEY")
-ACCESS_CODE_ENV = "DEMO_ACCESS_CODE"
 # 선택 — 프로젝트 id 는 에이전트가 Upstage 프로젝트에 속하면 필요하다(config.PROJECT_ID_ENV). 여기 없으면 서버가 읽지 못한다
 OPTIONAL_ENV = ("UPSTAGE_BASE_URL", PROJECT_ID_ENV)
-KNOWN_ENV = REQUIRED_SUPABASE_ENV + REQUIRED_UPSTAGE_ENV + (ACCESS_CODE_ENV,) + OPTIONAL_ENV
+KNOWN_ENV = REQUIRED_SUPABASE_ENV + REQUIRED_UPSTAGE_ENV + OPTIONAL_ENV
 
 SUPABASE_KEY_PLACEHOLDER = "<SUPABASE_SECRET_KEY>"
-ACCESS_CODE_PLACEHOLDER = "<DEMO_ACCESS_CODE>"
 
 # 원본 파일을 두는 비공개 버킷(supabase/migrations/…_init_analyses_documents.sql)
 STORAGE_BUCKET = "documents"
@@ -67,16 +65,10 @@ class Settings:
         return {
             "supabase": not self._missing(REQUIRED_SUPABASE_ENV),
             "upstage": not self._missing(REQUIRED_UPSTAGE_ENV),
-            "access_code": bool(self._get(ACCESS_CODE_ENV)),
             "upstage_project": bool(self._get(PROJECT_ID_ENV)),
         }
 
     # --- 값이 필요한 곳 -------------------------------------------------------
-
-    @property
-    def access_code(self) -> str:
-        """접근 코드(없으면 빈 문자열 — 부르는 쪽이 500 으로 알린다)."""
-        return self._get(ACCESS_CODE_ENV)
 
     def supabase(self) -> SupabaseSettings:
         missing = self._missing(REQUIRED_SUPABASE_ENV)
@@ -94,7 +86,6 @@ class Settings:
             ("UPSTAGE_API_KEY", API_KEY_PLACEHOLDER),
             ("UPSTAGE_AGENT_ID", AGENT_ID_PLACEHOLDER),
             ("SUPABASE_SECRET_KEY", SUPABASE_KEY_PLACEHOLDER),
-            (ACCESS_CODE_ENV, ACCESS_CODE_PLACEHOLDER),
         )
         return {value: placeholder for name, placeholder in pairs if (value := self._get(name))}
 

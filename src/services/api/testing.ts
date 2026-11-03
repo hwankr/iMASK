@@ -5,7 +5,7 @@
    result(stages 없음). 다음 작업의 가짜 백엔드도 같은 파일을 읽는다.
    ========================================================================== */
 
-import type { KeyValueStorage } from './access-code';
+import type { KeyValueStorage } from './browser-storage';
 import type { AnalysisOut, DocumentOut } from './client';
 import doneResultFixture from './fixtures/done-result.json';
 

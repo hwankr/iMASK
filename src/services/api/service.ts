@@ -9,10 +9,9 @@
      만들기·업로드 실패는 id 를 넣지 않는다(파일이 올라가지 않아 시작될 수 없음).
    - get: GET /analyses/{id} → 매핑. 404 → null, 그 밖 오류는 ApiError 를 던진다. 알림은 보내지 않는다
      (진행 확인 폴링은 상세 화면이 3초마다 한다 — 조회할 때마다 백엔드가 Upstage 상태를 한 번 확인한다).
-   - list: 접근 코드가 없으면 [](요청 없음). 있으면 이 탭에서 만든 id 들을 조회해 요청 시각 최신순.
-     404 는 목록에서 빼고 건너뛴다. 401 등 그 밖 오류는 던진다.
-   - 같은 id 를 같은 접근 코드로 동시에 조회하면(헤더 숫자 + 목록 화면 + 상세 폴링) 요청 하나를 나눠 쓴다.
-     접근 코드를 고친 뒤의 조회는 이전 코드의 진행 중 요청에 합치지 않고 새로 보낸다.
+   - list: 이 탭에서 만든 id 들을 조회해 요청 시각 최신순(id 가 없으면 요청 없이 []).
+     404 는 목록에서 빼고 건너뛴다. 그 밖 오류는 던진다.
+   - 같은 id 를 동시에 조회하면(헤더 숫자 + 목록 화면 + 상세 폴링) 요청 하나를 나눠 쓴다.
    - 검토·내보내기·다시 분석은 아직 백엔드가 없다 — '실제 분석에서는 아직 지원하지 않는 기능입니다.' 로 거절한다.
      다만 retry 는 거절하지 않고 { ok: false, message: 그 문구 } 로 끝낸다 — 목록 화면(그대로 둠)의 '재시도'가
      거절을 받지 않아 처리되지 않은 오류가 되므로, 실패 결과로 돌려주면 기존 토스트가 이유를 보여 준다.
@@ -28,7 +27,7 @@
 
 import type { AnalysisService, LiveExtras, LiveFile, Pending, RequestAnalysisInput, ServiceEvent } from '../analysis-service';
 import type { Analysis, UploadFile } from '../types';
-import { accessCodeForHeader, browserSessionStorage, type KeyValueStorage } from './access-code';
+import { browserSessionStorage, type KeyValueStorage } from './browser-storage';
 import { ApiError, createApiClient, isApiError, type AnalysisOut, type ApiClient } from './client';
 import { downloadFile, fileInfoError } from './file-download';
 import { toAnalysis } from './mapping';
@@ -61,7 +60,7 @@ export interface ApiServiceDeps {
   client?: ApiClient;
   /** 서명 업로드(기본: supabase-js) */
   upload?: Uploader;
-  /** id 목록·접근 코드 저장소(기본: 이 탭의 sessionStorage) */
+  /** id 목록 저장소(기본: 이 탭의 sessionStorage) */
   storage?: KeyValueStorage | null;
   /** 원본 파일(서명 다운로드 주소)을 받을 fetch(기본: 전역 fetch) — 테스트용 */
   fileFetch?: typeof fetch;
@@ -99,7 +98,7 @@ function pickFile(files: readonly UploadFile[] | undefined): File {
 
 export function createApiService(deps: ApiServiceDeps = {}): ApiService {
   const storage = deps.storage === undefined ? browserSessionStorage() : deps.storage;
-  const client = deps.client ?? createApiClient({ getAccessCode: () => accessCodeForHeader(storage) });
+  const client = deps.client ?? createApiClient();
   const upload = deps.upload ?? uploadWithSupabase;
   const listeners = new Set<Listener>();
   const inflight = new Map<string, Promise<AnalysisOut>>();
@@ -117,19 +116,14 @@ export function createApiService(deps: ApiServiceDeps = {}): ApiService {
     }
   };
 
-  /**
-   * GET 하나 — 같은 id 를 같은 접근 코드로 보낸 요청이 진행 중이면 그 요청을 나눠 쓴다.
-   * 키에 지금 접근 코드를 넣어, 코드를 고친 뒤의 조회가 이전 코드의 요청(예: 401 이 될 요청)에 합쳐지지 않게 한다
-   * (키는 메모리에만 있고 기록하지 않는다).
-   */
+  /** GET 하나 — 같은 id 로 보낸 요청이 진행 중이면 그 요청을 나눠 쓴다 */
   const fetchOne = (id: string): Promise<AnalysisOut> => {
-    const key = JSON.stringify([accessCodeForHeader(storage), id]);
-    const running = inflight.get(key);
+    const running = inflight.get(id);
     if (running) return running;
     const p = client.getAnalysis(id).finally(() => {
-      if (inflight.get(key) === p) inflight.delete(key);
+      if (inflight.get(id) === p) inflight.delete(id);
     });
-    inflight.set(key, p);
+    inflight.set(id, p);
     return p;
   };
 
@@ -158,7 +152,6 @@ export function createApiService(deps: ApiServiceDeps = {}): ApiService {
 
   const service: ApiService = {
     async list() {
-      if (!accessCodeForHeader(storage)) return [];
       const ids = readSessionIds(storage);
       const found: { analysis: Analysis; order: number }[] = [];
       const missing: string[] = [];

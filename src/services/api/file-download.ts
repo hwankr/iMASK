@@ -2,17 +2,17 @@
    원본 파일 받기 — GET /analyses/{id}/file 이 준 서명 다운로드 주소(Supabase Storage)에서 내용을 받는다.
    - 주소 검사: https: 이거나, http: 이면서 호스트가 localhost·127.0.0.1(로컬 가짜 백엔드)일 때만 받는다.
      그 밖(javascript:·data:·원격 http: 등)은 요청하지 않고 오류.
-   - 받기 요청에는 사용자 지정 헤더를 붙이지 않는다(X-Demo-Code 없음 · credentials omit · cache no-store · referrer 없음).
+   - 받기 요청에는 사용자 지정 헤더를 붙이지 않는다(credentials omit · cache no-store · referrer 없음).
    - 시간 제한(기본 60초 — 백엔드 클라이언트와 같다)은 응답 헤더가 아니라 본문을 다 읽을 때까지 걸린다.
    - 2xx 아님 · 빈 본문 · 20MB(20,971,520 바이트) 초과는 오류. 본문은 조각씩 읽으며 한도를 넘는 순간 멈춘다.
    - 오류는 고정 한국어 문구의 '새' ApiError 다. 서명 주소·토큰은 문구·cause·스택·콘솔 어디에도 넣지 않는다.
      · 받기 안에서 알고 있는 실패는 모듈 안 전용 표식(FileFailure)으로만 던지고, 바깥 경계에서 새 ApiError 로 바꾼다.
        그 밖의 모든 오류는 종류와 상관없이(ApiError 여도) 버리고 고정 문구로 바꾼다 — 바깥 오류 객체를 다시 던지지 않는다.
-     · /file 요청 오류도 fileInfoError 로 새 ApiError 로 바꾼다. 401·404 의 백엔드 detail 은 안전한 문장일 때만
+     · /file 요청 오류도 fileInfoError 로 새 ApiError 로 바꾼다. 404 의 백엔드 detail 은 안전한 문장일 때만
        보존하고(isSafeDetail), 그 밖은 고정 문구로 바꾼다.
    ========================================================================== */
 
-import { ApiError, DEFAULT_TIMEOUT_MS, MSG_NETWORK, MSG_TIMEOUT, MSG_UNAUTHORIZED, isApiError, type ApiErrorCode } from './client';
+import { ApiError, DEFAULT_TIMEOUT_MS, MSG_NETWORK, MSG_TIMEOUT, isApiError, type ApiErrorCode } from './client';
 
 /** 원본 파일 최대 크기(업로드 한도와 같은 20MB) */
 export const FILE_MAX_BYTES = 20 * 1024 * 1024;
@@ -49,7 +49,7 @@ export function isSafeDetail(detail: unknown): detail is string {
 
 /**
  * /file 요청(client.getFile)이 던진 오류 → 새 ApiError — 순수 함수. 원래 오류 객체 · cause · 스택은 넘기지 않는다.
- * - 401 · 404: 백엔드 detail 이 안전한 문장이면 그대로, 아니면 고정 문구(401 접근 코드 · 404 원본 파일 없음).
+ * - 404: 백엔드 detail 이 안전한 문장이면 그대로, 아니면 고정 문구(원본 파일 없음).
  * - 시간 초과 · 네트워크: 클라이언트의 고정 문구. 그 밖(5xx · 다른 4xx · 응답 읽기 실패 · ApiError 아님): 주소를 받지 못함.
  * code · status 는 원래 값을 따른다(ApiError 가 아니면 server · 0).
  */
@@ -58,7 +58,6 @@ export function fileInfoError(err: unknown): ApiError {
   const status = typeof err.status === 'number' && Number.isFinite(err.status) ? err.status : 0;
   const code: ApiErrorCode = err.code;
   const detail = err.message;
-  if (code === 'unauthorized') return new ApiError(status, code, isSafeDetail(detail) ? detail : MSG_UNAUTHORIZED);
   if (code === 'not_found') return new ApiError(status, code, isSafeDetail(detail) ? detail : MSG_FILE_NOT_FOUND);
   if (code === 'network') return new ApiError(status, code, detail === MSG_TIMEOUT ? MSG_TIMEOUT : MSG_NETWORK);
   return new ApiError(status, code, MSG_FILE_BAD_URL);

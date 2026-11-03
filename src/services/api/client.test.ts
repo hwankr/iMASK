@@ -3,11 +3,11 @@ import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   ApiError,
+  MSG_BAD_REQUEST,
   MSG_BAD_RESPONSE,
   MSG_NETWORK,
   MSG_SERVER,
   MSG_TIMEOUT,
-  MSG_UNAUTHORIZED,
   apiErrorAnalysisId,
   apiErrorCode,
   codeForStatus,
@@ -18,9 +18,9 @@ import { analysisOut, fakeFetch, json } from './testing';
 const ID = 'ab12cd34-0000-4000-8000-000000000000';
 
 describe('요청 모양', () => {
-  it('같은 출처 /api/py, 모든 분석 요청에 X-Demo-Code(앞뒤 공백 뗌)', async () => {
+  it('같은 출처 /api/py, 사용자 지정 헤더 없음(접근 코드 헤더도 없다)', async () => {
     const { fetch, seen } = fakeFetch((req) => (req.method === 'GET' ? json(200, analysisOut()) : req.url.endsWith('/start') ? json(200, analysisOut({ status: 'running' })) : json(201, { analysis: analysisOut(), upload: {} })));
-    const client = createApiClient({ fetch, getAccessCode: () => '  code-123  ' });
+    const client = createApiClient({ fetch });
     await client.createAnalysis({ name: 'n', filename: 'a.pdf', size: 10, mime_type: 'application/pdf' });
     await client.startAnalysis(ID);
     await client.getAnalysis(ID);
@@ -29,28 +29,15 @@ describe('요청 모양', () => {
       ['POST', `/api/py/analyses/${ID}/start`],
       ['GET', `/api/py/analyses/${ID}`],
     ]);
-    for (const r of seen) expect(r.headers['x-demo-code']).toBe('code-123');
+    for (const r of seen) expect(r.headers).not.toHaveProperty('x-demo-code');
     expect(seen[0].headers['content-type']).toBe('application/json');
     expect(seen[0].body).toEqual({ name: 'n', filename: 'a.pdf', size: 10, mime_type: 'application/pdf' });
     expect(seen[1].body).toBeUndefined();
   });
 
-  it('접근 코드가 비면 헤더를 빼고 보낸다', async () => {
-    const { fetch, seen } = fakeFetch(() => json(401, { detail: MSG_UNAUTHORIZED }));
-    const client = createApiClient({ fetch, getAccessCode: () => '   ' });
-    await expect(client.getAnalysis(ID)).rejects.toMatchObject({ code: 'unauthorized' });
-    expect(seen[0].headers).not.toHaveProperty('x-demo-code');
-  });
-
-  it('ASCII 가 아닌 코드는 보내지 않고 401(맞을 수 없는 코드)', async () => {
-    const { fetch, seen } = fakeFetch(() => json(200, analysisOut()));
-    await expect(createApiClient({ fetch, getAccessCode: () => '한글코드' }).getAnalysis(ID)).rejects.toMatchObject({ status: 401, code: 'unauthorized', message: MSG_UNAUTHORIZED });
-    expect(seen).toHaveLength(0);
-  });
-
   it('getAnalysis(id, { includeStages: true }) 만 ?include=stages 를 붙인다', async () => {
     const { fetch, seen } = fakeFetch(() => json(200, analysisOut()));
-    const client = createApiClient({ fetch, getAccessCode: () => 'code-123' });
+    const client = createApiClient({ fetch });
     await client.getAnalysis(ID, { includeStages: true });
     await client.getAnalysis(ID, { includeStages: false });
     await client.getAnalysis(ID, {});
@@ -61,51 +48,48 @@ describe('요청 모양', () => {
       ['GET', `/api/py/analyses/${ID}`],
       ['GET', `/api/py/analyses/${ID}`],
     ]);
-    for (const r of seen) expect(r.headers['x-demo-code']).toBe('code-123');
   });
 
-  it('getFile — GET /analyses/{id}/file, X-Demo-Code · JSON 응답을 그대로', async () => {
+  it('getFile — GET /analyses/{id}/file · JSON 응답을 그대로', async () => {
     const body = { url: 'https://storage.example.test/object/sign/documents/a.pdf?token=fixture-token', mime_type: 'application/pdf', filename: 'a.pdf' };
     const { fetch, seen } = fakeFetch(() => json(200, body));
-    const out = await createApiClient({ fetch, getAccessCode: () => ' code-123 ' }).getFile('a/b');
+    const out = await createApiClient({ fetch }).getFile('a/b');
     expect(out).toEqual(body);
     expect(seen).toHaveLength(1);
     expect(seen[0]).toMatchObject({ method: 'GET', url: '/api/py/analyses/a%2Fb/file', body: undefined });
-    expect(seen[0].headers['x-demo-code']).toBe('code-123');
     expect(seen[0].headers.accept).toBe('application/json');
   });
 
-  it('getFile 오류 — 401 · 404 는 백엔드 detail 그대로, 네트워크 · 시간 초과는 다른 요청과 같다', async () => {
+  it('getFile 오류 — 404 는 백엔드 detail 그대로, 네트워크 · 시간 초과는 다른 요청과 같다', async () => {
     const cases: [number, string, string][] = [
-      [401, 'unauthorized', '접근 코드가 맞지 않습니다.'],
       [404, 'not_found', '원본 파일을 찾을 수 없습니다.'],
       [500, 'server', '서버 설정이 빠졌습니다.'],
     ];
     for (const [status, code, detail] of cases) {
       const { fetch } = fakeFetch(() => json(status, { detail }));
-      await expect(createApiClient({ fetch, getAccessCode: () => 'c' }).getFile(ID)).rejects.toMatchObject({ status, code, message: detail });
+      await expect(createApiClient({ fetch }).getFile(ID)).rejects.toMatchObject({ status, code, message: detail });
     }
     const down = (async () => {
       throw new TypeError('Failed to fetch');
     }) as typeof globalThis.fetch;
-    await expect(createApiClient({ fetch: down, getAccessCode: () => 'c' }).getFile(ID)).rejects.toMatchObject({ status: 0, code: 'network', message: MSG_NETWORK });
+    await expect(createApiClient({ fetch: down }).getFile(ID)).rejects.toMatchObject({ status: 0, code: 'network', message: MSG_NETWORK });
     const hang = ((_: unknown, init?: RequestInit) =>
       new Promise((_resolve, reject) => {
         init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
       })) as typeof globalThis.fetch;
-    await expect(createApiClient({ fetch: hang, getAccessCode: () => 'c', timeoutMs: 5 }).getFile(ID)).rejects.toMatchObject({ code: 'network', message: MSG_TIMEOUT });
+    await expect(createApiClient({ fetch: hang, timeoutMs: 5 }).getFile(ID)).rejects.toMatchObject({ code: 'network', message: MSG_TIMEOUT });
   });
 
   it('id 는 주소 조각으로 감싼다 · baseUrl 끝 / 는 뗀다', async () => {
     const { fetch, seen } = fakeFetch(() => json(200, analysisOut()));
-    await createApiClient({ fetch, baseUrl: 'http://x/api/py/', getAccessCode: () => 'c' }).getAnalysis('a/b?c');
+    await createApiClient({ fetch, baseUrl: 'http://x/api/py/' }).getAnalysis('a/b?c');
     expect(seen[0].url).toBe('http://x/api/py/analyses/a%2Fb%3Fc');
   });
 });
 
 describe('오류 → ApiError', () => {
   const cases: [number, string, string][] = [
-    [401, 'unauthorized', '접근 코드가 맞지 않습니다.'],
+    [401, 'bad_request', '권한이 없습니다.'],
     [404, 'not_found', '분석 건을 찾을 수 없습니다.'],
     [409, 'conflict', '이미 시작한 분석입니다.'],
     [400, 'bad_request', '파일 이름이 비었습니다.'],
@@ -115,7 +99,7 @@ describe('오류 → ApiError', () => {
   for (const [status, code, detail] of cases) {
     it(`${status} → ${code} + 서버 detail`, async () => {
       const { fetch } = fakeFetch(() => json(status, { detail }));
-      const err = await createApiClient({ fetch, getAccessCode: () => 'c' })
+      const err = await createApiClient({ fetch })
         .getAnalysis(ID)
         .catch((e: unknown) => e);
       expect(err).toBeInstanceOf(ApiError);
@@ -126,9 +110,10 @@ describe('오류 → ApiError', () => {
 
   it('detail 이 없거나 JSON 이 아니면 기본 문구', async () => {
     const { fetch } = fakeFetch(() => new Response('<html>Internal Server Error</html>', { status: 500 }));
-    await expect(createApiClient({ fetch, getAccessCode: () => 'c' }).getAnalysis(ID)).rejects.toMatchObject({ status: 500, code: 'server', message: MSG_SERVER });
+    await expect(createApiClient({ fetch }).getAnalysis(ID)).rejects.toMatchObject({ status: 500, code: 'server', message: MSG_SERVER });
     const { fetch: f2 } = fakeFetch(() => json(401, { detail: 7 }));
-    await expect(createApiClient({ fetch: f2, getAccessCode: () => 'c' }).getAnalysis(ID)).rejects.toMatchObject({ code: 'unauthorized', message: MSG_UNAUTHORIZED });
+    await expect(createApiClient({ fetch: f2 }).getAnalysis(ID)).rejects.toMatchObject({ code: 'bad_request', message: MSG_BAD_REQUEST });
+    expect(codeForStatus(401)).toBe('bad_request');
     expect(codeForStatus(413)).toBe('bad_request');
     expect(codeForStatus(503)).toBe('server');
   });
@@ -137,7 +122,7 @@ describe('오류 → ApiError', () => {
     const fetch = (async () => {
       throw new TypeError('Failed to fetch');
     }) as typeof globalThis.fetch;
-    const err = await createApiClient({ fetch, getAccessCode: () => 'c' })
+    const err = await createApiClient({ fetch })
       .getAnalysis(ID)
       .catch((e: unknown) => e);
     expect(err).toMatchObject({ status: 0, code: 'network', message: MSG_NETWORK });
@@ -148,12 +133,12 @@ describe('오류 → ApiError', () => {
       new Promise((_resolve, reject) => {
         init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
       })) as typeof globalThis.fetch;
-    await expect(createApiClient({ fetch, getAccessCode: () => 'c', timeoutMs: 5 }).getAnalysis(ID)).rejects.toMatchObject({ code: 'network', message: MSG_TIMEOUT });
+    await expect(createApiClient({ fetch, timeoutMs: 5 }).getAnalysis(ID)).rejects.toMatchObject({ code: 'network', message: MSG_TIMEOUT });
   });
 
   it('성공 응답이 JSON 이 아니면 server', async () => {
     const { fetch } = fakeFetch(() => new Response('ok', { status: 200 }));
-    await expect(createApiClient({ fetch, getAccessCode: () => 'c' }).getAnalysis(ID)).rejects.toMatchObject({ code: 'server', message: MSG_BAD_RESPONSE });
+    await expect(createApiClient({ fetch }).getAnalysis(ID)).rejects.toMatchObject({ code: 'server', message: MSG_BAD_RESPONSE });
   });
 
   it('apiErrorCode — ApiError 가 아니면 null', () => {
@@ -198,7 +183,7 @@ describe('시간 제한은 본문을 다 읽을 때까지', () => {
     it(`${label} → 제한 시간에 network + 시간 초과 문구`, async () => {
       const baseUrl = await slowBodyServer(status, delay);
       const started = Date.now();
-      const err = await createApiClient({ baseUrl, getAccessCode: () => 'c', timeoutMs: 60 })
+      const err = await createApiClient({ baseUrl, timeoutMs: 60 })
         .getAnalysis(ID)
         .catch((e: unknown) => e);
       const took = Date.now() - started;
@@ -213,12 +198,12 @@ describe('시간 제한은 본문을 다 읽을 때까지', () => {
     const fetch200 = (async () => new Response(stalled(), { status: 200 })) as typeof globalThis.fetch;
     const fetch502 = (async () => new Response(stalled(), { status: 502 })) as typeof globalThis.fetch;
     for (const fetch of [fetch200, fetch502]) {
-      await expect(createApiClient({ fetch, getAccessCode: () => 'c', timeoutMs: 20 }).getAnalysis(ID)).rejects.toMatchObject({ code: 'network', message: MSG_TIMEOUT });
+      await expect(createApiClient({ fetch, timeoutMs: 20 }).getAnalysis(ID)).rejects.toMatchObject({ code: 'network', message: MSG_TIMEOUT });
     }
   });
 
   it('제한 안에 끝난 본문은 그대로(타이머가 다음 요청에 남지 않음)', async () => {
     const baseUrl = await slowBodyServer(200, 10);
-    await expect(createApiClient({ baseUrl, getAccessCode: () => 'c', timeoutMs: 2000 }).getAnalysis(ID)).resolves.toMatchObject({ detail: 'x', id: 'a' });
+    await expect(createApiClient({ baseUrl, timeoutMs: 2000 }).getAnalysis(ID)).resolves.toMatchObject({ detail: 'x', id: 'a' });
   });
 });

@@ -19,7 +19,7 @@ from unittest.mock import patch
 
 import httpx
 import pytest
-from api_fakes import FAKE_ACCESS_CODE, FAKE_UPSTAGE_KEY, FakeUpstageServer
+from api_fakes import FAKE_UPSTAGE_KEY, FakeUpstageServer
 from fake_findings import VALUES, stored_result
 from fake_tokens import fake_jwt
 from fastapi.testclient import TestClient
@@ -111,11 +111,11 @@ class FakeApi:
     def handle(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
         path, method = request.url.path, request.method
-        if request.url.host == STORAGE_HOST:  # 서명 다운로드 URL — 접근 코드 없이 받는다
+        if request.url.host == STORAGE_HOST:  # 서명 다운로드 URL — 사용자 지정 헤더 없이 받는다
             assert "x-demo-code" not in request.headers
             assert request.url.params.get("token") == DOWNLOAD_TOKEN
             return httpx.Response(200, content=self.file_content)
-        assert request.headers.get("x-demo-code") == FAKE_ACCESS_CODE
+        assert "x-demo-code" not in request.headers  # 접근 코드 없음(2026-11-03 없앰)
         if method == "GET" and path == f"/api/py/analyses/{ANALYSIS_ID}/file":
             if self.file_status != 200:
                 return httpx.Response(self.file_status, json={"detail": "원본 파일을 찾을 수 없습니다."})
@@ -151,7 +151,7 @@ class FakeApi:
 @pytest.fixture
 def script(monkeypatch: pytest.MonkeyPatch) -> Any:
     module = load_script()
-    for name in ("IMASK_DEMO_CODE", "UPSTAGE_API_KEY", "UPSTAGE_PROJECT_ID", "VERCEL_PROTECTION_BYPASS"):
+    for name in ("UPSTAGE_API_KEY", "UPSTAGE_PROJECT_ID", "VERCEL_PROTECTION_BYPASS"):
         monkeypatch.delenv(name, raising=False)
     module._SECRETS.clear()
     return module
@@ -160,7 +160,7 @@ def script(monkeypatch: pytest.MonkeyPatch) -> Any:
 def _run(
     script: Any, api: FakeApi, upstage: FakeUpstageServer, args: list[str], *, key: bool = True, project: str | None = None
 ) -> int:
-    env = {"DEMO_ACCESS_CODE": FAKE_ACCESS_CODE}
+    env: dict[str, str] = {}
     if key:
         env["UPSTAGE_API_KEY"] = FAKE_UPSTAGE_KEY
     if project:
@@ -192,7 +192,7 @@ def test_abnormal_exit_deletes_upstage_file(script: Any, capsys: Any, poll_mode:
     assert upstage.deleted == [FILE_ID]
     out = capsys.readouterr().out
     assert "정리: Upstage 파일 1개 삭제 요청 완료" in out
-    assert FAKE_UPSTAGE_KEY not in out and FAKE_ACCESS_CODE not in out
+    assert FAKE_UPSTAGE_KEY not in out
 
 
 @pytest.mark.parametrize("project", ["proj_test_FAKE_9", None])
@@ -421,7 +421,7 @@ def test_upload_error_is_redacted_before_truncation(script: Any, capsys: Any) ->
     long_token = "FAKE_LONG_" + "R" * 280
     long_url = "https://storage.invalid/object/upload/sign/documents/probe.pdf?token=" + long_token
     args = script.argparse.Namespace(base_url="http://127.0.0.1:8200")
-    run = script.Run(args, {"DEMO_ACCESS_CODE": FAKE_ACCESS_CODE})
+    run = script.Run(args, {})
     upload = {"bucket": "documents", "path": "analyses/x/document.pdf", "token": long_token, "signed_url": long_url}
     with patch.object(script.httpx, "put", side_effect=RuntimeError(long_url)):
         assert script._upload(run, upload, b"x", "application/pdf") is False
@@ -477,7 +477,7 @@ def test_start_without_file_id_and_unknown_reread_reports_uncertain(script: Any,
     out = capsys.readouterr().out
     assert "정리 확인 못 함" in out
     assert "정리를 끝내지 못해 실패로 끝냅니다" in out
-    assert FAKE_UPSTAGE_KEY not in out and FAKE_ACCESS_CODE not in out
+    assert FAKE_UPSTAGE_KEY not in out
 
 
 def test_terminal_start_without_file_id_needs_no_reread(script: Any) -> None:
@@ -549,7 +549,7 @@ def _integrated(
             def cleanup_client(api_key: str, base_url: str, **kwargs: Any) -> UpstageClient:
                 return UpstageClient(api_key, base_url, transport=httpx.MockTransport(upstage.handle), **kwargs)
 
-            env = {"DEMO_ACCESS_CODE": FAKE_ACCESS_CODE, "UPSTAGE_API_KEY": FAKE_UPSTAGE_KEY}
+            env = {"UPSTAGE_API_KEY": FAKE_UPSTAGE_KEY}
             with (
                 patch.object(script, "_read_env", return_value=env),
                 patch.object(script, "_upload", browser_upload),
@@ -592,4 +592,4 @@ def test_real_api_cleanup_read_lost_reports_uncertain(script: Any, capsys: Any) 
     assert upstage.calls("DELETE", "file") == []
     out = capsys.readouterr().out
     assert "정리 확인 못 함" in out
-    assert FAKE_UPSTAGE_KEY not in out and FAKE_ACCESS_CODE not in out
+    assert FAKE_UPSTAGE_KEY not in out

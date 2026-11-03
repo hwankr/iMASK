@@ -1,19 +1,14 @@
 'use client';
 
 /* ==========================================================================
-   실제 분석 화면 훅 — 접근 코드 읽기 · 상태 확인 폴링 · 1초 시계 · 상태 변화 알림 · 단계별 JSON 불러오기
+   실제 분석 화면 훅 — 상태 확인 폴링 · 1초 시계 · 상태 변화 알림 · 단계별 JSON 불러오기
    ========================================================================== */
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useAnnounce } from '@/components/ui';
 import type { AnalysisStatus } from '@/display/rules';
-import { apiErrorCode, readAccessCode, subscribeAccessCode, type LiveExtras } from '@/services';
+import { apiErrorCode, type LiveExtras } from '@/services';
 import { POLL_MS, statusAnnouncement } from './liveModel';
-
-/** 이 탭에 저장한 접근 코드(입력한 그대로). 서버 렌더·하이드레이션 첫 렌더에서는 '' */
-export function useAccessCode(): string {
-  return useSyncExternalStore(subscribeAccessCode, () => readAccessCode(), () => '');
-}
 
 /**
  * active 인 동안 intervalMs 마다 refresh() 를 부른다.

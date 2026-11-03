@@ -4,22 +4,18 @@ import { useRouteBase } from '@/services/react';
 import styles from './ListEmpty.module.css';
 
 /**
- * 분석 이력 없음 — Main 205–233. 그림, 제목·설명, 단계 3개, '첫 문서 분석하기'(→ /analyses/new, `/demo` 아래면 /demo/analyses/new),
- * '샘플 분석 건 둘러보기'(데모 버튼 — 데모 서비스일 때만), 데모 안내.
+ * 분석 이력 없음 — Main 205–233. 그림, 제목, 단계 3개, '첫 문서 분석하기'(→ /analyses/new, `/demo` 아래면 /demo/analyses/new),
+ * '샘플 분석 건 둘러보기'(데모 버튼 — 데모 서비스일 때만).
+ * 실무자가 쓰는 화면이라 원본의 설명 문단과 아래 데모 안내 문구는 뺐다(데모 여부는 헤더 배지가 보인다).
  */
 export function ListEmpty({ onLoadSamples }: { onLoadSamples?: () => void }) {
   const base = useRouteBase();
   return (
     <section aria-labelledby="dg-empty-title" className={styles.empty}>
       <EmptyArt />
-      <div className={styles.text}>
-        <h2 id="dg-empty-title" className={styles.title}>
-          아직 분석한 문서가 없습니다
-        </h2>
-        <p className={styles.desc}>
-          대출 신청서, 소득증빙, 거래내역처럼 함께 검토할 서류를 올리면 개인정보와 금융 중요정보를 찾아 위험등급과 판단 근거를 보여드립니다.
-        </p>
-      </div>
+      <h2 id="dg-empty-title" className={styles.title}>
+        아직 분석한 문서가 없습니다
+      </h2>
       <ol className={styles.steps}>
         <li className={styles.step}>
           <span className={styles.stepNumFirst}>1</span>문서 올리기
@@ -43,7 +39,6 @@ export function ListEmpty({ onLoadSamples }: { onLoadSamples?: () => void }) {
           </Button>
         ) : null}
       </div>
-      <p className={styles.note}>샘플은 가상의 정보로 만든 데모 데이터입니다.</p>
     </section>
   );
 }

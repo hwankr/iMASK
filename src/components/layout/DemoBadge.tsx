@@ -6,6 +6,11 @@ export interface DemoBadgeProps {
   size?: 'md' | 'lg';
   /** 글자 — 기본 '데모 데이터' */
   label?: string;
+  /**
+   * 좁은 폭(768 미만)에서 대신 보일 짧은 글자 — 옆에 모드 전환 링크가 있어 헤더가 빠듯할 때만 넘긴다.
+   * 없으면 폭과 상관없이 label 그대로(지금 모양).
+   */
+  shortLabel?: string;
   /** 마우스를 올리면 보이는 설명 — 기본 '샘플 데이터로 동작하는 데모 환경입니다' */
   title?: string;
   className?: string;
@@ -15,11 +20,18 @@ export interface DemoBadgeProps {
  * 데모 데이터 표시 — 점 + 글자(Main 109). 샘플 데이터로 동작하는 환경임을 늘 보여 준다.
  * 실제 분석 모드에서는 헤더가 '실제 분석' 글자와 설명을 넘긴다.
  */
-export function DemoBadge({ size = 'md', label = '데모 데이터', title = '샘플 데이터로 동작하는 데모 환경입니다', className }: DemoBadgeProps) {
+export function DemoBadge({ size = 'md', label = '데모 데이터', shortLabel, title = '샘플 데이터로 동작하는 데모 환경입니다', className }: DemoBadgeProps) {
   return (
     <span title={title} className={cx(styles.badge, styles[size], className)}>
       <span aria-hidden="true" className={styles.dot} />
-      {label}
+      {shortLabel ? (
+        <>
+          <span className={styles.long}>{label}</span>
+          <span className={styles.short}>{shortLabel}</span>
+        </>
+      ) : (
+        label
+      )}
     </span>
   );
 }

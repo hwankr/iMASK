@@ -25,3 +25,16 @@
   border-radius: var(--radius-round);
   background: var(--demo-dot);
 }
+
+/* 짧은 글자(shortLabel 을 넘겼을 때만 있다) — 폭 768 미만에서 긴 글자 대신 보인다 */
+.short {
+  display: none;
+}
+@media (max-width: 767.98px) {
+  .long {
+    display: none;
+  }
+  .short {
+    display: inline;
+  }
+}

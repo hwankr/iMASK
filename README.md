@@ -4,7 +4,7 @@
 
 - 기본은 브라우저 안의 **데모 서비스**가 샘플 데이터로 응답합니다. 샘플 속 이름·주민등록번호·전화번호·계좌번호·주소·금액은 모두 가상입니다. 화면의 '데모 데이터' 표시도 이 때문에 있습니다.
 - `NEXT_PUBLIC_IMASK_SERVICE=api` 로 켜는 **실제 분석 모드**에서는 서류 묶음 하나를 올리면 **FastAPI 백엔드**(`api/`)가 **Upstage Studio 워크플로우**로 분석하고, 화면은 진행 상태를 보여 주고, 끝나면 데모와 같은 상세 검토 화면(올린 PDF·이미지 원문 위의 탐지 위치 상자·마스킹 미리보기·분석 요약)을 **읽기 전용**으로 보여 줍니다([실제 분석 모드](#실제-분석-모드)). 검토 동작(확인·오탐·분류 수정·메모·검토 완료)·보고서는 아직 데모에만 있습니다.
-- 모드는 **주소 기준**입니다. **`/demo` 아래는 언제나 데모**이고, 그 밖은 빌드 모드(`NEXT_PUBLIC_IMASK_SERVICE`)를 따릅니다. 그래서 실제 분석 모드로 빌드한 운영 사이트에서도 `/demo` 로 들어가면 데모(샘플 6건·상세 검토·보고서·내보내기)가 그대로 동작합니다. 실제 분석 화면 헤더의 **'데모 체험하기'** 링크가 `/demo` 로 갑니다.
+- 모드는 **주소 기준**입니다. **`/demo` 아래는 언제나 데모**이고, 그 밖은 빌드 모드(`NEXT_PUBLIC_IMASK_SERVICE`)를 따릅니다. 그래서 실제 분석 모드로 빌드한 운영 사이트에서도 `/demo` 로 들어가면 데모(샘플 6건·상세 검토·보고서·내보내기)가 그대로 동작합니다. 실제 분석 화면 헤더의 **'데모 체험하기'** 링크가 `/demo` 로 가고, `/demo` 헤더의 **'실제 분석으로'** 링크로 돌아옵니다.
 - Next.js 16(App Router), TypeScript strict, CSS Modules와 디자인 토큰(CSS 변수)으로 만들었습니다. Tailwind, CSS-in-JS, UI 라이브러리는 쓰지 않습니다.
 
 ## 화면
@@ -123,18 +123,18 @@ src/
 │  ├─ demo/                 데모 구현 — 동기 코어(core.ts), 비동기 겉면(service.ts),
 │  │                        미리 해 둔 검토 동작(seed.ts), /dev/states 상태 준비(scenarios.ts)
 │  ├─ api/                  실제 분석 구현 — 백엔드 클라이언트(client.ts), 응답 → 화면 타입(mapping.ts),
-│  │                        서명 업로드(upload.ts), 접근 코드·이 탭의 분석 id(access-code.ts·session-list.ts)
+│  │                        서명 업로드(upload.ts), 이 탭의 저장소·분석 id(browser-storage.ts·session-list.ts)
 │  ├─ mode.ts               서비스 모드 — 빌드 모드 SERVICE_MODE(NEXT_PUBLIC_IMASK_SERVICE — demo | api)와
 │  │                        주소 기준 모드 modeForPath(/demo 아래는 언제나 demo)
 │  ├─ index.ts              createServiceFor(mode) · createServiceCache() — 모드별 데모·실제 분석 서비스를 만드는 한 곳
 │  └─ react.tsx             ServiceProvider(주소 기준 모드 · 기준 경로, 모드별 브라우저 싱글턴)와
-│                           훅(useService·useServiceMode·useRouteBase·useAnalyses·useAnalysis·usePending …)
+│                           훅(useService·useServiceMode·useRouteBase·useBuildMode·useAnalyses·useAnalysis·usePending …)
 ├─ app/                     ⑤ 라우트 — layout.tsx·providers.tsx·fonts.ts·globals.css,
 │                             page.tsx(/), analyses/(새 분석·상세·보고서 — 주소 기준 모드로 데모·실제 분석 화면을 고름),
 │                             demo/(/demo 아래 같은 네 화면 — 언제나 데모, [...rest] 는 /demo 아래 404), dev/(states·components)
 ├─ components/              ⑤ 화면 컴포넌트
 │  ├─ ui/                   공통 컴포넌트(버튼·입력·드롭다운·탭·모달·토스트·상태 표기 …)
-│  ├─ layout/               헤더(실제 분석 화면의 '데모 체험하기' 링크 포함), AppShell(<main>·토스트·알림 영역·
+│  ├─ layout/               헤더(모드 전환 링크 — modeSwitch.ts: '데모 체험하기' · '실제 분석으로'), AppShell(<main>·토스트·알림 영역·
 │  │                        아이콘 스프라이트), 데모 표시, ByServiceMode(주소 기준 모드로 두 화면 중 하나를 그림)
 │  ├─ list/                 분석 목록
 │  ├─ upload/               새 분석
@@ -175,16 +175,16 @@ supabase/                   DB 변경 기록 — migrations/에 적용한 SQL을
    $env:NEXT_PUBLIC_IMASK_SERVICE='api'; npm run dev       # Windows PowerShell
    ```
 
-3. `http://localhost:3000/analyses/new` 에서 접근 코드(팀에서 받은 코드 — 로컬은 `.env` 의 `DEMO_ACCESS_CODE` 값)를 넣고 파일을 올립니다.
+3. `http://localhost:3000/analyses/new` 에서 파일을 올립니다(접근 코드는 없습니다 — 2026-11-03 없앰).
 
 - 브라우저 업로드에 `NEXT_PUBLIC_SUPABASE_URL`·`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` 도 필요합니다. Next 는 저장소 루트의 `.env` 도 읽지만, 브라우저 코드에는 `NEXT_PUBLIC_` 이 붙은 값만 들어갑니다.
 - `NEXT_PUBLIC_*` 값은 **빌드(또는 `next dev` 시작) 때** 코드에 들어갑니다. 바꾸면 개발 서버를 다시 띄우고, Vercel 에서는 다시 배포합니다.
-- 헤더 배지가 '데모 데이터' 대신 **'실제 분석'** 으로 보이면 켜진 것입니다. 실제 분석 화면 헤더에만 배지 앞에 작은 **'데모 체험하기'** 링크(→ `/demo`, 휴대폰 폭에서는 '데모')가 있습니다. 이 링크는 미리 받지 않으므로(`prefetch={false}`) 실제 분석 화면을 열 때의 요청은 그대로입니다. `/demo` 에서 실제 분석 화면으로 돌아가는 링크는 아직 없습니다(뒤로 가기나 주소 입력).
+- 헤더 배지가 '데모 데이터' 대신 **'실제 분석'** 으로 보이면 켜진 것입니다. 실제 분석 화면 헤더에는 배지 앞에 작은 **'데모 체험하기'** 링크(→ `/demo`, 휴대폰 폭에서는 '데모')가, `/demo` 헤더에는 같은 자리에 **'실제 분석으로'** 링크(→ `/`, 휴대폰 폭에서는 '실제' — 이때 배지도 '데모')가 있습니다(`src/components/layout/modeSwitch.ts`). 두 링크는 미리 받지 않으므로(`prefetch={false}`) 한쪽 화면을 열 때 다른 쪽 화면을 받지 않습니다. 데모 빌드(실제 분석 없음)에는 이 링크가 없습니다.
 
 ### 흐름
 
 ```
-새 분석(/analyses/new) — 접근 코드 · 분석명(선택) · 파일 1개
+새 분석(/analyses/new) — 분석명(선택) · 파일 1개
   ① POST /api/py/analyses             분석 건 + 서명 업로드 URL          '분석 건 만드는 중'
   ② Supabase Storage 서명 업로드       @supabase/supabase-js · 공개 키    '파일 올리는 중'
   ③ POST /api/py/analyses/{id}/start  Upstage 작업 시작                  '분석 시작 중'
@@ -204,24 +204,19 @@ supabase/                   DB 변경 기록 — migrations/에 적용한 SQL을
 - 요청 하나의 시간 제한은 60초이고 응답 본문을 다 받을 때까지 걸립니다.
 - 상세 화면은 `queued`·`running` 인 동안만 조회합니다. 앞 요청이 끝난 뒤 다음을 잡아 겹치지 않고, 탭이 숨겨지면 쉬었다가 다시 보이면 바로 한 번 조회합니다. 끝나거나(`done`·`failed`) 화면을 떠나면 멈춥니다. **백엔드는 조회가 올 때만 상태를 나아가게 하므로 상세 화면이 열려 있어야 끝납니다**(닫았다가 다시 열면 이어서 진행합니다).
 
-### 접근 코드
+### 접근 제한 없음
 
-공개 주소를 아무나 쓰지 못하게 막는 공용 코드입니다(로그인이 아닙니다).
-
-- 입력칸은 값을 가리고, 값은 **이 탭의 sessionStorage**(`imask:demo-code`)에만 둡니다. 탭을 닫으면 지워집니다.
-- `/api/py/` 요청에만 `X-Demo-Code` 헤더로 붙습니다. Supabase 업로드 요청에는 붙지 않습니다.
-- 틀리면 새 분석 화면은 접근 코드 칸에 `접근 코드가 맞지 않습니다.` 를 보이고 그 칸으로 포커스를 옮깁니다. 상세 화면은 접근 코드 입력칸과 '다시 불러오기' 를 보여 줍니다.
-- 헤더에는 ASCII 글자만 보낼 수 있어, 그 밖 글자가 섞인 코드는 보내지 않고 같은 오류로 처리합니다.
+접근 코드(예전 `X-Demo-Code` · `DEMO_ACCESS_CODE`)는 2026-11-03 없앴습니다 — 팀만 아는 주소이고 Upstage 키가 대회용 무제한이라서입니다. 그래서 **주소를 아는 사람은 누구나 분석을 올리고 돌릴 수 있습니다**(Upstage 크레딧 · Supabase 저장 공간이 쓰입니다). 다른 사람의 분석은 목록 경로가 없고 분석 id(UUID)를 알아야 볼 수 있습니다.
 
 ### 화면별 동작
 
 | 주소 | 실제 분석 모드 |
 |---|---|
-| `/` | 기존 목록 화면 그대로입니다. **이 탭에서 만든 분석만** 보입니다(백엔드에 목록 경로가 없습니다 — 공용 코드로 남의 분석이 보이지 않게). id 목록은 sessionStorage `imask:api-analyses`(최신 50개)에 있고, 접근 코드가 없으면 빈 목록입니다. 위험등급은 묶음 전체 위험도 판정에서 옵니다 — 공통 계약의 `result.overall.level`, 없으면 `result.summary.risk_level`(상·중·하 → 높음·보통·낮음, 검토 필요·없음 → 미평가). 탐지 항목별 위험등급은 워크플로우가 판정한 항목(`risk_source: "workflow"`)만 받은 값이고 나머지는 미평가입니다. 검토 상태는 늘 미검토입니다. |
-| `/analyses/new` | 실제 분석 새 화면(`src/components/live/LiveUploadScreen.tsx`) — 합성 자료 안내, 접근 코드, 분석명, 파일 1개, 진행 단계 |
+| `/` | 기존 목록 화면 그대로입니다. **이 탭에서 만든 분석만** 보입니다(백엔드에 목록 경로가 없습니다 — 남의 분석이 보이지 않게). id 목록은 sessionStorage `imask:api-analyses`(최신 50개)에 있습니다. 위험등급은 묶음 전체 위험도 판정에서 옵니다 — 공통 계약의 `result.overall.level`, 없으면 `result.summary.risk_level`(상·중·하 → 높음·보통·낮음, 검토 필요·없음 → 미평가). 탐지 항목별 위험등급은 워크플로우가 판정한 항목(`risk_source: "workflow"`)만 받은 값이고 나머지는 미평가입니다. 검토 상태는 늘 미검토입니다. |
+| `/analyses/new` | 실제 분석 새 화면(`src/components/live/LiveUploadScreen.tsx`) — 걸리는 시간 안내, 분석명, 파일 1개, 진행 단계 |
 | `/analyses/[id]` | 실제 분석 상세(`src/components/live/LiveDetailScreen.tsx`) — 대기·분석 중: 머리(분석명·상태·분석 번호 `DG-YYYYMMDD-XXXX`·요청 시각·파일·경과 시간), 진행 중 안내와 Upstage 상태. 실패: 실패 문구와 '새 분석'. **완료 + 공통 계약 결과**(`raw.detailReady`): 데모와 같은 상세 검토 화면(`DetailView` — 3단 배치·휴대폰 탭)을 새로 고침 없이 바로 그립니다 — 문서 목록(한국어 서류 이름, `1페이지 · 파일 3쪽`), 원문 자리에 올린 파일의 그 서류 쪽(PDF 는 캔버스, PNG·JPEG 는 이미지)과 탐지 위치 상자(위험등급 색 · 누르면 그 항목 · 고르면 강조와 이름표 · 마스킹 미리보기면 검은 상자), 위치 없는 항목은 '위치 확인 필요', 기타 서류는 '기타 서류 안내', 결과 패널은 '탐지 항목'과 '분석 요약'(위험도 판정·다음 단계 문구를 글자 그대로, 결과 요약 줄, 접은 원본 단계별 JSON). 원본 파일을 받지 못하면 이유와 '다시 시도'(결과 패널은 그대로). 검토 동작 버튼은 막혀 있고 '실제 분석에서는 아직 지원하지 않는 기능입니다' 안내가 보입니다. **완료지만 옛 형식**(서류 0개 등): 완료 요약(분류한 서류 수와 종류·정보를 추출한 서류 수·위험도·마지막 단계·기타 서류·걸린 시간·Upstage 작업 번호)과 단계별 결과(단계마다 접고 펴는 JSON — 펼칠 때만 그립니다). 없는 id 면 안내와 '새 분석'(목록으로 보내지 않습니다). |
 | `/analyses/[id]/report` | '실제 분석 보고서는 아직 없습니다' 안내와 상세로 가는 링크 |
-| `/demo/**` | **데모 그대로** — 헤더 배지 '데모 데이터'(데모 링크 없음), '검토 필요' 숫자는 데모 목록 기준, 샘플 6건·상세 검토 동작·보고서·내보내기·`?sample=1`·분석 완료 토스트가 모두 됩니다. 데모 서비스(브라우저 메모리)는 처음 `/demo` 를 열 때 만들어 탭 안에서 이어지고(`/` 로 갔다가 클라이언트 이동으로 돌아와도 검토가 남음), `/demo` 만 다니면 실제 분석 서비스는 만들지 않아 `/api/py` 요청이 없습니다. 새로 고침하면 샘플 상태로 돌아갑니다. |
+| `/demo/**` | **데모 그대로** — 헤더 배지 '데모 데이터'와 배지 앞 **'실제 분석으로'** 링크(→ `/`), '검토 필요' 숫자는 데모 목록 기준, 페이지 설명(meta description)은 '(데모 데이터)'가 붙은 문구(`src/app/demo/layout.tsx`), 샘플 6건·상세 검토 동작·보고서·내보내기·`?sample=1`·분석 완료 토스트가 모두 됩니다. 데모 서비스(브라우저 메모리)는 처음 `/demo` 를 열 때 만들어 탭 안에서 이어지고(`/` 로 갔다가 클라이언트 이동으로 돌아와도 검토가 남음), `/demo` 만 다니면 실제 분석 서비스는 만들지 않아 `/api/py` 요청이 없습니다. 새로 고침하면 샘플 상태로 돌아갑니다. |
 
 ### 실제 분석 모드에서 안 되는 것
 
@@ -237,7 +232,7 @@ supabase/                   DB 변경 기록 — migrations/에 적용한 SQL을
 
 | 구분 | 이름 |
 |---|---|
-| 서버 전용 7개 — `NEXT_PUBLIC_` 을 붙이지 않음 | `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `UPSTAGE_API_KEY`, `UPSTAGE_AGENT_ID`, `UPSTAGE_CONFIG_ID`, `UPSTAGE_PROJECT_ID`(에이전트가 Upstage 프로젝트에 속할 때 — 지금 그렇다), `DEMO_ACCESS_CODE` |
+| 서버 전용 6개 — `NEXT_PUBLIC_` 을 붙이지 않음 | `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `UPSTAGE_API_KEY`, `UPSTAGE_AGENT_ID`, `UPSTAGE_CONFIG_ID`, `UPSTAGE_PROJECT_ID`(에이전트가 Upstage 프로젝트에 속할 때 — 지금 그렇다) |
 | 브라우저 공개 3개 — 빌드 때 들어가므로 바꾸면 다시 배포 | `NEXT_PUBLIC_IMASK_SERVICE`(실제 분석이면 `api`), `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` |
 
 ---
@@ -250,7 +245,7 @@ supabase/                   DB 변경 기록 — migrations/에 적용한 SQL을
 
 | 위치 | 내용 |
 |---|---|
-| `api/index.py` | FastAPI 앱 진입점. 경로·의존성·접근 코드 검사·오류 모양만 다룹니다. Vercel 은 `api/` 의 `.py` 파일마다 함수를 만들므로 이 폴더에는 이 파일 하나만 둡니다 |
+| `api/index.py` | FastAPI 앱 진입점. 경로·의존성·오류 모양만 다룹니다. Vercel 은 `api/` 의 `.py` 파일마다 함수를 만들므로 이 폴더에는 이 파일 하나만 둡니다 |
 | `imask_backend/settings.py` | 환경변수. 요청 때 읽어서, 값이 빠져도 import 는 실패하지 않고 필요한 순간에 500 으로 이름만 알립니다 |
 | `imask_backend/files.py` | 파일 이름·형식·크기 검사, Storage 용 안전한 이름, 내용 첫 바이트 검사 |
 | `imask_backend/store.py` | Supabase 테이블·Storage 접근(`supabase==2.33.0`, `create_client(SUPABASE_URL, SUPABASE_SECRET_KEY)`)과 조건부 갱신 |
@@ -273,11 +268,10 @@ supabase/                   DB 변경 기록 — migrations/에 적용한 SQL을
 | `SUPABASE_URL`, `SUPABASE_SECRET_KEY` | DB·Storage. 새 형식 서버 비밀 키(`sb_secret_…`)가 supabase-py 2.33 에서 그대로 동작합니다 |
 | `UPSTAGE_API_KEY`, `UPSTAGE_AGENT_ID`, `UPSTAGE_CONFIG_ID` | Upstage 작업. `UPSTAGE_CONFIG_ID` 가 비면 작업을 만들지 않습니다(빼면 Studio 최신 설정이 돌아 결과가 바뀜) |
 | `UPSTAGE_PROJECT_ID`(에이전트가 프로젝트에 속하면 필수) | Upstage Studio 코드 패널의 Project ID(`proj_…`). 모든 Upstage 요청(파일 올리기·작업 만들기·조회·지우기)에 `x-project-id` 헤더로 보냅니다. 빠지면 올린 파일이 프로젝트 밖에 저장돼 작업 만들기가 `HTTP 403 — No access to file` 로 실패합니다. 영문·숫자·`_`·`-` 만 받습니다(그 밖은 설정 오류) |
-| `DEMO_ACCESS_CODE` | 공개 주소 보호용 접근 코드. 비면 분석 경로가 모두 500 입니다 |
 | `UPSTAGE_BASE_URL`(선택) | 기본 `https://api.upstage.ai/v2` |
 | `IMASK_API_DEV_URL`(선택, Next 개발 서버만) | `next dev` 가 `/api/py/*` 를 넘길 주소. 기본 `http://127.0.0.1:8000` |
 
-`GET /api/py/health` 의 `configured` 로 값이 들어 있는지(값 없이 참·거짓만 — `supabase`·`upstage`·`access_code`·`upstage_project`) 확인할 수 있습니다.
+`GET /api/py/health` 의 `configured` 로 값이 들어 있는지(값 없이 참·거짓만 — `supabase`·`upstage`·`upstage_project`) 확인할 수 있습니다.
 
 ### 로컬 실행
 
@@ -307,7 +301,7 @@ npm run dev
 .venv\Scripts\python.exe scripts\api_e2e.py --analysis-id <분석 id>                     # 이미 끝난 분석 재확인(Upstage 작업 없음)
 ```
 
-접근 코드는 환경변수 `IMASK_DEMO_CODE`, 없으면 `.env` 의 `DEMO_ACCESS_CODE` 를 씁니다(출력하지 않음). 배포 사이트에 Vercel 보호가 켜져 있으면 `VERCEL_PROTECTION_BYPASS` 환경변수를 `x-vercel-protection-bypass` 헤더로 보냅니다. 종료 코드는 기대대로면 0, 아니면 1 입니다. done 이면 다음이 모두 맞아야 합니다: 요약(서류 6·추출 5·위험도 상), 화면용 결과(`findings` 29·좌표 있는 항목 28·`documents` 6(extracted 5·other 1, other 에 `other_guide`·extracted 에 `validation`)·`overall` 상/권장_조치·계약 키와 허용 값·id 중복 없음·`document_index` 가 `documents` 에 있음·`boxes` 0~1·`risk` 가 `risk_source` 와 맞음), 기본 응답에 `stages`·`response` 없음, 기본 응답이 `?include=stages` 응답보다 작음, `/file` 의 주소로(접근 코드 없이) 받은 내용이 올린 파일과 같음(sha256). 출력에는 개수·분포·바이트 수만 나오고 원문 값·가림 미리보기·서명 URL 은 나오지 않습니다. `--analysis-id` 는 만들기·올리기·시작 없이 그 분석을 조회해 위 done 확인과 원본 파일 확인만 합니다(비교할 원본은 `--file`, 기본 합성 묶음). 어떻게 끝나든(시간 초과·Ctrl+C·연결 오류 포함) 마지막에 이번 실행이 Upstage 에 남겼을 수 있는 파일을 `UPSTAGE_API_KEY` 로 지우고(404 = 이미 지움), 정리를 못 하면 종료 코드 1 입니다.
+배포 사이트에 Vercel 보호가 켜져 있으면 `VERCEL_PROTECTION_BYPASS` 환경변수를 `x-vercel-protection-bypass` 헤더로 보냅니다. 종료 코드는 기대대로면 0, 아니면 1 입니다. done 이면 다음이 모두 맞아야 합니다: 요약(서류 6·추출 5·위험도 상), 화면용 결과(`findings` 29·좌표 있는 항목 28·`documents` 6(extracted 5·other 1, other 에 `other_guide`·extracted 에 `validation`)·`overall` 상/권장_조치·계약 키와 허용 값·id 중복 없음·`document_index` 가 `documents` 에 있음·`boxes` 0~1·`risk` 가 `risk_source` 와 맞음), 기본 응답에 `stages`·`response` 없음, 기본 응답이 `?include=stages` 응답보다 작음, `/file` 의 주소로 받은 내용이 올린 파일과 같음(sha256). 출력에는 개수·분포·바이트 수만 나오고 원문 값·가림 미리보기·서명 URL 은 나오지 않습니다. `--analysis-id` 는 만들기·올리기·시작 없이 그 분석을 조회해 위 done 확인과 원본 파일 확인만 합니다(비교할 원본은 `--file`, 기본 합성 묶음). 어떻게 끝나든(시간 초과·Ctrl+C·연결 오류 포함) 마지막에 이번 실행이 Upstage 에 남겼을 수 있는 파일을 `UPSTAGE_API_KEY` 로 지우고(404 = 이미 지움), 정리를 못 하면 종료 코드 1 입니다.
 
 ### 경로
 
@@ -315,7 +309,7 @@ npm run dev
 
 | 요청 | 하는 일 | 응답 |
 |---|---|---|
-| `GET /api/py/health` | 접근 코드 없이. 설정이 있는지만 | 200 `{"ok": true, "configured": {"supabase", "upstage", "access_code"}}` |
+| `GET /api/py/health` | 설정이 있는지만 | 200 `{"ok": true, "configured": {"supabase", "upstage", "upstage_project"}}` |
 | `POST /api/py/analyses` | 본문 `{"name"?, "filename", "size", "mime_type"}`. `analyses`(queued)·`documents` 행과 서명 업로드 URL 을 만든다 | 201 `{"analysis": 분석 건, "upload": {"bucket", "path", "token", "signed_url"}}` · 400 검사 실패 · 502 준비 실패(만든 행은 지움) |
 | `POST /api/py/analyses/{id}/start` | 올린 파일을 Upstage 에 넘겨 작업을 만든다(완료를 기다리지 않음) | 200 분석 건(`running`, 선점 뒤 실패면 `failed` + `error`) · 404 · 409 이미 시작함 · 502 실패 기록도 못 함 |
 | `GET /api/py/analyses/{id}` | 분석 건 조회. `running` 이면 Upstage 상태를 **한 번** 확인. 쿼리 `include` 에 `stages` 가 있으면(여러 번·쉼표로 줄 수 있음, 모르는 값은 무시) `result.stages` 도 넣는다 | 200 분석 건 · 404 |
@@ -327,9 +321,9 @@ npm run dev
 - 브라우저는 `@supabase/supabase-js` 의 `storage.from(bucket).uploadToSignedUrl(path, token, file)` 로 올립니다. 공개 키로 충분합니다(서명 토큰이 권한).
 - **원본 파일 주소**(`/file`)는 `documents` 행(분석 1건 = 묶음 파일 1개)의 `storage_path` 로 `storage3` 의 `create_signed_url(path, 600)` 을 부릅니다. `supabase==2.33.0`(storage3 2.33)은 `{"signedURL", "signedUrl"}` 에 Storage 기준 주소를 붙인 **절대 주소**를 돌려줍니다(다른 버전이 상대 경로 `/object/sign/…` 를 주면 `storage_url` 에 붙입니다). 없는 객체는 Storage 가 HTTP 400 + 본문 `statusCode "404"` 로 알려 404 로 답합니다. 서명 URL 은 로그에 남기지 않습니다.
 
-### 접근 코드
+### 접근 코드 없음
 
-`/api/py/analyses` 로 시작하는 모든 요청은 **본문 검사·404 판정보다 먼저** `X-Demo-Code` 헤더를 `DEMO_ACCESS_CODE` 와 `hmac.compare_digest` 로 비교합니다(미들웨어). 없거나 다르면 401 `접근 코드가 맞지 않습니다.`, 서버에 값이 없으면 500 `서버에 접근 코드가 설정되지 않았습니다.` 입니다. 로그인이 아니라 공개 주소를 아무나 쓰지 못하게 막는 장치입니다.
+`/api/py/analyses` 경로는 접근 코드 없이 처리합니다(예전 `X-Demo-Code` 검사 미들웨어 · `DEMO_ACCESS_CODE` 는 2026-11-03 없앰). 헤더를 보내도 무시합니다.
 
 ### 상태 흐름
 
@@ -354,7 +348,7 @@ queued ──(start: 원자적 선점)──▶ running ──(GET 이 Upstage �
 
 1. 시작: Storage 에서 파일 받기 → 내용 검사(20MB 이하, 첫 바이트: PDF 는 앞 1024바이트 안 `%PDF-`, PNG `\x89PNG\r\n\x1a\n`, JPEG `\xff\xd8\xff`) → `POST /v2/files`(안전한 이름) → `documents.upstage_file_id` 저장 → `POST /v2/responses`(`model` = 에이전트 id, `config_id`, `include: ["all"]`) → `analyses.upstage_job_id`·`agent_id` 저장.
 2. 조회(화면이 3초마다 부름): `GET /v2/responses/{job}?include[]=last` 한 번. `completed` 면 `?include[]=all` 로 한 번 더 받아 `analyses.result` 에 저장합니다. 끝나면(완료·실패) `DELETE /v2/files/{id}` 로 Upstage 파일을 지웁니다(404 는 이미 지움). 지우기 실패는 결과를 바꾸지 않습니다(로그만).
-3. 바깥에서 온 문구(`analyses.error`·`poll_error`·`upstage_status`·로그)는 `imask_backend.redaction` 으로 서버 비밀값 전체(Upstage 키·에이전트 id·Supabase 비밀 키·접근 코드), 인증 문구, Supabase 서명 URL·`token=` 값·JWT 를 가린 **뒤에** 길이를 자릅니다. 정상 만들기 응답의 `upload.token`·`upload.signed_url` 은 브라우저 업로드에 필요하므로 그대로 줍니다.
+3. 바깥에서 온 문구(`analyses.error`·`poll_error`·`upstage_status`·로그)는 `imask_backend.redaction` 으로 서버 비밀값 전체(Upstage 키·에이전트 id·Supabase 비밀 키), 인증 문구, Supabase 서명 URL·`token=` 값·JWT 를 가린 **뒤에** 길이를 자릅니다. 정상 만들기 응답의 `upload.token`·`upload.signed_url` 은 브라우저 업로드에 필요하므로 그대로 줍니다.
 
 ### `analyses.result` 형식
 
@@ -463,11 +457,11 @@ export function createServiceFor(mode: ServiceMode): AnalysisService {
 - 빌드 모드 `SERVICE_MODE`(`src/services/mode.ts`)는 `NEXT_PUBLIC_IMASK_SERVICE` 가 정확히 `api` 일 때만 `'api'`, 그 밖(없음 포함)은 `'demo'` 입니다. `process.env.NEXT_PUBLIC_IMASK_SERVICE` 를 글자 그대로 참조해야 Next 가 빌드 때 값을 넣습니다(`process.env[name]` 처럼 쓰면 브라우저 코드에 값이 들어가지 않습니다). 이 환경변수는 `mode.ts` 와, pdf.js 묶음을 빼는 `src/components/detail/liveFile.ts` 의 빌드 분기에서만 읽습니다.
 - `ServiceProvider` 가 `usePathname()` 으로 **화면의 모드**(`modeForPath(경로, SERVICE_MODE)`)와 **기준 경로**(`routeBaseFor(경로)` — `''` 또는 `'/demo'`, `src/lib/routes.ts`)를 한 번 계산해 내립니다. 화면은 `useServiceMode()`·`useRouteBase()` 로 받습니다. 모드·기준 경로는 서버에서도 주소로 정해지므로 첫 그림부터 맞습니다(하이드레이션 불일치 없음). `SERVICE_MODE` 는 `src/services` 밖에서 읽지 않고 `@/services` 로 다시 내보내지도 않습니다.
 - 서비스는 **모드별 브라우저 싱글턴**(`createServiceCache()` — 데모 하나, 실제 분석 하나)입니다. 그 모드를 처음 쓸 때 만들고, 화면을 옮겨도 그대로 써서 상태가 이어집니다. 서버 렌더와 하이드레이션 첫 렌더에서는 서비스가 없고(`useService()` 가 `null`), 화면은 불러오는 중 화면을 보여 줍니다. `/` ↔ `/demo` 를 오가면 새 서비스 값이 올 때까지 불러오는 중이라 다른 서비스의 값(예: 헤더 '검토 필요' 숫자)이 남지 않습니다.
-- 루트 라우트 페이지 3개(`src/app/analyses/new`·`[id]`·`[id]/report`)는 `ByServiceMode`(`src/components/layout/ByServiceMode.tsx` — `useServiceMode()` 로 둘 중 하나를 그림)에 데모 화면과 실제 분석 화면을 함께 넘깁니다. `/demo` 아래 페이지(`src/app/demo/`)는 실제 분석 화면을 거치지 않고 데모 화면을 바로 그립니다. 헤더 배지와 '데모 체험하기' 링크(`AppHeader`)도 `useServiceMode()` 로 정합니다. 실제 분석 화면은 `src/components/live/` 에 따로 있고, 목록(`/`·`/demo`)은 두 모드가 같은 화면을 씁니다.
+- 루트 라우트 페이지 3개(`src/app/analyses/new`·`[id]`·`[id]/report`)는 `ByServiceMode`(`src/components/layout/ByServiceMode.tsx` — `useServiceMode()` 로 둘 중 하나를 그림)에 데모 화면과 실제 분석 화면을 함께 넘깁니다. `/demo` 아래 페이지(`src/app/demo/`)는 실제 분석 화면을 거치지 않고 데모 화면을 바로 그립니다. 헤더 배지(`AppHeader`)도 `useServiceMode()` 로 정하고, 모드 전환 링크('데모 체험하기' · '실제 분석으로' — `modeSwitch.ts`)는 `useServiceMode()` 와 이 빌드의 모드 `useBuildMode()` 로 고릅니다(데모 빌드에는 없음). 실제 분석 화면은 `src/components/live/` 에 따로 있고, 목록(`/`·`/demo`)은 두 모드가 같은 화면을 씁니다.
 - 화면 안 이동 주소는 `src/lib/routes.ts` 의 함수(`listHref`·`newAnalysisHref`·`detailHref`·`reportHref`, 기준 경로 붙이기 `withBase`)에 `useRouteBase()` 값을 넘겨 만듭니다. 기준이 `''` 이면 예전과 바이트 단위로 같은 주소입니다.
 - 지킴 테스트(`src/lib/navigation-guard.test.ts`, `npm test`)가 소스를 읽어 `src/app`·`src/components`·`src/lib`·`src/dev` 의 `SERVICE_MODE` 사용, `mode.ts`·`liveFile.ts` 밖의 `NEXT_PUBLIC_IMASK_SERVICE` 사용, 화면 코드의 이동 주소 리터럴(`'/analyses…'`·`href="/"`·`push('/')` 등)을 파일:줄로 알려 줍니다.
 - `createService()` 는 빌드 모드의 서비스를 만듭니다(테스트용 — 테스트 환경은 값이 없어 데모). 화면은 쓰지 않습니다.
-- 실제 분석 화면은 데이터를 서비스로만 다루고, 예외로 접근 코드 저장 함수(`readAccessCode`·`saveAccessCode` …)와 오류 판별(`apiErrorCode`·`apiErrorAnalysisId`)만 `@/services` 에서 가져다 씁니다.
+- 실제 분석 화면은 데이터를 서비스로만 다루고, 예외로 오류 판별(`apiErrorCode`·`apiErrorAnalysisId`)만 `@/services` 에서 가져다 씁니다.
 
 ### 2. 인터페이스 계약 — `AnalysisService`
 
@@ -525,7 +519,7 @@ export function createServiceFor(mode: ServiceMode): AnalysisService {
 
 | 메서드 | 하는 일 |
 |---|---|
-| `loadFile(id)` → `{ bytes: ArrayBuffer, mime, filename }` | 부를 때마다 `GET /api/py/analyses/{id}/file` 로 **새 서명 주소**(10분 유효)를 받고 그 주소에서 원본 파일을 받습니다(캐시는 화면이 합니다). 주소는 `https:`(또는 로컬 가짜 백엔드용 `http://localhost`·`127.0.0.1`)만 받고, 받기 요청에는 `X-Demo-Code` 등 사용자 지정 헤더를 붙이지 않습니다(`credentials: 'omit'`·`cache: 'no-store'`). 시간 제한 60초(본문까지), 2xx 아님·빈 본문·20MB 초과는 오류입니다. 접근 코드 401·없음 404 는 **안전한 백엔드 문구만** 그대로 보이고 주소·서명·키·긴 토큰 모양이 섞이면 고정 안내 문구로 바꾸며, 그 밖 오류(5xx·네트워크·시간 초과·받기 실패 등)는 늘 고정 한국어 문구의 `ApiError` 이고, **서명 주소·토큰은 오류 문구·콘솔 어디에도 남기지 않습니다**(`src/services/api/file-download.ts`). |
+| `loadFile(id)` → `{ bytes: ArrayBuffer, mime, filename }` | 부를 때마다 `GET /api/py/analyses/{id}/file` 로 **새 서명 주소**(10분 유효)를 받고 그 주소에서 원본 파일을 받습니다(캐시는 화면이 합니다). 주소는 `https:`(또는 로컬 가짜 백엔드용 `http://localhost`·`127.0.0.1`)만 받고, 받기 요청에는 사용자 지정 헤더를 붙이지 않습니다(`credentials: 'omit'`·`cache: 'no-store'`). 시간 제한 60초(본문까지), 2xx 아님·빈 본문·20MB 초과는 오류입니다. 없음 404 는 **안전한 백엔드 문구만** 그대로 보이고 주소·서명·키·긴 토큰 모양이 섞이면 고정 안내 문구로 바꾸며, 그 밖 오류(5xx·네트워크·시간 초과·받기 실패 등)는 늘 고정 한국어 문구의 `ApiError` 이고, **서명 주소·토큰은 오류 문구·콘솔 어디에도 남기지 않습니다**(`src/services/api/file-download.ts`). |
 | `loadStages(id)` → `unknown[] \| null` | `GET /api/py/analyses/{id}?include=stages` 의 `result.stages`(배열이 아니면 `null`). 404·401 은 `null` 이 아니라 `ApiError` 로 거절합니다(화면이 문구를 보입니다). |
 
 ### 5. 분석 출력 형식이 확정되면

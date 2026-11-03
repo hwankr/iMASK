@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AnalysisService } from '../analysis-service';
 import type { UploadFile } from '../types';
-import { ACCESS_CODE_KEY } from './access-code';
-import { ApiError, apiErrorAnalysisId, createApiClient, type AnalysisOut, type ApiClient, type UploadTicket } from './client';
+import { ApiError, apiErrorAnalysisId, createApiClient, type ApiClient, type UploadTicket } from './client';
 import { MSG_ONE_FILE, MSG_UNSUPPORTED, MSG_UNSUPPORTED_FORMAT, MSG_UPLOAD_FAILED, createApiService, mimeForName } from './service';
 import { SESSION_LIST_KEY } from './session-list';
 import { analysisOut, doneResult, fakeFetch, json, memoryStorage, type SeenRequest } from './testing';
@@ -19,10 +18,9 @@ function pdfUpload(name = 'iMASK_smoke_bundle.pdf', type = 'application/pdf'): U
 type Route = (req: SeenRequest) => Response;
 
 /** 서비스 + 가짜 백엔드 + 가짜 업로더 — order 에 일어난 순서를 남긴다 */
-function setup(route?: Route, opts: { code?: string; ids?: string[] } = {}) {
+function setup(route?: Route, opts: { ids?: string[] } = {}) {
   const order: string[] = [];
   const storage = memoryStorage();
-  if (opts.code !== '') storage.setItem(ACCESS_CODE_KEY, opts.code ?? 'code-123');
   if (opts.ids) storage.setItem(SESSION_LIST_KEY, JSON.stringify(opts.ids));
   const defaultRoute: Route = (req) => {
     if (req.method === 'POST' && req.url.endsWith('/analyses')) return json(201, { analysis: analysisOut(), upload: TICKET });
@@ -36,7 +34,7 @@ function setup(route?: Route, opts: { code?: string; ids?: string[] } = {}) {
   const upload = vi.fn(async (ticket: UploadTicket, file: File, contentType: string) => {
     order.push(`upload ${ticket.bucket}/${ticket.path} ${file.name} ${contentType}`);
   });
-  const client = createApiClient({ fetch, getAccessCode: () => (storage.getItem(ACCESS_CODE_KEY) ?? '').trim() });
+  const client = createApiClient({ fetch });
   const service: AnalysisService = createApiService({ client, upload, storage });
   return { service, seen, order, upload, storage };
 }
@@ -93,11 +91,11 @@ describe('requestAnalysis', () => {
     expect(seen).toHaveLength(0);
   });
 
-  it('만들기 401 → ApiError(unauthorized) 그대로, 업로드·시작 없음', async () => {
-    const { service, order, upload } = setup(() => json(401, { detail: '접근 코드가 맞지 않습니다.' }));
+  it('만들기 400 → ApiError 그대로, 업로드·시작 없음', async () => {
+    const { service, order, upload } = setup(() => json(400, { detail: '파일 이름이 비었습니다.' }));
     const err = await service.requestAnalysis({ name: 'x', files: [pdfUpload()] }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
-    expect(err).toMatchObject({ code: 'unauthorized', message: '접근 코드가 맞지 않습니다.' });
+    expect(err).toMatchObject({ code: 'bad_request', message: '파일 이름이 비었습니다.' });
     expect(order).toEqual(['POST /analyses']);
     expect(upload).not.toHaveBeenCalled();
   });
@@ -134,7 +132,7 @@ describe('requestAnalysis', () => {
   });
 
   it('업로드 뒤 시작이 네트워크 오류 · 시간 초과면 — 같은 복구 길(code network)', async () => {
-    const storage = memoryStorage({ [ACCESS_CODE_KEY]: 'code-123' });
+    const storage = memoryStorage();
     const base: ApiClient = {
       createAnalysis: async () => ({ analysis: analysisOut(), upload: TICKET }),
       startAnalysis: async () => {
@@ -157,9 +155,8 @@ describe('requestAnalysis', () => {
     expect(st2.getItem(SESSION_LIST_KEY)).toContain(ID);
   });
 
-  it('시작이 401 · 404 · 400 이면 id 를 남기지 않는다(시작되지 않음이 분명)', async () => {
+  it('시작이 404 · 400 이면 id 를 남기지 않는다(시작되지 않음이 분명)', async () => {
     for (const [status, detail] of [
-      [401, '접근 코드가 맞지 않습니다.'],
       [404, '분석 건을 찾을 수 없습니다.'],
       [400, '요청 형식이 올바르지 않습니다.'],
     ] as const) {
@@ -192,41 +189,9 @@ describe('get', () => {
     expect(notified).not.toHaveBeenCalled();
   });
 
-  it('404 → null, 401 → ApiError', async () => {
+  it('404 → null, 그 밖 오류 → ApiError', async () => {
     expect(await setup(() => json(404, { detail: '분석 건을 찾을 수 없습니다.' })).service.get('A1')).toBeNull();
-    await expect(setup(() => json(401, { detail: '접근 코드가 맞지 않습니다.' })).service.get(ID)).rejects.toMatchObject({ code: 'unauthorized' });
-  });
-
-  it('접근 코드를 고친 뒤의 조회는 이전 코드의 진행 중 요청에 합치지 않는다(같은 코드는 계속 합침)', async () => {
-    const storage = memoryStorage({ [ACCESS_CODE_KEY]: 'wrong-code' });
-    const sent: string[] = [];
-    const waits: { resolve: (v: AnalysisOut) => void; reject: (e: unknown) => void }[] = [];
-    const client = createApiClient({
-      getAccessCode: () => (storage.getItem(ACCESS_CODE_KEY) ?? '').trim(),
-      fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
-        const code = new Headers(init?.headers).get('x-demo-code') ?? '';
-        sent.push(code);
-        return new Promise<Response>((resolve) => {
-          waits.push({
-            resolve: () => resolve(code === 'right-code' ? json(200, analysisOut({ status: 'done' })) : json(401, { detail: '접근 코드가 맞지 않습니다.' })),
-            reject: () => {},
-          });
-        });
-      }) as typeof globalThis.fetch,
-    });
-    const service = createApiService({ client, upload: async () => {}, storage });
-    const old = service.get(ID).catch((e: unknown) => e);
-    const oldAgain = service.get(ID).catch((e: unknown) => e); // 같은 코드 → 합침
-    await new Promise((r) => setTimeout(r, 0));
-    expect(sent).toEqual(['wrong-code']);
-    storage.setItem(ACCESS_CODE_KEY, 'right-code'); // 이전 요청이 아직 끝나지 않았다
-    const fixed = service.get(ID);
-    await new Promise((r) => setTimeout(r, 0));
-    expect(sent).toEqual(['wrong-code', 'right-code']); // 새 요청 1회 더
-    for (const w of waits) w.resolve(analysisOut());
-    expect(await old).toMatchObject({ code: 'unauthorized' });
-    expect(await oldAgain).toMatchObject({ code: 'unauthorized' });
-    expect(await fixed).toMatchObject({ id: ID, status: 'done' }); // 결과는 새 코드 기준
+    await expect(setup(() => json(500, { detail: '서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.' })).service.get(ID)).rejects.toMatchObject({ code: 'server' });
   });
 
   it('같은 id 를 동시에 조회하면 요청 하나를 나눠 쓴다(결과 객체는 따로)', async () => {
@@ -241,12 +206,6 @@ describe('get', () => {
 });
 
 describe('list', () => {
-  it('접근 코드가 없으면 요청 없이 []', async () => {
-    const { service, seen } = setup(undefined, { code: '', ids: [ID] });
-    expect(await service.list()).toEqual([]);
-    expect(seen).toHaveLength(0);
-  });
-
   it('이 탭 목록의 id 를 조회해 요청 시각 최신순, 404 는 목록에서 뺀다', async () => {
     const older = 'old00000-0000-4000-8000-000000000000';
     const gone = 'gone0000-0000-4000-8000-000000000000';
@@ -262,13 +221,13 @@ describe('list', () => {
     const list = await service.list();
     expect(list.map((a) => a.id)).toEqual([newer, older]);
     expect(seen).toHaveLength(3);
-    for (const r of seen) expect(r.headers['x-demo-code']).toBe('code-123');
+    for (const r of seen) expect(r.headers).not.toHaveProperty('x-demo-code');
     expect(JSON.parse(storage.getItem(SESSION_LIST_KEY) as string)).toEqual([older, newer]);
   });
 
-  it('401 등 그 밖 오류는 던진다', async () => {
-    const { service } = setup(() => json(401, { detail: '접근 코드가 맞지 않습니다.' }), { ids: [ID] });
-    await expect(service.list()).rejects.toMatchObject({ code: 'unauthorized' });
+  it('404 말고 그 밖 오류는 던진다', async () => {
+    const { service } = setup(() => json(500, { detail: '서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.' }), { ids: [ID] });
+    await expect(service.list()).rejects.toMatchObject({ code: 'server' });
   });
 
   it('목록이 비었으면 []', async () => {

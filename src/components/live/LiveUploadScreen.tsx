@@ -2,13 +2,13 @@
 
 /* ==========================================================================
    새 분석 — 실제 분석 모드(/analyses/new, 실제 모드 빌드 · 주소 기준 모드 'api')
-   - 접근 코드 · 분석명 · 파일 1개(PDF·PNG·JPEG, 20MB 이하)를 받아 서비스의 requestAnalysis 로 보낸다.
+   - 분석명 · 파일 1개(PDF·PNG·JPEG, 20MB 이하)를 받아 서비스의 requestAnalysis 로 보낸다.
      서비스가 만들기 → 서명 업로드 → 시작을 하고 단계마다 onProgress 로 알린다(화면은 진행 단계를 보여 준다).
    - 요청 중에는 입력을 잠근다. 성공하면 상세(/analyses/{id})로 간다 — 상세 화면이 3초마다 상태를 확인한다.
-   - 401 이면 접근 코드 칸에 '접근 코드가 맞지 않습니다.' 를 보이고 그 칸으로 포커스, 그 밖은 위쪽 오류 상자.
+   - 실패하면 위쪽 오류 상자에 이유를 보이고 그리로 포커스.
    - 업로드까지 끝낸 뒤 시작 결과를 모르는 오류(5xx·네트워크·시간 초과)면 서비스가 오류에 분석 id 를 담아 준다 —
      오류 상자에 '분석 건 확인하기'(상세 → 실제 상태)를 함께 보인다. 성공했다고 표시하지 않는다.
-   - 데이터는 서비스 인터페이스로만 다룬다(접근 코드 저장만 예외 — src/services 의 함수).
+   - 데이터는 서비스 인터페이스로만 다룬다.
    - 이동 주소(목록 · 상세)는 기준 경로 함수(src/lib/routes.ts · useRouteBase)로 만든다 — 이 화면은 `/demo` 밖에서만
      그려지므로 기준이 '' 이고 주소는 예전과 같다.
    ========================================================================== */
@@ -16,19 +16,16 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useId, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { Button, Icon, Spinner, TextField, buttonClass, cx, useToast } from '@/components/ui';
+import { Button, Icon, Spinner, TextField, VisuallyHidden, buttonClass, cx, useToast } from '@/components/ui';
 import { fmtSize } from '@/lib/format';
 import { detailHref, listHref } from '@/lib/routes';
-import { apiErrorAnalysisId, apiErrorCode } from '@/services';
+import { apiErrorAnalysisId } from '@/services';
 import type { RequestStep } from '@/services/analysis-service';
 import { useRouteBase, useService } from '@/services/react';
-import { AccessCodeField } from './AccessCodeField';
-import { useAccessCode } from './liveHooks';
 import {
   LIVE_ACCEPT,
   LIVE_MAX_FILE_MB,
   LIVE_NAME_MAX,
-  MSG_NEED_CODE,
   MSG_PICK_FILE,
   analysisNameFor,
   checkLiveFiles,
@@ -37,29 +34,25 @@ import {
 } from './liveModel';
 import styles from './LiveUploadScreen.module.css';
 
-const MSG_WRONG_CODE = '접근 코드가 맞지 않습니다.';
 const MSG_REQUEST_FAILED = '분석을 시작하지 못했습니다. 잠시 후 다시 시도해 주세요.';
 const MSG_CREATED_UNKNOWN = '분석 건은 만들어졌지만 시작됐는지 확인하지 못했습니다. 상세 화면에서 실제 상태를 확인하세요.';
 const STARTED_TOAST = '분석을 시작했습니다. 이 화면에서 3초마다 진행 상태를 확인합니다.';
 
-type FocusTarget = 'code' | 'file' | 'alert';
+type FocusTarget = 'file' | 'alert';
 
 export function LiveUploadScreen() {
   const router = useRouter();
   const base = useRouteBase();
   const service = useService();
   const toast = useToast();
-  const code = useAccessCode();
   const [name, setName] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState('');
-  const [codeError, setCodeError] = useState('');
   const [formError, setFormError] = useState('');
   /** 오류가 났지만 이미 만든 분석 건(시작 결과를 모를 때) — 상세로 가는 길을 보인다 */
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [step, setStep] = useState<RequestStep | null>(null);
   const [focus, setFocus] = useState<{ target: FocusTarget; n: number } | null>(null);
-  const codeRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const alertRef = useRef<HTMLDivElement>(null);
   const alive = useRef(true);
@@ -76,8 +69,7 @@ export function LiveUploadScreen() {
   /* 오류를 보인 뒤(잠금이 풀린 다음 그리기에서) 고칠 곳으로 포커스 */
   useEffect(() => {
     if (!focus) return;
-    if (focus.target === 'code') codeRef.current?.focus();
-    else if (focus.target === 'file') fileRef.current?.focus();
+    if (focus.target === 'file') fileRef.current?.focus();
     else alertRef.current?.focus();
   }, [focus]);
   const focusOn = (target: FocusTarget) => setFocus((f) => ({ target, n: (f?.n ?? 0) + 1 }));
@@ -105,22 +97,13 @@ export function LiveUploadScreen() {
   const onSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (busy || !service) return;
-    let bad: FocusTarget | null = null;
-    if (!code.trim()) {
-      setCodeError(MSG_NEED_CODE);
-      bad = 'code';
-    }
     if (!file) {
       setFileError((err) => err || MSG_PICK_FILE);
-      bad = bad ?? 'file';
-    }
-    if (bad || !file) {
-      focusOn(bad ?? 'file');
+      focusOn('file');
       return;
     }
     setFormError('');
     setCreatedId(null);
-    setCodeError('');
     setStep('create');
     const ext = fileExt(file.name).toUpperCase();
     service
@@ -140,11 +123,6 @@ export function LiveUploadScreen() {
         (err: unknown) => {
           if (!alive.current) return;
           setStep(null);
-          if (apiErrorCode(err) === 'unauthorized') {
-            setCodeError(MSG_WRONG_CODE);
-            focusOn('code');
-            return;
-          }
           setFormError(err instanceof Error && err.message ? err.message : MSG_REQUEST_FAILED);
           setCreatedId(apiErrorAnalysisId(err));
           focusOn('alert');
@@ -168,18 +146,8 @@ export function LiveUploadScreen() {
             <div className={styles.titles}>
               <span className={styles.eyebrow}>새 분석 · 실제 분석</span>
               <h1 className={styles.title}>분석할 서류 묶음을 올려 주세요</h1>
-              <p className={styles.lead}>올린 파일은 Upstage 워크플로우가 실제로 분석합니다. 서류 분류 · 민감정보 추출 · 필수항목 검증 · 위험도 판정까지 보통 1~3분 걸립니다.</p>
+              <p className={styles.lead}>분석은 1~3분까지 걸릴 수 있습니다.</p>
             </div>
-          </div>
-
-          <div className={styles.warn}>
-            <span className={styles.warnIcon}>
-              <Icon name="dg-i-alert" size={17} strokeWidth={2.1} />
-            </span>
-            <span>
-              <strong className={styles.warnStrong}>합성 자료만 올려 주세요.</strong> 실제 고객 서류나 본인 서류는 올리지 마세요. 올린 파일은 분석을 위해 Supabase 저장소와 Upstage
-              서버로 보내집니다.
-            </span>
           </div>
 
           {formError ? (
@@ -201,15 +169,6 @@ export function LiveUploadScreen() {
               </span>
             </div>
           ) : null}
-
-          <AccessCodeField
-            error={codeError || undefined}
-            disabled={busy}
-            inputRef={codeRef}
-            onEdit={() => {
-              if (codeError) setCodeError('');
-            }}
-          />
 
           <TextField
             label="분석명"
@@ -253,16 +212,18 @@ export function LiveUploadScreen() {
                   onChange={onPick}
                   disabled={busy}
                   className={styles.fileInput}
-                  aria-describedby={fileHelpId}
+                  aria-describedby={fileError ? fileHelpId : undefined}
                   aria-invalid={fileError ? true : undefined}
                 />
                 <Icon name="dg-i-upload" size={17} strokeWidth={2.2} />
                 {file ? '다른 파일 고르기' : '파일 선택'}
               </label>
             </div>
-            <span id={fileHelpId} className={cx(styles.fileHelp, fileError && styles.fileHelpError)}>
-              {fileError || '여러 서류가 한 파일에 묶여 있어도 워크플로우가 서류별로 나눠 분석합니다.'}
-            </span>
+            {fileError ? (
+              <span id={fileHelpId} className={cx(styles.fileHelp, styles.fileHelpError)}>
+                {fileError}
+              </span>
+            ) : null}
           </div>
 
           {busy ? (
@@ -273,7 +234,8 @@ export function LiveUploadScreen() {
                     {s.state === 'done' ? <Icon name="dg-i-check-circle" size={16} /> : s.state === 'current' ? <Spinner size={14} /> : <Icon name="dg-i-circle" size={16} />}
                   </span>
                   {s.label}
-                  {s.state === 'done' ? <span className={styles.stepDone}> · 끝남</span> : null}
+                  {/* 끝난 단계는 체크 아이콘으로만 보인다 — 화면 낭독기에는 '완료'를 읽어 준다 */}
+                  {s.state === 'done' ? <VisuallyHidden> 완료</VisuallyHidden> : null}
                 </li>
               ))}
             </ol>
@@ -283,7 +245,7 @@ export function LiveUploadScreen() {
         <div className={styles.bar}>
           <div className={styles.barInner}>
             <span aria-live="polite" className={styles.barText}>
-              {busy ? steps.find((s) => s.state === 'current')?.label + '…' : '분석 시작을 누르면 파일을 올리고 바로 분석을 시작합니다.'}
+              {busy ? steps.find((s) => s.state === 'current')?.label + '…' : null}
             </span>
             <div className={styles.buttons}>
               <Button variant="secondary" size="xl" onClick={() => router.push(listHref(base))} disabled={busy}>

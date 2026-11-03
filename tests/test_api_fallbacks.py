@@ -12,7 +12,7 @@ from typing import Any
 
 import httpx
 import pytest
-from api_fakes import FAKE_ACCESS_CODE, FAKE_ENV, FakeStore, FakeUpstageServer
+from api_fakes import FAKE_ENV, FakeStore, FakeUpstageServer
 from fastapi.testclient import TestClient
 
 from api.index import app, get_store, get_upstage
@@ -20,7 +20,6 @@ from imask_backend.analyses import poll_analysis
 from imask_backend.settings import get_settings, load_settings
 from imask_backend.upstage import UpstageClient
 
-CODE = {"X-Demo-Code": FAKE_ACCESS_CODE}
 STALE = "분석 시작이 끝나지 않았습니다. 새 분석으로 다시 올려 주세요."
 REREAD_FAILED = "분석 상태를 다시 읽지 못했습니다. 다음 조회에서 다시 확인합니다."
 START_REREAD_FAILED = "분석 시작 결과를 확인하지 못했습니다. 잠시 후 분석 건을 다시 조회해 주세요."
@@ -64,7 +63,7 @@ def test_start_success_with_failed_final_reread_keeps_job_and_file_ids(env: Any)
     client, store, server = env
     analysis_id = store.put()
     store.fail_get_calls = {2}  # 1: 시작 전 읽기, 2: 마지막 다시 읽기
-    response = client.post(f"/api/py/analyses/{analysis_id}/start", headers=CODE)
+    response = client.post(f"/api/py/analyses/{analysis_id}/start")
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "running"
@@ -83,7 +82,7 @@ def test_start_job_failure_with_failed_final_reread_keeps_saved_file_id(env: Any
     analysis_id = store.put()
     server.errors[("POST", "responses")] = (400, {"error": {"message": "bad config"}})
     store.fail_get_calls = {2}
-    body = client.post(f"/api/py/analyses/{analysis_id}/start", headers=CODE).json()
+    body = client.post(f"/api/py/analyses/{analysis_id}/start").json()
     assert body["status"] == "failed"
     assert body["error"] == store.analyses[analysis_id]["error"]
     assert body["error"].startswith("Upstage 분석을 시작하지 못했습니다: 작업 만들기: HTTP 400")
@@ -95,7 +94,7 @@ def test_start_failure_before_upload_with_failed_final_reread(env: Any) -> None:
     client, store, _ = env
     analysis_id = store.put(content=None)
     store.fail_get_calls = {2}
-    body = client.post(f"/api/py/analyses/{analysis_id}/start", headers=CODE).json()
+    body = client.post(f"/api/py/analyses/{analysis_id}/start").json()
     assert body["status"] == "failed"
     assert body["error"] == "업로드된 파일을 찾을 수 없습니다. 파일을 다시 올려 주세요."
     assert _file_ids(body) == [None]
@@ -115,13 +114,13 @@ def test_start_lost_race_with_failed_final_reread_is_502_not_guessed(env: Any) -
 
     store.update_analysis = update  # type: ignore[method-assign]
     store.fail_get_calls = {2}
-    response = client.post(f"/api/py/analyses/{analysis_id}/start", headers=CODE)
+    response = client.post(f"/api/py/analyses/{analysis_id}/start")
     # 조건부 갱신(job id 저장)에 졌고 다시 읽기도 실패 — 상태를 지어내지 않고 502(다시 조회하게)
     assert response.status_code == 502
     assert response.json() == {"detail": START_REREAD_FAILED}
     assert server.deleted == ["file_fake1"]  # 작업으로 이어지지 않은 파일은 지운다
     assert store.analyses[analysis_id]["upstage_job_id"] is None
-    after = client.get(f"/api/py/analyses/{analysis_id}", headers=CODE).json()
+    after = client.get(f"/api/py/analyses/{analysis_id}").json()
     assert after["status"] == "failed"
     assert after["error"] == STALE  # 승자(만료 처리)가 저장한 상태
 
@@ -139,7 +138,7 @@ def test_start_lost_race_with_working_reread_returns_winner(env: Any) -> None:
         return original(aid, values, **kw)
 
     store.update_analysis = update  # type: ignore[method-assign]
-    body = client.post(f"/api/py/analyses/{analysis_id}/start", headers=CODE).json()
+    body = client.post(f"/api/py/analyses/{analysis_id}/start").json()
     assert body["status"] == "failed"
     assert body["error"] == STALE  # 승자의 저장 값(지어낸 문구가 아님)
 
@@ -156,7 +155,7 @@ def test_start_failure_record_lost_with_failed_final_reread_is_502(env: Any) -> 
 
     store.update_analysis = update  # type: ignore[method-assign]
     store.fail_get_calls = {2}
-    response = client.post(f"/api/py/analyses/{analysis_id}/start", headers=CODE)
+    response = client.post(f"/api/py/analyses/{analysis_id}/start")
     assert response.status_code == 502
     assert response.json() == {"detail": START_REREAD_FAILED}
     assert store.analyses[analysis_id]["error"] == STALE  # 이 요청의 문구로 덮어쓰지 않음
@@ -175,7 +174,7 @@ def test_poll_done_with_failed_final_reread_returns_saved_result(env: Any) -> No
     analysis_id = _running(store, server)
     server.last_status = "completed"
     store.fail_get_calls = {2}  # 1: 조회 읽기, 2: 반영 뒤 다시 읽기
-    body = client.get(f"/api/py/analyses/{analysis_id}", headers=CODE).json()
+    body = client.get(f"/api/py/analyses/{analysis_id}").json()
     assert body["status"] == "done"
     assert body["upstage_job_id"] == "job_up1"
     assert _file_ids(body) == ["file_up1"]
@@ -190,7 +189,7 @@ def test_poll_failed_job_with_failed_final_reread(env: Any) -> None:
     server.last_status = "failed"
     server.last_extra = {"error": {"message": "unreadable"}}
     store.fail_get_calls = {2}
-    body = client.get(f"/api/py/analyses/{analysis_id}", headers=CODE).json()
+    body = client.get(f"/api/py/analyses/{analysis_id}").json()
     assert body["status"] == "failed"
     assert body["error"] == "Upstage 분석이 실패했습니다: unreadable"
     assert _file_ids(body) == ["file_up1"]
@@ -206,14 +205,14 @@ def test_poll_lost_update_with_failed_final_reread_does_not_guess(env: Any) -> N
 
     store.before_update = other_poll_wins
     store.fail_get_calls = {2}
-    body = client.get(f"/api/py/analyses/{analysis_id}", headers=CODE).json()
+    body = client.get(f"/api/py/analyses/{analysis_id}").json()
     # 반영하지 못한 값을 확정하지 않는다: 조회 전 running 행 + poll_error(다음 조회가 승자의 상태를 읽는다)
     assert body["status"] == "running"
     assert body["poll_error"] == REREAD_FAILED
     assert body["result"] is None and body["error"] is None
     assert _file_ids(body) == ["file_up1"]
     assert server.deleted == ["file_up1"]  # 작업은 끝났으므로 파일 정리는 그대로
-    assert client.get(f"/api/py/analyses/{analysis_id}", headers=CODE).json()["status"] == "done"
+    assert client.get(f"/api/py/analyses/{analysis_id}").json()["status"] == "done"
 
 
 def test_poll_job_gone_with_failed_final_reread(env: Any) -> None:
@@ -221,7 +220,7 @@ def test_poll_job_gone_with_failed_final_reread(env: Any) -> None:
     analysis_id = _running(store, server, updated_at=_ago(3))
     server.errors[("GET", "response")] = (404, {"error": {"message": "gone"}})
     store.fail_get_calls = {2}
-    body = client.get(f"/api/py/analyses/{analysis_id}", headers=CODE).json()
+    body = client.get(f"/api/py/analyses/{analysis_id}").json()
     assert body["status"] == "failed"
     assert body["error"] == "Upstage 작업을 찾을 수 없습니다. 새 분석으로 다시 올려 주세요."
     assert _file_ids(body) == ["file_up1"]
@@ -237,12 +236,12 @@ def test_stale_start_lost_with_failed_final_reread_keeps_running(env: Any) -> No
 
     store.before_update = start_saves_job_first
     store.fail_get_calls = {2}
-    body = client.get(f"/api/py/analyses/{analysis_id}", headers=CODE).json()
+    body = client.get(f"/api/py/analyses/{analysis_id}").json()
     assert body["status"] == "running"
     assert body["error"] is None
     assert body["poll_error"] == REREAD_FAILED
     assert server.calls("DELETE") == []  # 실행 중인 작업의 입력은 지우지 않는다
-    assert client.get(f"/api/py/analyses/{analysis_id}", headers=CODE).json()["upstage_job_id"] == "job_now"
+    assert client.get(f"/api/py/analyses/{analysis_id}").json()["upstage_job_id"] == "job_now"
 
 
 def test_stale_start_with_failed_final_reread(env: Any) -> None:
@@ -250,7 +249,7 @@ def test_stale_start_with_failed_final_reread(env: Any) -> None:
     server.files["file_up1"] = ("document.pdf", b"")
     analysis_id = store.put(status="running", updated_at=_ago(6), upstage_file_id="file_up1")
     store.fail_get_calls = {2}
-    body = client.get(f"/api/py/analyses/{analysis_id}", headers=CODE).json()
+    body = client.get(f"/api/py/analyses/{analysis_id}").json()
     assert body["status"] == "failed"
     assert _file_ids(body) == ["file_up1"]
     assert server.deleted == ["file_up1"]
@@ -287,7 +286,7 @@ def _race(env: Any, loser_view: str, winner_view: str, *, fail_loser_reread: boo
             winner["status"] = poll_analysis(store, lambda: service, settings, aid).row["status"]
 
     store.before_update = other_request_wins
-    response = client.get(f"/api/py/analyses/{analysis_id}", headers=CODE)
+    response = client.get(f"/api/py/analyses/{analysis_id}")
     return client, store, server, analysis_id, response, winner
 
 
@@ -308,7 +307,7 @@ def test_conditional_update_loser_with_failed_reread_returns_running(
     assert body["upstage_job_id"] == "job_race"
     assert set(server.files) - set(server.deleted) == set()  # 파일은 남지 않는다(승자가 지웠거나 404 = 성공)
     # 다음 GET 은 승자가 저장한 상태
-    after = client.get(f"/api/py/analyses/{analysis_id}", headers=CODE).json()
+    after = client.get(f"/api/py/analyses/{analysis_id}").json()
     assert after["status"] == winner_status
     assert after["error"] == stored["error"]
     assert (after["result"] is not None) == (winner_status == "done")

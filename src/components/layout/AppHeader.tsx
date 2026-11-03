@@ -6,9 +6,10 @@ import { Suspense } from 'react';
 import { activeNav, listHomeHref, listNavHref, reviewNeededHref, useRememberedListQuery, type NavKey } from '@/components/list/listReturn';
 import { cx } from '@/components/ui/cx';
 import { Icon } from '@/components/ui/Icon';
-import { DEMO_BASE, type RouteBase } from '@/lib/routes';
-import { useRouteBase, useServiceMode } from '@/services/react';
+import type { RouteBase } from '@/lib/routes';
+import { useBuildMode, useRouteBase, useServiceMode } from '@/services/react';
 import { DemoBadge } from './DemoBadge';
+import { modeSwitchLink } from './modeSwitch';
 import styles from './AppHeader.module.css';
 
 export interface AppHeaderProps {
@@ -27,8 +28,8 @@ export interface AppHeaderProps {
 /** 실제 분석 모드(주소 기준 모드 'api')의 헤더 표시 — 데모 모드는 DemoBadge 기본값('데모 데이터') */
 const LIVE_BADGE = { label: '실제 분석', title: 'Upstage 워크플로우로 실제 분석합니다. 합성 자료만 올려 주세요.' } as const;
 
-/** 실제 분석 화면에서 데모(`/demo`)로 가는 보조 링크 — 폭 768 미만은 짧은 글자(390 미만은 밑줄 글자), 접근 가능한 이름은 그대로 */
-const DEMO_LINK = { label: '데모 체험하기', short: '데모', title: '샘플 데이터로 동작하는 데모 화면으로 이동합니다' } as const;
+/** 옆에 전환 링크가 있는 데모 배지(실제 모드 빌드의 `/demo`)의 좁은 폭 글자 — 헤더가 넘치지 않게 */
+const DEMO_BADGE_SHORT = '데모';
 
 /**
  * 메뉴 이동 주소는 그 기준 경로(루트 · `/demo`)에서 마지막으로 본 목록(listReturn)으로 만든다 — 프로토타입 nav:
@@ -69,14 +70,16 @@ function NavFallback({ count, base }: { count: number | null; base: RouteBase })
 
 /**
  * 헤더 — Main 98–112. 로고 버튼(첫 화면), 브랜드 글자(폭 480 이상), 주 메뉴(문서 분석 · 검토 필요 + 건수),
- * 오른쪽 데모 표시(실제 분석 모드면 '데모 체험하기' 링크 + '실제 분석')와 사용자 칩(폭 960 이상: 첫 글자 동그라미 · 이름 · 팀).
+ * 오른쪽 모드 전환 링크(modeSwitch.ts — 실제 분석 화면은 '데모 체험하기', 실제 모드 빌드의 `/demo` 는 '실제 분석으로')와
+ * 모드 표시(배지 '실제 분석' · '데모 데이터'), 사용자 칩(폭 960 이상: 첫 글자 동그라미 · 이름 · 팀).
  * 모드 · 기준 경로는 주소 기준(useServiceMode · useRouteBase) — `/demo` 아래는 빌드 모드와 상관없이 데모 표시이고
- * 링크도 `/demo` 기준이다. 선택 밑줄은 scaleX 로 움직인다(.32s).
+ * 링크도 `/demo` 기준이다. 데모 빌드(useBuildMode 'demo')에는 전환 링크가 없다. 선택 밑줄은 scaleX 로 움직인다(.32s).
  */
 export function AppHeader({ brandName, user, reviewNeededCount }: AppHeaderProps) {
   const count = reviewNeededCount === null ? null : Math.max(0, Math.floor(reviewNeededCount));
   const mode = useServiceMode();
   const base = useRouteBase();
+  const switchLink = modeSwitchLink(mode, useBuildMode());
   // 로고 = 프로토타입 goHome: 검색·필터를 모두 풀고 정렬만 둔다
   const homeHref = listHomeHref(base, useRememberedListQuery(base));
   return (
@@ -90,17 +93,21 @@ export function AppHeader({ brandName, user, reviewNeededCount }: AppHeaderProps
           <NavFromUrl count={count} base={base} />
         </Suspense>
       </nav>
-      <div className={cx(styles.right, mode === 'api' && styles.rightLive)}>
-        {mode === 'api' ? (
-          /* 미리 받지 않는다(prefetch={false}) — 실제 분석 화면을 열 때 /demo 를 받지 않게 */
-          <Link href={DEMO_BASE} prefetch={false} aria-label={DEMO_LINK.label} title={DEMO_LINK.title} className={styles.demoLink}>
-            <span className={styles.demoLinkLong}>{DEMO_LINK.label}</span>
-            <span aria-hidden="true" className={styles.demoLinkShort}>
-              {DEMO_LINK.short}
+      <div className={cx(styles.right, switchLink && styles.rightSwitch)}>
+        {switchLink ? (
+          /* 미리 받지 않는다(prefetch={false}) — 한쪽 화면을 열 때 다른 쪽 화면을 받지 않게(요청 목록 그대로) */
+          <Link href={switchLink.href} prefetch={false} aria-label={switchLink.label} title={switchLink.title} className={styles.modeLink}>
+            <span className={styles.modeLinkLong}>{switchLink.label}</span>
+            <span aria-hidden="true" className={styles.modeLinkShort}>
+              {switchLink.short}
             </span>
           </Link>
         ) : null}
-        {mode === 'api' ? <DemoBadge label={LIVE_BADGE.label} title={LIVE_BADGE.title} /> : <DemoBadge />}
+        {mode === 'api' ? (
+          <DemoBadge label={LIVE_BADGE.label} title={LIVE_BADGE.title} />
+        ) : (
+          <DemoBadge shortLabel={switchLink ? DEMO_BADGE_SHORT : undefined} />
+        )}
         <div className={styles.user}>
           <span aria-hidden="true" className={styles.avatar}>
             {user.name.slice(0, 1)}

@@ -1,5 +1,5 @@
 # ==========================================================================
-#  FastAPI 앱(api/index.py) — 접근 코드·만들기·시작·조회 (네트워크 없음)
+#  FastAPI 앱(api/index.py) — 열린 경로(접근 코드 없음)·만들기·시작·조회 (네트워크 없음)
 #  저장소는 메모리 가짜(FakeStore), Upstage 는 진짜 UpstageClient + 가짜 서버(MockTransport).
 # ==========================================================================
 
@@ -17,10 +17,10 @@ import httpx
 import pytest
 from api_fakes import (
     ALL_SECRETS,
-    FAKE_ACCESS_CODE,
     FAKE_AGENT_ID,
     FAKE_CONFIG_ID,
     FAKE_ENV,
+    FAKE_SUPABASE_KEY,
     FAKE_UPSTAGE_KEY,
     JPEG_BYTES,
     PNG_BYTES,
@@ -41,7 +41,6 @@ from imask_backend.files import (
 from imask_backend.settings import get_settings, load_settings
 from imask_backend.upstage import UpstageClient
 
-CODE = {"X-Demo-Code": FAKE_ACCESS_CODE}
 ANALYSIS_KEYS = {
     "id",
     "name",
@@ -74,13 +73,13 @@ class Ctx:
     def create(self, **overrides: Any) -> httpx.Response:
         body = {"name": "합성 묶음", "filename": "묶음.pdf", "size": 322053, "mime_type": "application/pdf"}
         body.update(overrides)
-        return self.client.post("/api/py/analyses", json=body, headers=CODE)
+        return self.client.post("/api/py/analyses", json=body)
 
     def start(self, analysis_id: str) -> httpx.Response:
-        return self.client.post(f"/api/py/analyses/{analysis_id}/start", headers=CODE)
+        return self.client.post(f"/api/py/analyses/{analysis_id}/start")
 
     def get(self, analysis_id: str, params: Any = None) -> httpx.Response:
-        return self.client.get(f"/api/py/analyses/{analysis_id}", headers=CODE, params=params)
+        return self.client.get(f"/api/py/analyses/{analysis_id}", params=params)
 
 
 def _install(env: dict[str, str]) -> tuple[FakeStore, FakeUpstageServer, list[UpstageClient]]:
@@ -124,15 +123,15 @@ def _ago(minutes: float) -> str:
     return (datetime.now(UTC) - timedelta(minutes=minutes)).isoformat()
 
 
-# --- 접근 코드 -----------------------------------------------------------------------
+# --- 열린 경로(접근 코드 없음 — 2026-11-03 없앰) -----------------------------------------
 
 
-def test_health_needs_no_code_and_shows_only_booleans(ctx: Ctx) -> None:
+def test_health_shows_only_booleans(ctx: Ctx) -> None:
     response = ctx.client.get("/api/py/health")
     assert response.status_code == 200
     assert response.json() == {
         "ok": True,
-        "configured": {"supabase": True, "upstage": True, "access_code": True, "upstage_project": False},
+        "configured": {"supabase": True, "upstage": True, "upstage_project": False},
     }
     _assert_clean(response.text)
     assert FAKE_ENV["SUPABASE_URL"] not in response.text
@@ -149,60 +148,21 @@ def test_health_without_env() -> None:
     assert response.json()["configured"] == {
         "supabase": False,
         "upstage": False,
-        "access_code": False,
         "upstage_project": False,
     }
 
 
-@pytest.mark.parametrize("headers", [{}, {"X-Demo-Code": "wrong"}, {"X-Demo-Code": ""}, {"X-Demo-Code": FAKE_ACCESS_CODE + "x"}])
-def test_missing_or_wrong_code_is_401(ctx: Ctx, headers: dict[str, str]) -> None:
-    body = {"filename": "a.pdf", "size": 10, "mime_type": "application/pdf"}
-    for response in (
-        ctx.client.post("/api/py/analyses", json=body, headers=headers),
-        ctx.client.post(f"/api/py/analyses/{uuid.uuid4()}/start", headers=headers),
-        ctx.client.get(f"/api/py/analyses/{uuid.uuid4()}", headers=headers),
-    ):
-        assert response.status_code == 401
-        assert response.json() == {"detail": "접근 코드가 맞지 않습니다."}
-    assert ctx.store.calls == []
-
-
-def test_non_ascii_code_header_is_401_not_500(ctx: Ctx) -> None:
-    response = ctx.client.get(f"/api/py/analyses/{uuid.uuid4()}", headers={"X-Demo-Code": "코드".encode()})
-    assert response.status_code == 401
-
-
-def test_401_comes_before_body_check_and_404(ctx: Ctx) -> None:
+def test_analyses_need_no_access_code(ctx: Ctx) -> None:
+    # 헤더 없이도 처리한다 — 예전 X-Demo-Code 를 보내도 무시한다
+    assert ctx.client.get(f"/api/py/analyses/{uuid.uuid4()}").status_code == 404
+    assert ctx.client.get(f"/api/py/analyses/{uuid.uuid4()}", headers={"X-Demo-Code": "anything"}).status_code == 404
     bad_json = ctx.client.post("/api/py/analyses", content=b"{not json", headers={"Content-Type": "application/json"})
-    assert bad_json.status_code == 401
-    assert ctx.client.get("/api/py/analyses/not-a-uuid").status_code == 401
-    assert ctx.client.get("/api/py/analyses/x/y/z").status_code == 401
-    assert ctx.client.delete(f"/api/py/analyses/{uuid.uuid4()}").status_code == 401
-    # 코드가 맞으면 그때 400·404
-    assert ctx.client.post("/api/py/analyses", content=b"{not json", headers={**CODE, "Content-Type": "application/json"}).status_code == 400
-    assert ctx.client.get("/api/py/analyses/not-a-uuid", headers=CODE).status_code == 404
-    unknown = ctx.client.get("/api/py/analyses/x/y/z", headers=CODE)
+    assert bad_json.status_code == 400
+    assert ctx.client.get("/api/py/analyses/not-a-uuid").status_code == 404
+    unknown = ctx.client.get("/api/py/analyses/x/y/z")
     assert unknown.status_code == 404
     assert unknown.json() == {"detail": "요청한 주소를 찾을 수 없습니다."}
 
-
-@pytest.mark.parametrize("code", [None, "", "   "])
-def test_server_without_access_code_is_500(code: str | None) -> None:
-    env = dict(FAKE_ENV)
-    if code is None:
-        env.pop("DEMO_ACCESS_CODE")
-    else:
-        env["DEMO_ACCESS_CODE"] = code
-    _install(env)
-    try:
-        with TestClient(app) as client:
-            response = client.get(f"/api/py/analyses/{uuid.uuid4()}", headers={"X-Demo-Code": ""})
-            health = client.get("/api/py/health")
-    finally:
-        app.dependency_overrides.clear()
-    assert response.status_code == 500
-    assert response.json() == {"detail": "서버에 접근 코드가 설정되지 않았습니다."}
-    assert health.json()["configured"]["access_code"] is False
 
 
 def test_missing_supabase_env_is_500_with_names_only() -> None:
@@ -210,9 +170,7 @@ def test_missing_supabase_env_is_500_with_names_only() -> None:
     app.dependency_overrides[get_settings] = lambda: load_settings(env)
     try:
         with TestClient(app) as client:
-            response = client.post(
-                "/api/py/analyses", json={"filename": "a.pdf", "size": 10, "mime_type": "application/pdf"}, headers=CODE
-            )
+            response = client.post("/api/py/analyses", json={"filename": "a.pdf", "size": 10, "mime_type": "application/pdf"})
     finally:
         app.dependency_overrides.clear()
     assert response.status_code == 500
@@ -270,7 +228,7 @@ def test_create_name_defaults_to_filename(ctx: Ctx) -> None:
         body = {"filename": "묶음.pdf", "size": 10, "mime_type": "application/pdf"}
         if name is not None:
             body["name"] = name
-        response = ctx.client.post("/api/py/analyses", json=body, headers=CODE)
+        response = ctx.client.post("/api/py/analyses", json=body)
         assert response.status_code == 201
         assert response.json()["analysis"]["name"] == "묶음.pdf"
 
@@ -308,7 +266,7 @@ def test_create_validation_messages(ctx: Ctx, overrides: dict[str, Any], message
     ],
 )
 def test_create_bad_body_shape_is_400(ctx: Ctx, body: Any) -> None:
-    response = ctx.client.post("/api/py/analyses", json=body, headers=CODE)
+    response = ctx.client.post("/api/py/analyses", json=body)
     assert response.status_code == 400
     assert response.json() == {"detail": "요청 형식이 올바르지 않습니다."}
 
@@ -425,7 +383,7 @@ def test_start_without_upstage_config_is_500_and_stays_queued() -> None:
     analysis_id = store.put()
     try:
         with TestClient(app) as client:
-            response = client.post(f"/api/py/analyses/{analysis_id}/start", headers=CODE)
+            response = client.post(f"/api/py/analyses/{analysis_id}/start")
     finally:
         app.dependency_overrides.clear()
     assert response.status_code == 500
@@ -477,7 +435,7 @@ def test_start_download_error_fails(ctx: Ctx) -> None:
     _assert_failed(ctx, response, analysis_id, "업로드된 파일을 읽지 못했습니다. 새 분석으로 다시 올려 주세요.")
 
 
-@pytest.mark.parametrize("secret", ALL_SECRETS, ids=["upstage_key", "agent_id", "supabase_key", "access_code"])
+@pytest.mark.parametrize("secret", ALL_SECRETS, ids=["upstage_key", "agent_id", "supabase_key"])
 def test_start_upload_failure_is_failed_row_with_redacted_reason(ctx: Ctx, secret: str) -> None:
     analysis_id = ctx.store.put()
     ctx.server.errors[("POST", "files")] = (500, {"error": {"message": leaky(secret)}})
@@ -738,7 +696,7 @@ def test_get_failed_job_marks_failed_and_deletes_file(ctx: Ctx, status: str, ext
     assert [r.url.query.decode() for r in ctx.server.calls("GET", "response")] == ["include[]=last"]
 
 
-@pytest.mark.parametrize("secret", ALL_SECRETS, ids=["upstage_key", "agent_id", "supabase_key", "access_code"])
+@pytest.mark.parametrize("secret", ALL_SECRETS, ids=["upstage_key", "agent_id", "supabase_key"])
 def test_get_failed_job_reason_is_redacted(ctx: Ctx, secret: str) -> None:
     analysis_id = _running(ctx)
     ctx.server.last_status = "failed"
@@ -864,7 +822,7 @@ def test_get_store_read_failure_is_502(ctx: Ctx) -> None:
 
 def test_unexpected_error_is_500_json_and_log_is_redacted(ctx: Ctx, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
     def broken(*_a: Any, **_k: Any) -> Any:
-        raise RuntimeError(f"broken with {FAKE_UPSTAGE_KEY} and {FAKE_ACCESS_CODE}")
+        raise RuntimeError(f"broken with {FAKE_UPSTAGE_KEY} and {FAKE_SUPABASE_KEY}")
 
     monkeypatch.setattr(logic, "_load", broken)
     with caplog.at_level(logging.ERROR, logger="imask"):

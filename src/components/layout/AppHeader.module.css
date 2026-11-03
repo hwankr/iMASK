@@ -2,7 +2,8 @@
    헤더 — Main.dc.html 98–112
    높이 --head-h(64 · 1200 미만 56), 좌우 --gutter, 간격 --head-gap / --nav-gap / --nav-ml
    브랜드 글자: 폭 480 이상 · 사용자 칩: 폭 960 이상
-   데모 체험 링크(실제 분석 모드에서만): 폭 768 이상 '데모 체험하기', 그 아래 '데모'(390 미만은 밑줄 글자)
+   모드 전환 링크(실제 분석이 있는 빌드에서만 — 실제 분석 화면 '데모 체험하기', /demo '실제 분석으로'):
+   폭 768 이상 긴 글자, 그 아래 짧은 글자('데모' · '실제', /demo 배지도 '데모'), 390 미만은 밑줄 글자
    ========================================================================== */
 .header {
   flex: none;
@@ -141,8 +142,9 @@
   gap: var(--space-10);
 }
 
-/* 데모 체험 링크 — 실제 분석 모드에서만 배지 앞에 둔다. 보조 링크답게 작고 차분하게(배지와 같은 높이, 선만 있는 알약) */
-.demoLink {
+/* 모드 전환 링크 — 실제 분석이 있는 빌드에서만 배지 앞에 둔다('데모 체험하기' · '실제 분석으로').
+   보조 링크답게 작고 차분하게(배지와 같은 높이, 선만 있는 알약) */
+.modeLink {
   position: relative;
   flex: none;
   display: inline-flex;
@@ -163,12 +165,12 @@
     color var(--dur-color) var(--ease);
 }
 @media (hover: hover) {
-  .demoLink:hover {
+  .modeLink:hover {
     background: var(--hover);
     color: var(--ink);
   }
 }
-.demoLinkShort {
+.modeLinkShort {
   display: none;
 }
 .avatar {
@@ -204,19 +206,20 @@
   }
 }
 
-/* 휴대폰(< 768): 데모 링크는 짧은 글자('데모' — 접근 가능한 이름은 aria-label 로 그대로)로 헤더가 넘치지 않게 하고,
-   보이는 모양은 두고 누르는 영역만 44×44(--touch-min) 이상으로 넓힌다(가상 요소 방식) */
+/* 휴대폰(< 768): 전환 링크는 짧은 글자('데모' · '실제' — 접근 가능한 이름은 aria-label 로 그대로)로 헤더가 넘치지 않게 하고
+   (/demo 에서는 배지도 '데모' — DemoBadge shortLabel), 보이는 모양은 두고 누르는 영역만 44×44(--touch-min) 이상으로
+   넓힌다(가상 요소 방식) */
 @media (max-width: 767.98px) {
-  .demoLink {
+  .modeLink {
     padding: 0 var(--space-10);
   }
-  .demoLinkLong {
+  .modeLinkLong {
     display: none;
   }
-  .demoLinkShort {
+  .modeLinkShort {
     display: inline;
   }
-  .demoLink::after {
+  .modeLink::after {
     content: '';
     position: absolute;
     top: 50%;
@@ -228,12 +231,12 @@
 }
 
 /* 아주 좁은 폭(< 390 — 360 · 375 · 384 휴대폰): 알약이면 배지가 헤더 여백 밖으로 밀린다.
-   실제 분석 모드에서만 링크를 테두리 없는 밑줄 글자 '데모'로 줄이고 링크–배지 간격을 좁힌다(누름 영역 44×44 는 그대로) */
+   전환 링크가 있을 때만 링크를 테두리 없는 밑줄 글자로 줄이고 링크–배지 간격을 좁힌다(누름 영역 44×44 는 그대로) */
 @media (max-width: 389.98px) {
-  .rightLive {
+  .rightSwitch {
     gap: var(--space-6);
   }
-  .demoLink {
+  .modeLink {
     padding: 0;
     border: 0;
     background: transparent;

@@ -36,7 +36,6 @@ export const MSG_BAD_TYPE = 'PDF·PNG·JPEG 파일만 올릴 수 있습니다.';
 export const MSG_TYPE_MISMATCH = '파일 형식과 확장자가 맞지 않습니다.';
 export const MSG_EMPTY_FILE = '빈 파일은 올릴 수 없습니다.';
 export const MSG_TOO_LARGE = `파일은 ${LIVE_MAX_FILE_MB}MB 이하여야 합니다.`;
-export const MSG_NEED_CODE = '접근 코드를 넣어 주세요.';
 
 /** 브라우저 File 에서 쓰는 값 */
 export interface PickedLiveFile {

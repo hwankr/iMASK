@@ -1,18 +1,15 @@
 /* ==========================================================================
    FastAPI 백엔드 클라이언트 — fetch 래퍼(T2 'API 계약' 그대로)
    - 기본 주소는 같은 출처의 '/api/py'(로컬은 Next rewrites → uvicorn, 배포는 같은 Vercel 프로젝트의 Python 함수).
-   - 모든 분석 요청에 X-Demo-Code(이 탭에 저장한 접근 코드)를 붙인다. 코드가 비었으면 헤더를 빼고 보낸다
-     (서버가 401 로 답한다). 이 헤더는 이 클라이언트만 붙인다 — Supabase 업로드 요청에는 붙지 않는다.
+   - 사용자 지정 헤더는 붙이지 않는다(Accept · Content-Type 만). 백엔드는 접근 코드를 받지 않는다(2026-11-03 없앰).
    - 오류는 ApiError { status, code, message }. message 는 서버가 준 detail(한국어) 또는 기본 문구.
      네트워크 오류·시간 초과도 한국어 문구의 ApiError(code 'network', status 0)다.
    - 시간 제한(기본 60초)은 응답 헤더가 아니라 본문을 다 읽을 때까지 걸린다.
    - getFile 이 주는 서명 다운로드 주소는 권한이다 — 이 파일도, 받는 쪽(file-download.ts)도 기록·출력하지 않는다.
    ========================================================================== */
 
-import { accessCodeForHeader } from './access-code';
-
 /** 오류 종류 */
-export type ApiErrorCode = 'unauthorized' | 'not_found' | 'conflict' | 'bad_request' | 'server' | 'network';
+export type ApiErrorCode = 'not_found' | 'conflict' | 'bad_request' | 'server' | 'network';
 
 /** 백엔드 요청 오류 */
 export class ApiError extends Error {
@@ -39,7 +36,7 @@ export function isApiError(error: unknown): error is ApiError {
   return error instanceof ApiError;
 }
 
-/** 오류 종류(ApiError 가 아니면 null) — 화면이 401·404 를 가를 때 */
+/** 오류 종류(ApiError 가 아니면 null) — 화면이 404 등을 가를 때 */
 export function apiErrorCode(error: unknown): ApiErrorCode | null {
   return isApiError(error) ? error.code : null;
 }
@@ -51,7 +48,6 @@ export function apiErrorAnalysisId(error: unknown): string | null {
 
 /* ---------- 기본 문구 ---------- */
 
-export const MSG_UNAUTHORIZED = '접근 코드가 맞지 않습니다.';
 export const MSG_NOT_FOUND = '분석 건을 찾을 수 없습니다.';
 export const MSG_CONFLICT = '이미 시작한 분석입니다.';
 export const MSG_BAD_REQUEST = '요청 형식이 올바르지 않습니다.';
@@ -62,7 +58,6 @@ export const MSG_BAD_RESPONSE = '서버 응답을 읽지 못했습니다. 잠시
 
 /** HTTP 상태 → 오류 종류 */
 export function codeForStatus(status: number): ApiErrorCode {
-  if (status === 401) return 'unauthorized';
   if (status === 404) return 'not_found';
   if (status === 409) return 'conflict';
   if (status >= 400 && status < 500) return 'bad_request';
@@ -70,7 +65,6 @@ export function codeForStatus(status: number): ApiErrorCode {
 }
 
 const DEFAULT_MESSAGE: Record<ApiErrorCode, string> = {
-  unauthorized: MSG_UNAUTHORIZED,
   not_found: MSG_NOT_FOUND,
   conflict: MSG_CONFLICT,
   bad_request: MSG_BAD_REQUEST,
@@ -153,8 +147,6 @@ export interface ApiClientOptions {
   baseUrl?: string;
   /** 기본 전역 fetch */
   fetch?: typeof fetch;
-  /** 접근 코드(기본: 이 탭의 sessionStorage) */
-  getAccessCode?: () => string;
   /** 요청 하나의 시간 제한(밀리초). 기본 60초(시작 요청은 Upstage 올리기까지 기다린다) */
   timeoutMs?: number;
 }
@@ -172,8 +164,6 @@ export interface ApiClient {
 
 export const DEFAULT_BASE_URL = '/api/py';
 export const DEFAULT_TIMEOUT_MS = 60_000;
-/** 헤더에 넣을 수 있는 접근 코드 글자(공백 ~ '~') */
-const PRINTABLE_ASCII = /^[\x20-\x7e]+$/;
 
 /** 응답 본문의 detail(한국어 문장) — 없거나 문자열이 아니면 '' */
 async function readDetail(response: Response): Promise<string> {
@@ -191,16 +181,11 @@ async function readDetail(response: Response): Promise<string> {
 
 export function createApiClient(options: ApiClientOptions = {}): ApiClient {
   const base = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
-  const getCode = options.getAccessCode ?? (() => accessCodeForHeader());
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const doFetch: typeof fetch = options.fetch ?? ((input, init) => fetch(input, init));
 
   async function request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
     const headers: Record<string, string> = { Accept: 'application/json' };
-    const code = getCode().trim();
-    // 헤더 값은 ASCII 만 보낼 수 있다(그 밖이면 fetch 가 TypeError) — 그런 코드는 맞을 수 없으므로 401 로 본다
-    if (code && !PRINTABLE_ASCII.test(code)) throw new ApiError(401, 'unauthorized', MSG_UNAUTHORIZED);
-    if (code) headers['X-Demo-Code'] = code;
     if (body !== undefined) headers['Content-Type'] = 'application/json';
 
     // 시간 제한은 헤더가 아니라 본문(오류 detail·정상 JSON)을 다 읽을 때까지 — 헤더 뒤 본문이 멈춰도 끝난다.

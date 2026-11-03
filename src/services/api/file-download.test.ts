@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ApiError, MSG_NETWORK, MSG_NOT_FOUND, MSG_TIMEOUT, MSG_UNAUTHORIZED } from './client';
+import { ApiError, MSG_NETWORK, MSG_NOT_FOUND, MSG_TIMEOUT } from './client';
 import { MSG_FILE_BAD_URL, MSG_FILE_NOT_FOUND, fileInfoError, isSafeDetail } from './file-download';
 
 /* 키 · 토큰 모양 문자열은 GitGuardian 이 보지 않게 실행 중에 조립한다(모두 가짜) */
@@ -10,7 +10,7 @@ const SB_KEY = ['sb', 'secret', 'fixture'].join('_');
 
 describe('isSafeDetail — 백엔드 detail 을 그대로 보여도 되는가(순수 함수)', () => {
   it('평범한 한국어 문장은 안전', () => {
-    for (const d of ['접근 코드가 맞지 않습니다.', '분석 건을 찾을 수 없습니다.', '원본 파일을 찾을 수 없습니다.', '서버 설정이 빠졌습니다: UPSTAGE_CONFIG_ID', 'a'.repeat(20) + ' 끝']) {
+    for (const d of ['분석 건을 찾을 수 없습니다.', '원본 파일을 찾을 수 없습니다.', '서버 설정이 빠졌습니다: UPSTAGE_CONFIG_ID', 'a'.repeat(20) + ' 끝']) {
       expect(isSafeDetail(d)).toBe(true);
     }
   });
@@ -50,10 +50,8 @@ describe('fileInfoError — /file 요청 오류 → 새 ApiError(순수 함수)'
     expect(out.analysisId).toBeNull();
   });
 
-  it('401 · 404 — 안전한 detail 은 그대로, 주소 · 토큰이 섞이면 고정 문구(code · status 유지)', () => {
-    expect(fileInfoError(new ApiError(401, 'unauthorized', '접근 코드가 맞지 않습니다.'))).toMatchObject({ status: 401, code: 'unauthorized', message: '접근 코드가 맞지 않습니다.' });
+  it('404 — 안전한 detail 은 그대로, 주소 · 토큰이 섞이면 고정 문구(code · status 유지)', () => {
     expect(fileInfoError(new ApiError(404, 'not_found', '분석 건을 찾을 수 없습니다.'))).toMatchObject({ status: 404, code: 'not_found', message: MSG_NOT_FOUND });
-    expect(fileInfoError(new ApiError(401, 'unauthorized', `코드 오류 ${SIGNED}`))).toMatchObject({ status: 401, code: 'unauthorized', message: MSG_UNAUTHORIZED });
     expect(fileInfoError(new ApiError(404, 'not_found', `없음 ${JWT_LIKE}`))).toMatchObject({ status: 404, code: 'not_found', message: MSG_FILE_NOT_FOUND });
   });
 

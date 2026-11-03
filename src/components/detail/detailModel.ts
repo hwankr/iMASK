@@ -7,11 +7,14 @@
    - 화면 색은 되도록 상태 표시(flag)로 넘기고 CSS 모듈이 토큰으로 칠한다. 원문 하이라이트처럼
      항목마다 색이 바뀌는 곳만 ② 의 CSS 변수 값(var(--hi-soft) 등)을 넘긴다.
    - 행동(누름)은 담지 않는다. 화면 조각이 useDetailUi(선택·이동)와 DetailActions(T7 검토 동작)를 부른다.
+   - 실제 분석(Analysis.raw 가 있음 — API 서비스만 채운다)은 읽기 전용(readOnly)이다: 검토 동작 버튼을 막고 안내를 보이며,
+     원문은 블록 대신 원본 파일 쪽(live — 파일 기준 쪽 · 위치 상자)을 그린다. 데모 분석에는 raw 가 없어 값이 전과 같다.
    ========================================================================== */
 
 import {
   analysisStatusView,
   byRisk,
+  findingNotes,
   FSTATUS,
   LSTATUS,
   riskView,
@@ -25,7 +28,11 @@ import {
 import type { IconName } from '@/display/icon-names';
 import { clamp, fmtDT, fmtSize } from '@/lib/format';
 import type { Analysis, AnalysisDoc, DocLink, Finding, PageBlock, ReviewItem, Segment, TextValue } from '@/services/types';
-import { DETAIL_TABS, focusAnchors, focusKey, passesFilter, type DetailFocus, type DetailTab, type DetailUiState, type FindingFilter, type MobileTab } from './detailState';
+import { DETAIL_TABS, LIVE_DETAIL_TABS, focusAnchors, focusKey, passesFilter, type DetailFocus, type DetailTab, type DetailUiState, type FindingFilter, type MobileTab } from './detailState';
+import { FILE_FAILED, filePageOf, guideText, liveDocMeta, pageMissingText } from './liveViewerModel';
+
+/** 실제 분석에서 막아 둔 검토 동작의 안내(서비스가 거절하는 문구와 같다) */
+export const READ_ONLY_TEXT = '실제 분석에서는 아직 지원하지 않는 기능입니다.';
 
 /* ---------- 원문 위치 모으기 ---------- */
 
@@ -90,6 +97,8 @@ export interface DetailFacts {
   pageTotal: number;
   nFailDocs: number;
   nDoneDocs: number;
+  /** 실제 분석 — 읽기 전용(검토 동작을 막는다) */
+  readOnly: boolean;
 }
 
 export function detailFacts(a: Analysis, s: Pick<DetailUiState, 'docId'>): DetailFacts {
@@ -107,6 +116,7 @@ export function detailFacts(a: Analysis, s: Pick<DetailUiState, 'docId'>): Detai
     pageTotal: docs.reduce((n, d) => n + docPageCount(d), 0),
     nFailDocs: docs.filter((d) => d.status === 'failed').length,
     nDoneDocs: docs.filter((d) => d.status === 'done').length,
+    readOnly: !!a.raw,
   };
 }
 
@@ -133,6 +143,8 @@ export interface HeaderModel {
   /** '결과 보고서' 를 열 수 없음(결과를 기다리는 중) */
   noReport: boolean;
   reportTitle: string;
+  /** 실제 분석 — 읽기 전용(검토 완료 · 다시 열기를 막고 안내를 보인다) */
+  readOnly: boolean;
 }
 
 export function headerModel(a: Analysis, x: DetailFacts): HeaderModel {
@@ -150,10 +162,11 @@ export function headerModel(a: Analysis, x: DetailFacts): HeaderModel {
     progress: { reviewed: x.reviewed, total, fp: x.fpN, open: x.openItems, pct: total ? Math.round((x.reviewed / total) * 1000) / 10 : 0 },
     showComplete: !x.locked,
     showReopen: x.locked,
-    noComplete: x.notReady && !a.retrying,
-    completeTitle: x.notReady ? '분석이 끝난 뒤 검토를 완료할 수 있습니다' : '검토를 마치고 결과를 기록합니다',
+    noComplete: (x.notReady && !a.retrying) || x.readOnly,
+    completeTitle: x.readOnly ? READ_ONLY_TEXT : x.notReady ? '분석이 끝난 뒤 검토를 완료할 수 있습니다' : '검토를 마치고 결과를 기록합니다',
     noReport: x.waiting,
     reportTitle: x.waiting ? '분석이 끝나면 보고서를 볼 수 있습니다' : '검토 결과 보고서를 엽니다',
+    readOnly: x.readOnly,
   };
 }
 
@@ -209,6 +222,14 @@ export function bannerModel(a: Analysis, x: DetailFacts): BannerModel | null {
       text: '위험등급과 최초 탐지 결과는 검토 완료 후에도 그대로 유지됩니다.',
       actions: [{ key: 'openReport', label: '보고서 보기', disabled: false }],
     };
+  if (x.readOnly)
+    return {
+      variant: 'info',
+      icon: 'dg-i-info',
+      title: '읽기 전용 화면입니다.',
+      text: '탐지 내용 확인 · 오탐 표시 · 분류 수정 · 메모 · 검토 완료는 ' + READ_ONLY_TEXT,
+      actions: [],
+    };
   return null;
 }
 
@@ -248,7 +269,8 @@ export function docModels(a: Analysis, x: DetailFacts): DocModel[] {
       title: docName(d),
       file: d.name,
       ext: d.ext,
-      meta: (pc ? pc + '페이지 · ' : '') + fmtSize(d.size),
+      // 실제 분석 서류는 묶음 파일 안 쪽 범위(파일 크기는 서류마다 보이지 않는다)
+      meta: d.source ? liveDocMeta(d.source) : (pc ? pc + '페이지 · ' : '') + fmtSize(d.size),
       status: st,
       hasCount: done,
       nFind,
@@ -318,9 +340,11 @@ export interface NoticeModel {
   icon: IconName;
   title: string;
   text: string;
+  /** 여러 줄 글(줄바꿈을 지킨다 — 기타 서류 안내) */
+  pre?: boolean;
 }
 
-export type PlaceholderActionKey = 'trySample' | 'retryDoc';
+export type PlaceholderActionKey = 'trySample' | 'retryDoc' | 'retryFile';
 
 /** 미리보기 대신 보이는 화면(원본 placeholderVM) */
 export interface PlaceholderModel {
@@ -364,6 +388,53 @@ export function placeholderModel(a: Analysis, doc: AnalysisDoc | null, hasPage: 
       skeleton: true,
     };
   return { ...base, icon: 'dg-i-clock', title: '분석 대기 중인 문서입니다', text: '앞 문서의 분석이 끝나면 이어서 분석합니다.', skeleton: true };
+}
+
+/**
+ * 실제 분석 원문 자리 — 원본 파일 상태(받는 중 · 실패 · 준비됨)와 지금 서류의 파일 기준 쪽으로 정한다.
+ * 받는 중 · 실패면 그 화면, 준비됐지만 그 쪽이 파일에 없으면 안내, 그 밖(그릴 수 있음)은 null.
+ */
+export function liveFilePlaceholder(
+  file: { status: 'loading' } | { status: 'error'; message: string } | { status: 'ready'; pageCount: number },
+  filePage: number,
+): PlaceholderModel | null {
+  if (file.status !== 'ready') return filePlaceholder(file);
+  if (filePage >= 1 && filePage <= file.pageCount) return null;
+  return {
+    tone: 'err',
+    spin: false,
+    icon: 'dg-i-x-circle',
+    title: '원문을 표시하지 못했습니다',
+    text: pageMissingText(filePage, file.pageCount),
+    skeleton: false,
+    action: null,
+    note: '탐지 항목 · 분석 요약은 결과 패널에서 그대로 볼 수 있습니다.',
+  };
+}
+
+/** 실제 분석 원본 파일을 받는 중 · 실패했을 때 원문 자리 화면 */
+export function filePlaceholder(file: { status: 'loading' } | { status: 'error'; message: string }): PlaceholderModel {
+  if (file.status === 'loading')
+    return {
+      tone: 'run',
+      spin: true,
+      icon: 'dg-i-file',
+      title: '원본 파일을 받고 있습니다',
+      text: '올린 파일을 받아 이 서류의 쪽을 그립니다. 그동안 결과 패널은 그대로 쓸 수 있습니다.',
+      skeleton: true,
+      action: null,
+      note: '',
+    };
+  return {
+    tone: 'err',
+    spin: false,
+    icon: 'dg-i-x-circle',
+    title: '원문을 표시하지 못했습니다',
+    text: file.message || FILE_FAILED,
+    skeleton: false,
+    action: { key: 'retryFile', label: '다시 시도', icon: 'dg-i-refresh', disabled: false },
+    note: '탐지 항목 · 분석 요약은 결과 패널에서 그대로 볼 수 있습니다.',
+  };
 }
 
 /** 원문 뷰어 크기 — 실행 중에 잰 값 */
@@ -418,6 +489,35 @@ export interface ViewerModel {
   pageKey: string;
   /** 선택 신호 서명(dg-ring-a/b) */
   ringKey: string;
+  /** 실제 분석 서류 — 원본 파일 쪽과 위치 상자(데모 문서는 null) */
+  live: LiveViewerModel | null;
+}
+
+/** 실제 분석 원문 쪽 */
+export interface LiveViewerModel {
+  /** 파일 기준 쪽(1부터) = source.pageStart + (뷰어 쪽 − 1) */
+  filePage: number;
+  /** 기타 서류 */
+  other: boolean;
+  /** 지금 쪽에 있는 이 서류의 위치 상자(탐지 항목 순서 · 항목 안 상자 순서) */
+  boxes: LiveBoxModel[];
+}
+
+/** 위치 상자 하나 — 누르면 그 탐지 항목을 고른다(진짜 버튼) */
+export interface LiveBoxModel {
+  /** 위치 ID(data-anchor) */
+  anchor: string;
+  findingId: string;
+  /** 쪽 크기에 대한 0~1 비율 꼭짓점 — 화면이 px 사각형으로 바꾼다(src/lib/pageBox.ts) */
+  points: { x: number; y: number }[];
+  aria: string;
+  /** 고른 항목의 상자 */
+  on: boolean;
+  /** 고른 위치 이름표를 이 상자 위에 */
+  tag: boolean;
+  /** 마스킹 미리보기 — 검은 상자로 가린다 */
+  masked: boolean;
+  vars: HighlightVars;
 }
 
 const align = (x: string | undefined): CellAlignName => (x === 'r' ? 'right' : x === 'c' ? 'center' : 'left');
@@ -430,7 +530,9 @@ export function viewerModel(a: Analysis, s: DetailUiState, x: DetailFacts, metri
   const pages = doc ? doc.pages : null;
   const pc = docPageCount(doc);
   const page = clamp(s.page || 1, 1, Math.max(1, pc));
-  const hasPage = !!(doc && pages && pages[page - 1]) && !a.demoQueued;
+  const source = doc ? doc.source : undefined;
+  // 실제 분석 서류는 블록 대신 원본 파일 쪽을 그린다 — 완료된 서류면 쪽이 있다
+  const hasPage = source ? !!doc && doc.status === 'done' && pc > 0 : !!(doc && pages && pages[page - 1]) && !a.demoQueued;
   const showFind = x.hasResults && !!doc && doc.status === 'done';
   const z = Math.round((s.zoom == null ? fitZoom(metrics) : s.zoom) * 100) / 100;
 
@@ -438,7 +540,12 @@ export function viewerModel(a: Analysis, s: DetailUiState, x: DetailFacts, metri
   if (showFind) fAll.forEach((f) => f.anchors.forEach((an) => (anchorF[an] = f)));
   const fset = new Set(focusAnchors(a, focus));
   const pageBlocks = hasPage && pages ? pages[page - 1] : [];
-  const first = collectAnchors(pageBlocks).find((an) => fset.has(an)) || null;
+  // 지금 쪽에 있는 이 서류의 위치 상자(실제 분석) — 위치 없는 항목(boxes [])은 빠진다
+  const liveBoxSrc =
+    source && hasPage && showFind && doc
+      ? fAll.filter((f) => f.docId === doc.id && f.page === page).flatMap((f) => (f.boxes ?? []).map((b) => ({ f, b })))
+      : [];
+  const first = (source ? liveBoxSrc.map((x) => x.b.a) : collectAnchors(pageBlocks)).find((an) => fset.has(an)) || null;
 
   let tone: FocusTone = ACCENT_TONE;
   let tagText = '';
@@ -547,6 +654,14 @@ export function viewerModel(a: Analysis, s: DetailUiState, x: DetailFacts, metri
     const it = a.items.find((i) => i.id === focus.id);
     if (it && it.docId === doc.id && hasPage) notices.push({ tone: 'warn', icon: RTYPE[it.type].icon, title: it.id + ' · ' + RTYPE[it.type].label, text: it.next });
   }
+  if (source && source.kind === 'other' && hasPage)
+    notices.push({
+      tone: 'run',
+      icon: 'dg-i-info',
+      title: '기타 서류 안내',
+      text: guideText(source.otherGuide) || '워크플로우가 대출 서류 5종에 해당하지 않는 기타 서류로 분류했습니다.',
+      pre: true,
+    });
   if (mask && hasPage)
     notices.push({
       tone: 'accent',
@@ -583,6 +698,34 @@ export function viewerModel(a: Analysis, s: DetailUiState, x: DetailFacts, metri
     placeholder: placeholderModel(a, doc, hasPage),
     pageKey: (doc ? doc.id : '') + ':' + page,
     ringKey: focusKey(focus) + '#' + s.pulse,
+    live:
+      source && hasPage
+        ? {
+            filePage: filePageOf(source, page),
+            other: source.kind === 'other',
+            boxes: liveBoxSrc.map(({ f, b }): LiveBoxModel => {
+              const R = riskView(f.risk);
+              const on = fset.has(b.a);
+              const fp = f.status === 'false_positive';
+              return {
+                anchor: b.a,
+                findingId: f.id,
+                points: b.points.map((pt) => ({ x: pt.x, y: pt.y })),
+                aria: f.id + ' ' + f.cat + ' ' + R.label + ' — 탐지 항목 보기',
+                on,
+                tag: on && b.a === first,
+                masked: mask && !fp,
+                vars: {
+                  soft: R.soft,
+                  solid: R.solid,
+                  onBg: selfFocus ? R.focus : tone.bg,
+                  pc: selfFocus ? R.solid : tone.line,
+                  ph: selfFocus ? R.halo : tone.halo,
+                },
+              };
+            }),
+          }
+        : null,
   };
 }
 
@@ -607,6 +750,10 @@ export interface FindingModel {
   reason: string;
   rule: string;
   ruleName: string;
+  /** 적용 규칙이 있다(실제 분석은 없음 — 줄을 뺀다) */
+  hasRule: boolean;
+  /** 실제 분석 항목 안내(분류 확인 필요 · 인식 신뢰도 낮음) */
+  notes: string[];
   locText: string;
   hasEvidence: boolean;
   evidence: string;
@@ -659,6 +806,8 @@ export function findingModel(a: Analysis, f: Finding, focus: DetailFocus | null)
     reason: f.reason,
     rule: f.rule,
     ruleName: ruleName(f.rule),
+    hasRule: !!f.rule,
+    notes: findingNotes(f.live),
     locText: f.anchors.length ? dName + ' ' + f.page + '쪽 · 원문 위치 확인됨' : dName + ' ' + f.page + '쪽 · 좌표 없음 (위치 확인 필요)',
     hasEvidence: !!f.evidence,
     evidence: f.evidence || '',
@@ -807,7 +956,8 @@ export function waitingModel(a: Analysis, x: DetailFacts): WaitingModel | null {
 export interface ResultTabModel {
   value: DetailTab;
   label: string;
-  count: number;
+  /** 건수(분석 요약 탭은 없음) */
+  count?: number;
   tone: 'default' | 'warn';
 }
 
@@ -834,6 +984,8 @@ export interface ResultsModel {
   memo: string;
   memoPreview: string;
   memoBtn: string;
+  /** 실제 분석 — 읽기 전용(검토 동작 · 메모를 막고 안내를 보인다) */
+  readOnly: boolean;
 }
 
 /** 결과 패널(원본 detailVM 의 '탐지 결과 패널' 부분) */
@@ -854,14 +1006,16 @@ export function resultsModel(a: Analysis, s: DetailUiState, x: DetailFacts): Res
   const hi = fAll.filter((f) => f.risk === 'high' && f.status !== 'false_positive').length;
   const issues = a.items.some((i) => !i.resolved && (i.type === 'unreadable' || i.type === 'cutoff' || i.type === 'failed'));
 
-  const tabLabel: Record<DetailTab, string> = { findings: '탐지 항목', review: '검토 필요', links: '문서 간 연결' };
-  const tabCount: Record<DetailTab, number> = { findings: fAll.length, review: x.openItems, links: a.links.length };
+  const tabLabel: Record<DetailTab, string> = { findings: '탐지 항목', review: '검토 필요', links: '문서 간 연결', summary: '분석 요약' };
+  const tabCount: Record<DetailTab, number | undefined> = { findings: fAll.length, review: x.openItems, links: a.links.length, summary: undefined };
+  // 실제 분석은 검토사항 · 연결이 아직 없어 그 탭을 빼고 '분석 요약'(위험도 판정 · 다음 단계 · 결과 요약 · 단계별 JSON)을 둔다
+  const tabList = x.readOnly ? LIVE_DETAIL_TABS : DETAIL_TABS;
 
   return {
     hasTabs: x.hasResults,
     locked: x.locked,
     tab: s.tab,
-    tabs: DETAIL_TABS.map((t) => ({ value: t, label: tabLabel[t], count: tabCount[t], tone: t === 'review' ? 'warn' : 'default' })),
+    tabs: tabList.map((t) => ({ value: t, label: tabLabel[t], count: tabCount[t], tone: t === 'review' ? 'warn' : 'default' })),
     chips: [
       { value: 'all', label: '전체', count: fAll.length },
       // 상태 · 위험등급 라벨은 ② 표시 규칙에서 — 키와 순서는 원본 그대로
@@ -882,8 +1036,9 @@ export function resultsModel(a: Analysis, s: DetailUiState, x: DetailFacts): Res
     links: a.links.map((l) => linkModel(a, l, focus)),
     waiting: waitingModel(a, x),
     memo: a.memo,
-    memoPreview: a.memo ? a.memo.replace(/\n/g, ' ') : '아직 작성한 메모가 없습니다.',
+    memoPreview: x.readOnly ? READ_ONLY_TEXT : a.memo ? a.memo.replace(/\n/g, ' ') : '아직 작성한 메모가 없습니다.',
     memoBtn: a.memo ? '수정' : '작성',
+    readOnly: x.readOnly,
   };
 }
 

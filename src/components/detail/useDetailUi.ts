@@ -9,6 +9,8 @@
      해당 영역이 화면에 있으면 처리한다(휴대폰에서 다른 탭에 있으면 그 탭이 열릴 때 처리).
    - 부드러운 스크롤은 동작 줄이기면 즉시(scrollBehavior → 'auto').
    - 원문 뷰어 폭은 ResizeObserver 로 재고, 종이 폭은 실행 중에 --paper-w 토큰에서 읽는다(화면 맞춤 배율).
+   - 실제 분석 원문은 원본 파일을 받은 뒤에야 쪽 크기 · 위치 상자가 생긴다 — 쪽이 준비되면 recenter() 로
+     고른 항목의 첫 위치로 다시 스크롤한다(데모는 부르지 않는다).
    ========================================================================== */
 
 import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState, type Dispatch } from 'react';
@@ -108,6 +110,11 @@ export interface DetailUi {
   openLink: (lid: string) => void;
   /** 남은 항목으로 가기(검토 완료 모달에서 — T7) */
   goPending: () => void;
+  /**
+   * 실제 분석 원문 쪽이 준비됐을 때(파일 · 쪽 크기를 늦게 앎) — 고른 탐지 항목이 지금 문서 · 쪽에 있으면
+   * 그 첫 위치로 다시 스크롤한다. 없으면 아무것도 하지 않는다.
+   */
+  recenter: () => void;
   /* 모달 자리(T7) */
   openModal: (modal: DetailModal) => void;
   patchModal: (patch: DetailModalPatch) => void;
@@ -265,6 +272,15 @@ export function useDetailUi(analysis: Analysis, initial?: Partial<DetailUiState>
         const cur = latest.current;
         run(planGoPending(cur.state, cur.analysis, p, cur.mobile));
       });
+    },
+    recenter: () => {
+      const focus = state.focus;
+      if (!focus || focus.kind !== 'finding') return;
+      const f = analysis.findings.find((x) => x.id === focus.id);
+      const docId = state.docId ?? analysis.docs[0]?.id ?? null;
+      if (!f || !f.anchors.length || f.docId !== docId || f.page !== state.page) return;
+      pending.current.viewer = f.anchors[0];
+      flush();
     },
     openModal: (modal) => dispatch({ type: 'openModal', modal }),
     patchModal: (patch) => dispatch({ type: 'patchModal', patch }),

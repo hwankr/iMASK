@@ -169,6 +169,17 @@ export const DOC_TYPE_NAMES: Record<string, string> = {
   other: '기타',
 };
 
+/* ---------- 실제 분석 탐지 항목 안내 ---------- */
+
+/** 계약 mapping_status 가 ok 가 아닐 때 펼친 행에 보이는 안내 */
+export const MAPPING_NOTES = {
+  needs_review: '분류 확인 필요',
+  unknown: '분류 확인 필요 · 대응표에 없는 항목',
+} as const;
+
+/** 추출 신뢰도가 낮을 때(confidence 'low') 펼친 행에 보이는 안내 */
+export const LOW_CONFIDENCE_NOTE = '인식 신뢰도 낮음';
+
 /* ---------- 검토 이력 구분 ---------- */
 
 export const HKIND = {
@@ -245,6 +256,18 @@ export function ruleName(rule: string | null | undefined): string {
 /** 서류 종류 코드 → 한국어 이름(실제 분석). 모르는 코드는 그대로 */
 export function docTypeName(code: string): string {
   return hasKey(DOC_TYPE_NAMES, code) ? DOC_TYPE_NAMES[code] : code;
+}
+
+/**
+ * 실제 분석 탐지 항목 안내 — 분류 확인 필요(mapping_status needs_review · unknown) · 인식 신뢰도 낮음(confidence low).
+ * 데모 항목(live 없음)은 [].
+ */
+export function findingNotes(live: { readonly mappingStatus: string; readonly confidence: string | null } | null | undefined): string[] {
+  if (!live) return [];
+  const out: string[] = [];
+  if (hasKey(MAPPING_NOTES, live.mappingStatus)) out.push(MAPPING_NOTES[live.mappingStatus]);
+  if (live.confidence === 'low') out.push(LOW_CONFIDENCE_NOTE);
+  return out;
 }
 
 /** 위험 높은 순 정렬 비교 함수. (원본 byRisk) */

@@ -5,8 +5,10 @@ import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { Icon, IconButton, SkeletonCard, Spinner, cx } from '@/components/ui';
 import { useReplayToggle } from '@/lib/hooks';
-import type { PlaceholderModel, ViewerModel } from './detailModel';
+import { liveFilePlaceholder, type PlaceholderModel, type ViewerModel } from './detailModel';
 import type { PanelProps } from './DocList';
+import { LivePaper } from './LivePaper';
+import type { LiveFileState } from './liveFile';
 import { PaperPage } from './PaperPage';
 import { Tip } from './Tip';
 import styles from './DocViewer.module.css';
@@ -30,12 +32,41 @@ export interface DocViewerProps {
   /** 미리보기 대신 화면의 '이 문서 다시 분석'(T7) */
   onRetryDoc: (docId: string) => void;
   panel?: PanelProps;
+  /** 실제 분석 — 원본 파일 상태와 처리기(데모는 없음) */
+  live?: DocViewerLive;
 }
 
-function Placeholder({ ph, docId, onRetryDoc }: { ph: PlaceholderModel; docId: string; onRetryDoc: (docId: string) => void }) {
+/** 실제 분석 원문 — 원본 파일(상세 화면에서 한 번 받음) */
+export interface DocViewerLive {
+  file: LiveFileState;
+  /** 종이 폭(px) — 잰 --paper-w. 재기 전이면 0 */
+  paperW: number;
+  /** '다시 시도' — 원본 파일을 다시 받는다 */
+  onRetryFile: () => void;
+  /** 쪽 크기를 알게 됐다 — 고른 위치로 다시 스크롤 */
+  onPageReady: () => void;
+}
+
+/**
+ * 미리보기 대신 화면. role 은 실제 분석 원본 파일 상태에만 준다(받는 중 · 여는 중 = status, 실패 = alert —
+ * 낭독기가 바뀐 상태를 읽는다). 데모 화면은 role 없이 전과 같다.
+ */
+function Placeholder({
+  ph,
+  docId,
+  onRetryDoc,
+  onRetryFile,
+  role,
+}: {
+  ph: PlaceholderModel;
+  docId: string;
+  onRetryDoc: (docId: string) => void;
+  onRetryFile?: () => void;
+  role?: 'status' | 'alert';
+}) {
   const action = ph.action;
   return (
-    <div className={styles.ph}>
+    <div className={styles.ph} role={role}>
       <span className={cx(styles.phIcon, ph.tone === 'err' && styles.phErr, ph.tone === 'run' && styles.phRun)}>
         {ph.spin ? <Spinner size={24} /> : <Icon name={ph.icon} size={28} strokeWidth={1.9} />}
       </span>
@@ -50,6 +81,12 @@ function Placeholder({ ph, docId, onRetryDoc }: { ph: PlaceholderModel; docId: s
       ) : null}
       {action && action.key === 'retryDoc' ? (
         <button type="button" className={cx(styles.bigBtn, styles.phBtn)} disabled={action.disabled} onClick={() => onRetryDoc(docId)} data-slot="retry-doc">
+          <Icon name={action.icon} size={17} strokeWidth={2.2} />
+          {action.label}
+        </button>
+      ) : null}
+      {action && action.key === 'retryFile' && onRetryFile ? (
+        <button type="button" className={cx(styles.bigBtn, styles.phBtn)} disabled={action.disabled} onClick={onRetryFile} data-slot="retry-file">
           <Icon name={action.icon} size={17} strokeWidth={2.2} />
           {action.label}
         </button>
@@ -78,6 +115,7 @@ export function DocViewer({
   onPickFinding,
   onRetryDoc,
   panel,
+  live,
 }: DocViewerProps) {
   const pageFlip = !useReplayToggle(v.pageKey);
   const ringFlip = !useReplayToggle(v.ringKey);
@@ -98,6 +136,9 @@ export function DocViewer({
   const zoomStyle = { '--paper-zoom': v.zoom, ...barVar } as CSSProperties;
   const wide = !compact;
   const mid = compact && !mobile;
+  // 실제 분석 서류 — 원본 파일을 받는 중 · 실패 · 쪽 없음이면 그 화면, 아니면 원본 쪽
+  const liveFile = v.live && live ? live.file : null;
+  const livePh = v.live && liveFile ? liveFilePlaceholder(liveFile, v.live.filePage) : null;
 
   return (
     <section aria-label="원문 뷰어" className={styles.viewer} style={zoomStyle} {...panel}>
@@ -117,13 +158,33 @@ export function DocViewer({
                   <Icon name={nt.icon} size={17} strokeWidth={2.1} />
                 </span>
                 <div>
-                  <strong className={styles.noticeTitle}>{nt.title}</strong> <span className={styles.noticeText}>{nt.text}</span>
+                  <strong className={styles.noticeTitle}>{nt.title}</strong> <span className={cx(styles.noticeText, nt.pre && styles.noticePre)}>{nt.text}</span>
                 </div>
               </div>
             ))}
           </div>
         ) : null}
-        {v.hasPage ? (
+        {v.live && live ? (
+          livePh && v.doc ? (
+            <Placeholder ph={livePh} docId={v.doc.id} onRetryDoc={onRetryDoc} onRetryFile={live.onRetryFile} role={livePh.tone === 'err' ? 'alert' : 'status'} />
+          ) : liveFile && liveFile.status === 'ready' ? (
+            <LivePaper
+              live={v.live}
+              file={liveFile}
+              ariaLabel={v.pageAria}
+              zoom={v.zoom}
+              paperW={live.paperW}
+              pageKey={v.pageKey}
+              pageFlip={pageFlip}
+              ringFlip={ringFlip}
+              tag={v.tag}
+              onPickFinding={onPickFinding}
+              onRetryFile={live.onRetryFile}
+              onPageReady={live.onPageReady}
+              mobile={mobile}
+            />
+          ) : null
+        ) : v.hasPage ? (
           <PaperPage blocks={v.blocks} ariaLabel={v.pageAria} scan={v.scan} pageFlip={pageFlip} ringFlip={ringFlip} tag={v.tag} onPickFinding={onPickFinding} />
         ) : null}
         {v.placeholder && v.doc ? <Placeholder ph={v.placeholder} docId={v.doc.id} onRetryDoc={onRetryDoc} /> : null}

@@ -99,3 +99,25 @@ export function useDetailActions(a: Analysis, ui: DetailUi): DetailActions {
     },
   };
 }
+
+const noop = () => {};
+
+/**
+ * 실제 분석(읽기 전용) 상세의 동작 — 모두 아무것도 하지 않는다(서비스 호출 · 모달 · 토스트 없음).
+ * 화면은 그 버튼을 막고 '실제 분석에서는 아직 지원하지 않는 기능입니다' 안내를 보인다.
+ */
+export const READ_ONLY_ACTIONS: DetailActions = {
+  confirmFinding: noop,
+  unconfirmFinding: noop,
+  markFalsePositive: noop,
+  restoreFinding: noop,
+  reclassify: noop,
+  editFindingMemo: noop,
+  resolveItem: noop,
+  reopenItem: noop,
+  decideLink: noop,
+  editMemo: noop,
+  completeReview: noop,
+  reopenReview: noop,
+  retry: noop,
+};

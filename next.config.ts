@@ -10,6 +10,13 @@ const nextConfig: NextConfig = {
   agentRules: false,
   // 개발 화면 왼쪽 아래의 경로 표시(N)를 숨긴다 — 디자인 비교 스크린샷을 가리지 않게. 컴파일·실행 오류는 그대로 보인다.
   devIndicators: false,
+  // 서비스 모드(NEXT_PUBLIC_IMASK_SERVICE)를 값이 없을 때도 빈 글자로 빌드에 넣는다. Next 는 정해진 NEXT_PUBLIC_ 값만
+  // 코드에 글자로 넣으므로, 데모 빌드(값 없음)에서는 `process.env.NEXT_PUBLIC_IMASK_SERVICE === 'api'` 가 실행 중 조회로 남아
+  // 실제 분석 전용 pdf.js 동적 import(src/components/detail/liveFile.ts)를 번들러가 지우지 못한다 → 데모 묶음에 pdf.js 가 생긴다.
+  // 빈 글자로 정해 두면 그 분기가 빌드 때 거짓이 되어 빠진다. 값이 'api' 면 그대로 'api'(모드 판단은 src/services/mode.ts 와 같다).
+  env: {
+    NEXT_PUBLIC_IMASK_SERVICE: process.env.NEXT_PUBLIC_IMASK_SERVICE ?? "",
+  },
   // FastAPI 백엔드(api/index.py)로 가는 길. Vercel 공식 nextjs-fastapi 템플릿과 같은 방식이다.
   // - 개발(next dev): 로컬 uvicorn(기본 127.0.0.1:8000, IMASK_API_DEV_URL 로 바꿈)으로 그대로 넘긴다.
   // - 배포: 같은 Vercel 프로젝트의 Python 함수 /api/ (= api/index.py)로 보낸다. 함수는 원래 경로(/api/py/...)를 받는다.

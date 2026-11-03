@@ -512,6 +512,29 @@ describe('공통 계약 — 탐지 항목', () => {
     expect(d.anchors).toEqual([]);
   });
 
+  it('상자 검사 — 쪽(0~1)과 전혀 겹치지 않는 상자는 버리고, 위치 ID 는 남은 상자만 차례로(그린 상자와 같다)', () => {
+    const a = withFindings([
+      {
+        id: '0:e',
+        document_index: 0,
+        field: 'e',
+        page: 3,
+        boxes: [
+          [{ x: 2, y: 2 }, { x: 3, y: 3 }], // 쪽 밖(오른쪽 아래)
+          box(0.1, 0.1),
+          [{ x: -0.5, y: 0.2 }, { x: -0.1, y: 0.3 }], // 쪽 밖(왼쪽)
+          [{ x: 0.9, y: 0.95 }, { x: 1.4, y: 1.2 }], // 일부만 걸침 — 남긴다
+        ],
+      },
+      { id: '0:f', document_index: 0, field: 'f', page: 3, boxes: [[{ x: 1.1, y: 0.1 }, { x: 1.3, y: 0.2 }]] },
+    ]);
+    const [e, f] = a.findings;
+    expect(e.anchors).toEqual(['D1-01#1', 'D1-01#2']);
+    expect(e.boxes!.map((b) => b.points)).toEqual([box(0.1, 0.1), [{ x: 0.9, y: 0.95 }, { x: 1.4, y: 1.2 }]]);
+    expect(f.anchors).toEqual([]);
+    expect(f.boxes).toEqual([]);
+  });
+
   it('분류 대체값 — 목록 밖 정보 종류 → 기타 개인정보, 주체 → 기타, 노출 → 전체 노출(ai 도 같은 값)', () => {
     const a = withFindings([
       { id: '0:x', document_index: 0, field: 'x', category: '건강정보', subject: '배우자', exposure: '일부 노출', page: 3 },

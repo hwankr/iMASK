@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { Button, FilterChips, Icon, SegmentedTabs, Spinner, Switch, IndeterminateBar, cx, tabPanelProps } from '@/components/ui';
 import type { DetailActions } from './detailActions';
 import type { ResultsModel, WaitingModel } from './detailModel';
@@ -34,6 +34,8 @@ export interface ResultsPanelProps {
   onLinkDoc: (lid: string, idx: number) => void;
   actions: DetailActions;
   panel?: PanelProps;
+  /** 실제 분석 '분석 요약' 탭 내용(데모는 없음) */
+  summary?: ReactNode;
 }
 
 function Waiting({ w }: { w: WaitingModel }) {
@@ -71,6 +73,7 @@ function Waiting({ w }: { w: WaitingModel }) {
 /**
  * 결과 패널(Main 457–600) — 탭 3개(탐지 항목 · 검토 필요 · 문서 간 연결 + 건수), 탐지 항목(필터 칩 · 현재 문서만 보기 ·
  * 펼치는 행), 검토 필요, 문서 간 연결, 결과를 기다리는 동안의 안내, 검토 메모(편집은 T7).
+ * 실제 분석(rs.readOnly)은 탭이 탐지 항목 · 분석 요약(summary 를 그린다)이고, 검토 동작 · 메모는 막고 안내를 보인다.
  */
 export function ResultsPanel({
   rs,
@@ -89,6 +92,7 @@ export function ResultsPanel({
   onLinkDoc,
   actions,
   panel,
+  summary,
 }: ResultsPanelProps) {
   const tabPanel = rs.hasTabs ? tabPanelProps(RESULT_TABS_ID, rs.tab) : null;
   return (
@@ -110,7 +114,7 @@ export function ResultsPanel({
               </div>
             </div>
             {rs.findings.map((f) => (
-              <FindingRow key={f.id} f={f} locked={rs.locked} onToggle={onToggleFinding} onReveal={onRevealFinding} actions={actions} />
+              <FindingRow key={f.id} f={f} locked={rs.locked} readOnly={rs.readOnly} onToggle={onToggleFinding} onReveal={onRevealFinding} actions={actions} />
             ))}
             {rs.findings.length === 0 ? (
               <div className={styles.noItems}>
@@ -132,6 +136,11 @@ export function ResultsPanel({
             <LinkCards links={rs.links} locked={rs.locked} onPickDoc={onLinkDoc} actions={actions} />
           </div>
         ) : null}
+        {rs.hasTabs && rs.tab === 'summary' ? (
+          <div key="summary" className={styles.fade}>
+            {summary}
+          </div>
+        ) : null}
         {rs.waiting ? <Waiting w={rs.waiting} /> : null}
       </div>
       {rs.hasTabs ? (
@@ -143,7 +152,7 @@ export function ResultsPanel({
             <div className={styles.memoTitle}>검토 메모</div>
             <div className={cx(styles.memoPreview, rs.memo && styles.memoHas)}>{rs.memoPreview}</div>
           </div>
-          <Button size="item" variant="secondary" disabled={rs.locked} onClick={actions.editMemo} className={styles.memoBtn}>
+          <Button size="item" variant="secondary" disabled={rs.locked || rs.readOnly} onClick={actions.editMemo} className={styles.memoBtn}>
             {rs.memoBtn}
           </Button>
         </div>

@@ -9,11 +9,14 @@
    - 항목 위험등급은 risk_source 가 'workflow' 일 때만 받은 값, 그 밖(null·없음)은 '미평가'다(워크플로우 판정 전).
    - 쪽은 파일 전체 기준 → 서류 안 쪽(1부터)으로 바꾼다. 쪽을 모르거나 서류 범위 밖이면 1쪽 · 위치 없음(anchors []).
    - 상자는 꼭짓점 2개 이상이고 모든 x·y 가 유한한 수인 것만, 값은 0~1 로 자르지 않는다(화면 변환이 자른다).
+     쪽(0~1)과 전혀 겹치지 않는 상자는 그릴 수 없으므로 버린다 — 화면 변환과 같은 기준(unitBoxOnPage)이라
+     위치 ID(anchors)가 그린 상자와 같아 이름표 · 스크롤 · '위치 확인 필요'가 어긋나지 않는다.
    - 원문 값(value)은 대회용 합성 자료라 화면에 보여도 된다(사용자 결정) — evidence · live.value 에 둔다.
    ========================================================================== */
 
 import { CATS, EXPOSURES, RISK, SUBJECTS, docTypeName, type Exposure, type InfoCategory, type InfoSubject, type RiskLevel } from '@/display/rules';
 import { pad2 } from '@/lib/format';
+import { unitBoxOnPage } from '@/lib/pageBox';
 import type { AnalysisDoc, DocSource, Finding, FindingBox, FindingLive, RawFileInfo, RawOverall } from '../types';
 
 /** 항목 위험등급이 없고(risk_source null) 사유도 없을 때 보이는 판단 근거 */
@@ -213,7 +216,8 @@ export function toLiveFindings(findings: unknown, sources: readonly DocSource[],
     if (located && Array.isArray(f.boxes)) {
       for (const box of f.boxes) {
         const points = readPoints(box);
-        if (points) boxes.push({ a: `${id}#${boxes.length + 1}`, points });
+        // 쪽과 전혀 겹치지 않는 상자는 그릴 수 없다 — 위치 ID 에서도 뺀다(번호는 남은 상자만 차례로)
+        if (points && unitBoxOnPage(points)) boxes.push({ a: `${id}#${boxes.length + 1}`, points });
       }
     }
 

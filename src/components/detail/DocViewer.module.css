@@ -109,6 +109,13 @@
 .noticeText {
   color: var(--ink-2);
 }
+/* 여러 줄 안내(실제 분석 기타 서류 안내) — 제목 아래 줄을 바꿔 글자 그대로 */
+.noticePre {
+  display: block;
+  margin-top: var(--space-2);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
 
 /* ---------- 미리보기 대신 화면 (Main 425–433) ---------- */
 .ph {

@@ -143,6 +143,14 @@ export function riskText(level: unknown): string {
   return s || '판정 없음';
 }
 
+/** 다음 단계 제목 — 권장_조치 → '권장 조치', 검토_안내 → '검토 안내', 그 밖 → '다음 단계' */
+export function nextStageTitle(stage: unknown): string {
+  const s = typeof stage === 'string' ? stage.trim() : '';
+  if (s === '권장_조치') return '권장 조치';
+  if (s === '검토_안내') return '검토 안내';
+  return '다음 단계';
+}
+
 /** Upstage 상태 문구 */
 export function upstageStatusText(status: string): string {
   if (status === 'queued') return '대기(queued)';

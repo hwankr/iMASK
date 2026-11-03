@@ -5,7 +5,9 @@
    - useAnalysis(id) 로만 데이터를 받는다. 대기·분석 중인 동안 3초마다 refresh()(앞 요청이 끝난 뒤 다음,
      탭이 숨겨지면 쉬고 다시 보이면 바로 한 번). 조회할 때마다 백엔드가 Upstage 상태를 한 번 확인한다.
    - 대기·분석 중: 흐르는 막대 + 안내 + Upstage 상태(+ 확인 실패 문구). 실패: 오류 문구 그대로 + '새 분석'.
-     완료: 요약 + 단계별 결과(JSON 나무).
+     완료 + 공통 계약 결과(raw.detailReady): 데모와 같은 상세 검토 화면(DetailView — 문서 목록 · 원본 파일 원문과 위치 상자 ·
+     결과 패널 · 분석 요약, 읽기 전용). 진행 중에서 완료로 바뀌면 새로 고침 없이 바로 바뀐다.
+     완료지만 옛 형식(서류 0개 등): 요약 + 단계별 결과(JSON 나무).
    - 401 → 접근 코드 입력 + '다시 불러오기'. 404 → 안내 + '새 분석'(데모처럼 목록으로 보내지 않는다).
    - 상태가 바뀌면 화면 낭독기에 알린다.
    ========================================================================== */
@@ -16,8 +18,9 @@ import type { FormEvent } from 'react';
 import { AnalysisStatusLabel, Banner, Button, Icon, IndeterminateBar, Skeleton, VisuallyHidden, cx } from '@/components/ui';
 import { fmtDT, fmtSize } from '@/lib/format';
 import { apiErrorCode } from '@/services';
-import { useAnalysis } from '@/services/react';
+import { useAnalysis, useLiveExtras } from '@/services/react';
 import type { Analysis } from '@/services/types';
+import { DetailView } from '@/components/detail/DetailScreen';
 import { AccessCodeField } from './AccessCodeField';
 import { LiveResult } from './LiveResult';
 import { useClock, usePolling, useStatusAnnounce } from './liveHooks';
@@ -28,6 +31,7 @@ const NEW_HREF = '/analyses/new';
 
 export function LiveDetailScreen({ id }: { id: string }) {
   const { data, error, refresh } = useAnalysis(id);
+  const extras = useLiveExtras();
   const code = apiErrorCode(error);
   const unauthorized = code === 'unauthorized';
   usePolling(!!data && isPolling(data.status) && !unauthorized, refresh);
@@ -39,6 +43,10 @@ export function LiveDetailScreen({ id }: { id: string }) {
     return <LiveSkeleton />;
   }
   if (data === null) return <NotFound />;
+  if (data.status === 'done' && data.raw?.detailReady) {
+    const notice = unauthorized ? '접근 코드가 맞지 않아 최신 상태를 확인하지 못했습니다. 지금 보이는 결과는 마지막으로 받은 값입니다.' : error ? messageOf(error) : '';
+    return <DetailView analysis={data} live={{ extras, notice }} />;
+  }
   return <LiveView a={data} unauthorized={unauthorized} refreshError={error && !unauthorized ? messageOf(error) : ''} onRetry={refresh} />;
 }
 

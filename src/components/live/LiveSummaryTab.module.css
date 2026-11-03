@@ -1,0 +1,144 @@
+/* ==========================================================================
+   실제 분석 상세 — 결과 패널 '분석 요약' 탭
+   위험도 판정 · 다음 단계(글자 그대로, 줄바꿈 유지) · 결과 요약 줄 · 접은 원본 단계별 JSON
+   ========================================================================== */
+
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-14);
+  padding: var(--space-16);
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding-bottom: var(--space-14);
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+  font-size: var(--fs-15);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--ls-tight-1);
+  color: var(--ink);
+}
+.level {
+  font-size: var(--fs-13);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-3);
+}
+
+/* 워크플로우 문구 — Markdown 을 HTML 로 바꾸지 않고 글자 그대로(줄바꿈 유지) */
+.text {
+  margin: 0;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  font-size: var(--fs-13-5);
+  line-height: var(--lh-160);
+  color: var(--ink-2);
+}
+.none {
+  margin: 0;
+  font-size: var(--fs-13-5);
+  color: var(--ink-3);
+}
+
+/* 결과 요약 줄 */
+.rows {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-8);
+}
+.row {
+  display: grid;
+  grid-template-columns: var(--live-summary-label-w) minmax(0, 1fr);
+  gap: var(--space-12);
+  font-size: var(--fs-13-5);
+  line-height: var(--lh-155);
+}
+.label {
+  color: var(--ink-3);
+  font-weight: var(--fw-semibold);
+}
+.value {
+  margin: 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+/* 원본 단계별 JSON — 접은 칸 */
+.raw {
+  border-radius: var(--radius-14);
+  background: var(--band);
+  min-width: 0;
+}
+.rawSummary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: var(--size-44);
+  padding: var(--space-8) var(--space-14);
+  border-radius: var(--radius-14);
+  cursor: pointer;
+  list-style: none;
+  font-size: var(--fs-14-5);
+  font-weight: var(--fw-bold);
+  color: var(--ink);
+}
+@media (hover: hover) {
+  .rawSummary:hover {
+    background: var(--fill);
+  }
+}
+.rawChev {
+  flex: none;
+  color: var(--ink-3);
+  transform: rotate(-90deg);
+  transition: transform var(--dur-300) var(--ease);
+}
+.raw[open] .rawChev {
+  transform: none;
+}
+.rawCount {
+  font-weight: var(--fw-semibold);
+  color: var(--ink-3);
+}
+.rawBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+  padding: var(--space-4) var(--space-12) var(--space-12);
+  min-width: 0;
+}
+.lead {
+  margin: 0;
+  font-size: var(--fs-13);
+  line-height: var(--lh-155);
+  color: var(--ink-3);
+}
+.state {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  font-size: var(--fs-13-5);
+  color: var(--ink-2);
+}
+.error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-10);
+  font-size: var(--fs-13-5);
+  font-weight: var(--fw-semibold);
+  color: var(--err);
+}

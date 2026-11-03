@@ -5,15 +5,20 @@
    - 데이터는 useAnalysis(id) 로만 받는다. 불러오는 중에는 뼈대, 없는 ID 면 목록(/)으로 돌려보낸다(replace).
    - 서비스 변경 알림이 오면 훅이 다시 불러와 진행(대기 → 분석 중 → 문서별 완료 → 완료)이 그대로 반영된다.
    - 화면 상태는 useDetailUi(리듀서 하나), 검토 동작은 useDetailActions, 모달은 ReviewModal.
+   - DetailView 는 실제 분석 상세(LiveDetailScreen — 완료된 공통 계약 결과)도 그린다(live 옵션):
+     원문 자리에 원본 파일(useLiveFile — 한 번 받음), 결과 패널에 '분석 요약' 탭(useLiveStages), 검토 동작은 읽기 전용.
    ========================================================================== */
 
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { Banner, Button, SegmentedTabs, cx, type BannerAction } from '@/components/ui';
+import { LiveSummaryTab } from '@/components/live/LiveSummaryTab';
+import { useLiveStages } from '@/components/live/liveHooks';
+import type { LiveExtras } from '@/services';
 import { useAnalysis } from '@/services/react';
 import type { Analysis } from '@/services/types';
 import { ReviewModal } from '@/components/modals/ReviewModal';
-import { useDetailActions } from './detailActions';
+import { READ_ONLY_ACTIONS, useDetailActions } from './detailActions';
 import {
   bannerModel,
   detailFacts,
@@ -33,6 +38,7 @@ import { DetailSkeleton } from './DetailSkeleton';
 import { DocList, DocRail, type PanelProps } from './DocList';
 import { DocViewer, TRY_SAMPLE_HREF } from './DocViewer';
 import { FailedBody } from './FailedBody';
+import { useLiveFile } from './liveFile';
 import { ResultsPanel } from './ResultsPanel';
 import { useDetailUi } from './useDetailUi';
 import styles from './DetailScreen.module.css';
@@ -81,10 +87,32 @@ export function DetailScreen({ id, initial }: DetailScreenProps) {
   return <DetailView analysis={data} initial={initial} />;
 }
 
-function DetailView({ analysis: a, initial }: { analysis: Analysis; initial?: Partial<DetailUiState> }) {
+/** 실제 분석 상세로 그릴 때(LiveDetailScreen) */
+export interface DetailLiveOptions {
+  /** 실제 분석 전용 통로(원본 파일 · 단계별 JSON) — useLiveExtras() */
+  extras: LiveExtras | null;
+  /** 최신 상태를 다시 받지 못했을 때의 문구(있으면 띠로 보인다) */
+  notice?: string;
+}
+
+export interface DetailViewProps {
+  analysis: Analysis;
+  initial?: Partial<DetailUiState>;
+  /** 실제 분석(읽기 전용) — 없으면 데모 */
+  live?: DetailLiveOptions;
+}
+
+/** 상세 검토 화면 본체 — 데모 분석, 또는 실제 분석(live) */
+export function DetailView({ analysis: a, initial, live }: DetailViewProps) {
   const router = useRouter();
   const ui = useDetailUi(a, initial);
-  const actions = useDetailActions(a, ui);
+  const demoActions = useDetailActions(a, ui);
+  // 실제 분석은 읽기 전용 — 검토 동작은 아무것도 하지 않는다(버튼도 막혀 있다)
+  const actions = live ? READ_ONLY_ACTIONS : demoActions;
+  const liveId = live ? a.id : null;
+  const liveExtras = live ? live.extras : null;
+  const liveFile = useLiveFile(liveId, liveExtras);
+  const liveStages = useLiveStages(liveId, liveExtras, a.raw?.result ?? null);
   const s = ui.state;
   const mobile = ui.mobile;
 
@@ -124,6 +152,7 @@ function DetailView({ analysis: a, initial }: { analysis: Analysis; initial?: Pa
     <div className={styles.screen}>
       <DetailHeader model={head} analysisId={a.id} mobile={mobile} actions={actions} />
       {banner ? <Banner variant={banner.variant} icon={banner.icon} title={banner.title} description={banner.text} actions={bannerActions} /> : null}
+      {live && live.notice ? <Banner variant="partial" icon="dg-i-info" title="최신 상태를 확인하지 못했습니다." description={live.notice} /> : null}
       {showTabs ? (
         <div className={styles.mTabs}>
           <SegmentedTabs tabs={mobileTabs(a, x)} value={s.mTab} onChange={ui.setMobileTab} ariaLabel="상세 화면 전환" size="lg" idPrefix={MOBILE_TABS_ID} />
@@ -150,6 +179,7 @@ function DetailView({ analysis: a, initial }: { analysis: Analysis; initial?: Pa
               onPickFinding={(fid) => ui.pickFinding(fid, { fromDoc: true })}
               onRetryDoc={(docId) => actions.retry(docId)}
               panel={panel('doc')}
+              live={live ? { file: liveFile.state, paperW: ui.metrics?.paperW ?? 0, onRetryFile: liveFile.retry, onPageReady: ui.recenter } : undefined}
             />
           ) : null}
           {showResults ? (
@@ -170,6 +200,7 @@ function DetailView({ analysis: a, initial }: { analysis: Analysis; initial?: Pa
               onLinkDoc={ui.pickLinkDoc}
               actions={actions}
               panel={panel('results')}
+              summary={live ? <LiveSummaryTab analysis={a} stages={liveStages.state} onLoadStages={liveStages.load} /> : undefined}
             />
           ) : null}
         </div>

@@ -15,6 +15,7 @@ import {
   elapsedText,
   fileLine,
   isPolling,
+  nextStageTitle,
   progressSteps,
   riskText,
   stageLabel,
@@ -170,5 +171,14 @@ describe('결과', () => {
     expect(rows[0].additionalValues).toBeNull();
     expect(stageRows(null)).toEqual([]);
     expect(stageRows({ stages: 'x' })).toEqual([]);
+  });
+});
+
+describe('nextStageTitle — 실제 분석 상세 분석 요약의 다음 단계 제목', () => {
+  it('권장_조치 · 검토_안내 · 그 밖', () => {
+    expect(nextStageTitle('권장_조치')).toBe('권장 조치');
+    expect(nextStageTitle(' 검토_안내 ')).toBe('검토 안내');
+    expect(nextStageTitle('')).toBe('다음 단계');
+    expect(nextStageTitle(null)).toBe('다음 단계');
   });
 });

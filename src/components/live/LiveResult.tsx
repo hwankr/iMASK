@@ -3,6 +3,7 @@
 /* ==========================================================================
    실제 분석 결과 — 요약 줄(result.summary) + 단계별 결과(result.stages, output 순서)
    - 단계마다 <details>(단계 이름 · 같은 이름이 여러 개면 (2/5) · 상태). 펼칠 때만 JsonTree 를 그린다.
+   - 단계 목록(StageList)은 상세 검토 화면의 '분석 요약' 탭(LiveSummaryTab)도 같이 쓴다.
    ========================================================================== */
 
 import { useState } from 'react';
@@ -42,17 +43,21 @@ export function LiveResult({ result, createdAt, updatedAt, jobId }: LiveResultPr
           단계별 결과 <span className={styles.cardCount}>{stages.length}개</span>
         </h2>
         <p className={styles.cardLead}>워크플로우가 돌려준 순서대로입니다. 단계를 펼치면 결과 JSON(data · additional_values)을 볼 수 있습니다.</p>
-        {stages.length ? (
-          <ol className={styles.stages}>
-            {stages.map((s) => (
-              <StageItem key={s.index} stage={s} />
-            ))}
-          </ol>
-        ) : (
-          <p className={styles.empty}>단계 결과가 없습니다.</p>
-        )}
+        <StageList stages={stages} />
       </section>
     </>
+  );
+}
+
+/** 단계별 결과 목록 — 없으면 '단계 결과가 없습니다.' */
+export function StageList({ stages }: { stages: StageRow[] }) {
+  if (!stages.length) return <p className={styles.empty}>단계 결과가 없습니다.</p>;
+  return (
+    <ol className={styles.stages}>
+      {stages.map((s) => (
+        <StageItem key={s.index} stage={s} />
+      ))}
+    </ol>
   );
 }
 

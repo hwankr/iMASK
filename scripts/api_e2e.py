@@ -7,18 +7,35 @@
 #    .venv\Scripts\python.exe scripts\api_e2e.py [--base-url http://127.0.0.1:8000]
 #        [--file testdocs/iMASK_smoke_bundle.pdf] [--name 분석명] [--interval 3] [--timeout 600]
 #        [--skip-upload] [--content-file <올릴 실제 내용>] [--no-start] [--expect done|failed]
-#        [--analysis-id <이미 있는 분석 id>]
+#        [--analysis-id <이미 있는 분석 id>] [--no-review]
 #    --skip-upload   : 올리지 않고 시작 → '업로드된 파일을 찾을 수 없습니다' 실패 경로(Upstage 호출 없음)
 #    --content-file  : 이름·형식은 --file 로 알리고 내용은 이 파일로 올린다 → 형식 불일치 실패 경로
 #    --no-start      : 만들기·올리기까지만(한글 파일 이름이 Storage 에 올라가는지 확인할 때)
 #    --analysis-id   : 만들기·올리기·시작 없이(**Upstage 작업을 만들지 않음**) 그 분석을 조회해 아래 done 확인과
-#                      원본 파일 확인만 한다. 비교할 원본은 --file(기본 합성 묶음). 코드를 고친 뒤 재확인용.
+#                      원본 파일 확인, 검토 기록 모양 확인만 한다(**읽기만 — 검토 동작을 보내지 않음**).
+#                      비교할 원본은 --file(기본 합성 묶음). 코드를 고친 뒤 재확인용.
+#    --no-review     : 검토 동작 확인(아래)을 끈다(--analysis-id 에서는 검토 기록 모양 확인을 끈다).
 #  done 확인(T1 findings-api): 요약(서류 6·추출 5·상) + 화면용 결과 — findings 29·boxes 있는 항목 28·
 #    documents 6(kind extracted 5·other 1, other 에 other_guide·extracted 에 validation)·overall 상/권장_조치·
 #    risk 분포(허용 값·risk_source 와 맞는지만 — unrated 를 강제하지 않음)·계약 키·id 중복·document_index·
 #    boxes 0~1, 기본 응답에 stages·response 없음, 응답 크기(기본 GET vs ?include=stages GET 바이트 — 기본이 작아야 함).
 #    원본 파일: GET /analyses/{id}/file 200·키 {url, mime_type, filename} → url 로(사용자 지정 헤더 없이) 받아 올린 내용과
 #    sha256 비교. 원문 값(value·masked)·서명 URL 은 출력하지 않는다(개수·분포·바이트 수만).
+#  검토 동작 확인(review-actions, 기본 켬): **이번 실행이 만든 분석이 done 이 된 뒤에만** POST /analyses/{id}/review-actions 를
+#    차례로 보낸다(actor api_e2e, 글은 이 스크립트가 만든 합성 문구). 처음 조회(needed·version 0·findings {}·이력 S1·S2)
+#    → 확인 → 확인 취소 → 2건 한꺼번에 확인 → 같은 항목 다시 확인 409(상태 불일치) → 오탐 표시 → 오탐 취소(→ 미확인)
+#    → 분류 수정(정보 종류) → 같은 값 분류 수정(changed false·이력 없음) → 오탐 표시 → 오탐 취소(→ 분류 수정)
+#    → 항목 메모 저장·삭제 → 검토 메모 → 검토 완료(남은 미확인 수가 문구에) → 잠김 409·이미 완료 409 → 다시 열기
+#    (reviewer·completion_note 남음, reviewed_at null) → 400 두 가지(모르는 type, 501자 글).
+#    단계마다 응답 상태·changed·review 값·새 이력 줄(id H{version}·actor·kind·target·change·reason)을 보고 GET 으로 다시
+#    읽어 같은지 확인한다(오류 단계는 다시 읽은 review 가 그대로인지 = 쓰기 없음). 마지막에 이력 id H1…Hn 연속,
+#    at 이 줄어들지 않음, 저장 줄 수 = 쓴 동작 수 = version, 분석 created_at·updated_at 이 처음 조회와 같음(분석 시각·
+#    걸린 시간 불변). 출력은 단계 이름·통과/실패·개수만. 기대 문구는 계약(데모 코어와 같은 전이·문구)을 그대로 적은 것이다.
+#    기대값도 계약대로 따로 만든다(백엔드 함수를 쓰지 않음): 표시 이름·위험등급은 JavaScript trim() 공백 집합(_js_trim —
+#    U+FEFF 는 지우고 U+0085·U+001C~001F 는 두는 화면 기준), 이력 target 은 저장 안전화(_stored_target — 짝 없는
+#    서로게이트·NUL → U+FFFD, 200 코드 포인트 넘으면 앞 199자 + '…'). 검토 동작 본문(_json_body)은 httpx json= 과 같은
+#    UTF-8 JSON(같은 크기 — 서버 본문 한도 65,536 바이트 기준)이되 짝 없는 서로게이트만 \udXXX 로 escape 한다
+#    (브라우저 JSON.stringify 처럼 — 그런 글자가 든 계약 id 도 보낼 수 있게).
 #
 #  비밀값(BRIEF §2): 접근 코드는 없다(2026-11-03 없앰). Upstage 키 등은 출력하지 않는다.
 #    서명 URL·토큰·키는 출력하지 않는다(모든 출력은 _say() 를 지나며 알려진 값을 가린다).
@@ -32,19 +49,22 @@
 #    file id 를 모르면(시작 응답을 받았어도) 분석을 한 번 다시 읽어 얻는다. 그래도 확인할 수 없거나 정리를 못 하면
 #    값 없는 문구로 알리고 종료 코드 1.
 #  출력의 오류 문구는 원문 전체를 가린 뒤에 자른다(_short).
-#  종료 코드: 기대(--expect, 기본 done)대로면 0 — done 이면 위 done 확인과 원본 파일 확인도 모두 맞아야 한다. 아니면 1.
+#  종료 코드: 기대(--expect, 기본 done)대로면 0 — done 이면 위 done 확인·원본 파일 확인·검토 동작 확인(또는 검토 기록
+#    모양 확인)도 모두 맞아야 한다. 하나라도 실패하면 1.
 # ==========================================================================
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import mimetypes
 import os
 import sys
 import time
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -95,6 +115,32 @@ FINDING_KEYS = {
 OVERALL_KEYS = {"level", "text", "next_stage", "next_text"}
 FILE_KEYS = {"url", "mime_type", "filename"}
 RISKS = ("high", "medium", "low", "unrated")
+
+# 검토 동작 계약(review-actions — 조회 응답의 review 블록·POST /analyses/{id}/review-actions)
+REVIEW_KEYS = {"status", "memo", "memo_at", "reviewer", "reviewed_at", "completion_note", "findings", "history", "version"}
+REVIEW_FINDING_KEYS = {"status", "category", "subject", "exposure", "fp_type", "fp_note", "reclass_note", "memo", "updated_at"}
+HISTORY_KEYS = {"id", "at", "actor", "kind", "target", "change", "reason"}
+REVIEW_ACTOR = "api_e2e"  # 이 스크립트가 보내는 처리자 이름
+SYSTEM_ACTOR = "시스템"
+ANALYSIS_TARGET = "분석 건"
+UNNAMED_FINDING = "이름 없는 항목"
+RISK_LABELS = {"상": "높음", "중": "보통", "하": "낮음"}
+FP_REASON = "개인정보가 아닌 번호·문구"  # 오탐 사유 목록(FP_REASONS)의 첫 값
+MSG_REVIEW_BAD_REQUEST = "요청 형식이 올바르지 않습니다."
+MSG_REVIEW_TEXT_TOO_LONG = "메모·사유는 500자 이하로 적어 주세요."
+MSG_REVIEW_LOCKED = "검토를 완료한 분석은 바꿀 수 없습니다."
+MSG_REVIEW_STATE_CHANGED = "탐지 항목 상태가 바뀌었습니다. 새로 고친 뒤 다시 시도해 주세요."
+MSG_REVIEW_ALREADY_DONE = "이미 검토를 완료했습니다."
+# 이 스크립트가 만든 합성 문구(메모·사유)
+TEXT_CONFIRM = "api_e2e 확인"
+TEXT_UNCONFIRM = "api_e2e 확인 취소"
+TEXT_FP = "api_e2e 오탐 표시"
+TEXT_RESTORE = "api_e2e 오탐 취소"
+TEXT_RECLASS = "api_e2e 분류 수정"
+TEXT_FINDING_MEMO = "api_e2e 항목 메모"
+TEXT_MEMO = "api_e2e 검토 메모"
+TEXT_COMPLETE = "api_e2e 검토 완료"
+TEXT_REOPEN = "api_e2e 다시 열기"
 
 EXIT_OK = 0
 EXIT_FAIL = 1
@@ -466,6 +512,540 @@ def _check_file(run: Run, analysis_id: str, content: bytes) -> bool:
     return same and no_store
 
 
+# --- 검토 동작 확인(review-actions) ---------------------------------------------------------
+# 기대 문구는 백엔드 코드를 가져다 쓰지 않고 계약(데모 코어 src/services/demo/core.ts 와 같은 전이·문구)을 그대로 적는다.
+
+
+# JavaScript String.prototype.trim() 이 지우는 글자 = ECMAScript WhiteSpace + LineTerminator(계약 BRIEF §5.1 — 화면 기준).
+# Python str.strip() 과 다르다: U+FEFF 는 지우고, U+0085·U+001C~001F 는 지우지 않는다. 백엔드 함수를 쓰지 않고 따로 적는다.
+_JS_WHITESPACE = (0x0009, 0x000B, 0x000C, 0x0020, 0x00A0, 0xFEFF)  # TAB VT FF SP NBSP ZWNBSP
+_JS_ZS = (0x0020, 0x00A0, 0x1680, *range(0x2000, 0x200B), 0x202F, 0x205F, 0x3000)  # 유니코드 Zs 전체
+_JS_LINE_TERMINATORS = (0x000A, 0x000D, 0x2028, 0x2029)  # LF CR LS PS
+JS_TRIM_CHARS = "".join(chr(c) for c in sorted({*_JS_WHITESPACE, *_JS_ZS, *_JS_LINE_TERMINATORS}))
+TARGET_MAX = 200  # 이력 target 저장 한도(코드 포인트, BRIEF §5.5)
+REPLACEMENT_CHAR = chr(0xFFFD)  # 저장할 수 없는 글자(짝 없는 서로게이트·NUL)를 바꿀 글자
+
+
+_JSON_U_ESCAPE = chr(92) + "u"  # JSON 문자열의 \uXXXX escape 머리
+
+
+def _json_body(value: Any) -> bytes:
+    """검토 동작 본문 JSON 바이트 — httpx `json=` 과 같은 모양(ensure_ascii=False · 구분자 , : · NaN 금지 · UTF-8)이되,
+    UTF-8 로 인코딩할 수 없는 **짝 없는 서로게이트만** `\\udXXX` 로 escape 한다(브라우저 JSON.stringify 와 같은 값).
+    정상 유니코드(한글 등)는 UTF-8 그대로라 본문 크기가 httpx `json=` 과 같다(서버 본문 한도 65,536 바이트 기준).
+    서로게이트는 JSON 문자열 안에만 나오므로 그 자리의 escape 는 늘 올바른 JSON 이고, 결과는 늘 유효한 UTF-8 이다.
+    (json.loads 로 만든 문자열에는 상위·하위 서로게이트가 따로 붙어 있는 경우가 없다 — 있다면 서버가 한 글자로 합쳐 읽는다.)"""
+    text = json.dumps(value, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    escaped = "".join(f"{_JSON_U_ESCAPE}{ord(char):04x}" if 0xD800 <= ord(char) <= 0xDFFF else char for char in text)
+    return escaped.encode("utf-8")
+
+
+def _js_trim(text: str) -> str:
+    """JavaScript `text.trim()` 과 같은 결과(앞뒤의 JS_TRIM_CHARS 만 지운다)."""
+    return text.strip(JS_TRIM_CHARS)
+
+
+def _stored_target(text: str) -> str:
+    """이력 target 이 저장되는 모양(BRIEF §5.5): 짝 없는 서로게이트·NUL → U+FFFD, 200 코드 포인트를 넘으면 앞 199자 + '…'."""
+    cleaned = "".join(REPLACEMENT_CHAR if char == "\x00" or 0xD800 <= ord(char) <= 0xDFFF else char for char in text)
+    return cleaned if len(cleaned) <= TARGET_MAX else cleaned[: TARGET_MAX - 1] + "…"
+
+
+def _when(value: Any) -> datetime | None:
+    """ISO 8601(시간대 포함) → datetime. 못 읽으면 None. DB 시각(timestamptz)과 이력 문자열을 같은 기준으로 비교한다."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        moment = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return moment if moment.tzinfo is not None else None
+
+
+def _review_targets(result: Any) -> list[dict[str, str]]:
+    """검토할 수 있는 탐지 항목(화면에 보이는 항목) — 표시 번호·표시 이름·AI 값. 화면 toLiveFindings 와 같은 순서."""
+    if not isinstance(result, Mapping):
+        return []
+    documents = result.get("documents") if isinstance(result.get("documents"), list) else []
+    findings = result.get("findings") if isinstance(result.get("findings"), list) else []
+    seen: list[int] = []
+    for doc in documents:
+        if not isinstance(doc, Mapping):
+            continue
+        index, start, end = doc.get("index"), doc.get("page_start"), doc.get("page_end")
+        if _is_int(index) and index >= 0 and _is_int(start) and start >= 1 and _is_int(end) and end >= 1 and index not in seen:
+            seen.append(index)
+    numbers = {index: number for number, index in enumerate(sorted(seen), 1)}
+    seq: dict[int, int] = {}
+    targets: list[dict[str, str]] = []
+    for finding in findings:
+        if not isinstance(finding, Mapping):
+            continue
+        index = finding.get("document_index")
+        if not _is_int(index) or index not in numbers:
+            continue
+        number = numbers[index]
+        seq[number] = seq.get(number, 0) + 1
+        label, field = finding.get("label"), finding.get("field")
+        # 표시 이름: label → field → '이름 없는 항목'(화면 toLiveFindings 처럼 JavaScript trim 기준)
+        name = (_js_trim(label) if isinstance(label, str) else "") or (_js_trim(field) if isinstance(field, str) else "")
+        category, subject, exposure = finding.get("category"), finding.get("subject"), finding.get("exposure")
+        targets.append(
+            {
+                "id": str(finding.get("id")),
+                "num": f"D{number}-{seq[number]:02d}",
+                "label": name or UNNAMED_FINDING,
+                "category": category if category in CATS else "기타 개인정보",
+                "subject": subject if subject in SUBJECTS else "기타",
+                "exposure": exposure if exposure in EXPOSURES else "전체 노출",
+            }
+        )
+    return targets
+
+
+def _risk_label(result: Mapping[str, Any]) -> str:
+    """S2 의 위험등급 — overall.level(비면 summary.risk_level) 상·중·하 → 높음·보통·낮음, 그 밖 미평가."""
+    overall = result.get("overall") if isinstance(result.get("overall"), Mapping) else {}
+    level = overall.get("level")
+    if not (isinstance(level, str) and _js_trim(level)):
+        summary = result.get("summary") if isinstance(result.get("summary"), Mapping) else {}
+        level = summary.get("risk_level")
+    return RISK_LABELS.get(_js_trim(level) if isinstance(level, str) else "", "미평가")
+
+
+def _system_lines(row: Mapping[str, Any], targets: list[dict[str, str]]) -> list[dict[str, str]]:
+    """조회할 때 만드는 이력 두 줄(S1 분석 요청 · S2 최초 AI 결과)의 기대값."""
+    result = row.get("result") if isinstance(row.get("result"), Mapping) else {}
+    files = len([d for d in row.get("documents") or [] if isinstance(d, Mapping)])
+    base = {"actor": SYSTEM_ACTOR, "target": ANALYSIS_TARGET, "reason": ""}
+    return [
+        {"id": "S1", "at": row.get("created_at"), "kind": "request", "change": f"문서 {files}개 분석 요청", **base},
+        {
+            "id": "S2",
+            "at": row.get("updated_at"),
+            "kind": "ai",
+            "change": f"분석 완료 · 탐지 {len(targets)}건 · 위험등급 {_risk_label(result)} · 검토사항 0건",
+            **base,
+        },
+    ]
+
+
+def _line_problems(line: Any, want: Mapping[str, Any], where: str) -> list[str]:
+    if not isinstance(line, Mapping) or set(line) != HISTORY_KEYS:
+        return [f"{where}: 이력 줄 모양이 다름"]
+    return [f"{where} {key}: {line.get(key)!r} (기대 {value!r})" for key, value in want.items() if line.get(key) != value]
+
+
+def _review_shape_problems(row: Mapping[str, Any], targets: list[dict[str, str]]) -> list[str]:
+    """review 블록의 모양(값은 보지 않음): 키·status·findings·history S1·S2·version."""
+    review = row.get("review")
+    if not isinstance(review, Mapping):
+        return ["review 가 객체가 아님(검토 기록을 읽지 못함)"]
+    if set(review) != REVIEW_KEYS:
+        return [f"review 키가 계약과 다름 {sorted(set(review) ^ REVIEW_KEYS)}"]
+    problems: list[str] = []
+    if review["status"] not in ("needed", "done"):
+        problems.append(f"status {review['status']!r}")
+    version = review["version"]
+    if not (_is_int(version) and version >= 0):
+        problems.append("version 이 0 이상 정수가 아님")
+    findings = review["findings"]
+    ids = {t["id"] for t in targets}
+    if not isinstance(findings, Mapping):
+        problems.append("findings 가 객체가 아님")
+    else:
+        problems += [f"findings: 검토 가능 항목이 아닌 id {str(k)[:40]}" for k in findings if k not in ids][:3]
+        problems += [
+            f"findings {str(k)[:40]}: 키가 계약과 다름" for k, v in findings.items() if not (isinstance(v, Mapping) and set(v) == REVIEW_FINDING_KEYS)
+        ][:3]
+    history = review["history"]
+    if not isinstance(history, list) or len(history) < 2:
+        problems.append("history 에 S1·S2 두 줄이 없음")
+        return problems
+    for line, want in zip(history[:2], _system_lines(row, targets), strict=True):
+        problems += _line_problems(line, want, str(want["id"]))
+    stored = history[2:]
+    if any(not isinstance(line, Mapping) or set(line) != HISTORY_KEYS or not str(line.get("id")).startswith("H") for line in stored):
+        problems.append("저장된 이력 줄 모양이 다름")
+    if _is_int(version) and len(stored) > version:
+        problems.append(f"저장된 이력 {len(stored)}줄이 version {version} 보다 많음")
+    return problems
+
+
+def _first_review_problems(row: Mapping[str, Any], targets: list[dict[str, str]]) -> list[str]:
+    """새 분석의 처음 review: needed·빈 값·findings {}·S1·S2 만·version 0."""
+    problems = _review_shape_problems(row, targets)
+    review = row.get("review")
+    if problems or not isinstance(review, Mapping):
+        return problems
+    want = {"status": "needed", "memo": "", "memo_at": None, "reviewer": "", "reviewed_at": None, "completion_note": "", "findings": {}, "version": 0}
+    problems += [f"{key}: {review.get(key)!r} (기대 {value!r})" for key, value in want.items() if review.get(key) != value]
+    if len(review["history"]) != 2:
+        problems.append(f"history {len(review['history'])}줄(기대 S1·S2 2줄)")
+    return problems
+
+
+class _ReviewFlow:
+    """검토 동작을 차례로 보내고, 응답과 다시 읽은 값을 확인한다. 이번 실행이 만든 분석에만 쓴다."""
+
+    def __init__(self, run: Run, analysis_id: str, first: Mapping[str, Any]) -> None:
+        self.run = run
+        self.analysis_id = analysis_id
+        self.first = first
+        review = first.get("review")
+        self.review: Mapping[str, Any] = review if isinstance(review, Mapping) else {}
+        self.steps = 0
+        self.failed = 0
+        self.expected_writes = 0  # 이력 한 줄을 남겨야 하는 동작 수
+        self.writes = 0  # 실제로 changed true 였던 동작 수
+
+    def report(self, name: str, problems: list[str], note: str = "") -> bool:
+        self.steps += 1
+        ok = not problems
+        if not ok:
+            self.failed += 1
+        _say(f"  [{'통과' if ok else '실패'}] {self.steps:02d}. {name}" + (f" — {note}" if note else ""))
+        for problem in problems[:6]:
+            _say(f"      - {_short(problem)}")
+        return ok
+
+    def finding(self, target: Mapping[str, str]) -> Mapping[str, Any]:
+        found = self.review.get("findings", {}).get(target["id"]) if isinstance(self.review.get("findings"), Mapping) else None
+        return found if isinstance(found, Mapping) else {}
+
+    def _post(self, body: Mapping[str, Any]) -> tuple[httpx.Response, Any]:
+        # 본문은 _json_body 로 직접 만든다 — httpx json= 와 같은 UTF-8 바이트(같은 크기)이되, 짝 없는 서로게이트가 든
+        # 계약 id 도 보낼 수 있게 그 글자만 escape(httpx json= 는 UTF-8 로 인코딩하다 실패한다). 서버가 읽는 값은 같다.
+        content = _json_body({"actor": REVIEW_ACTOR, **body})
+        response = self.run.call(
+            "POST",
+            f"/api/py/analyses/{self.analysis_id}/review-actions",
+            content=content,
+            headers={"content-type": "application/json"},
+        )
+        try:
+            data = response.json()
+        except ValueError:
+            data = None
+        return response, data
+
+    def _reread(self, expected: Mapping[str, Any] | None) -> tuple[Mapping[str, Any] | None, list[str]]:
+        """GET 으로 다시 읽는다. expected 가 있으면 분석 전체가 같아야 하고, 없으면 review 가 지금 값과 같아야 한다."""
+        response, row = _get(self.run, self.analysis_id)
+        if response.status_code != 200 or not isinstance(row, Mapping):
+            return None, [f"다시 읽기: HTTP {response.status_code}"]
+        if expected is not None and row != expected:
+            keys = sorted(k for k in set(row) | set(expected) if row.get(k) != expected.get(k))
+            return row, [f"다시 읽은 값이 응답과 다름 {keys}"]
+        if expected is None and row.get("review") != self.review:
+            return row, ["다시 읽은 review 가 바뀜(쓰기가 있었음)"]
+        return row, []
+
+    def write(
+        self,
+        name: str,
+        body: Mapping[str, Any],
+        line: tuple[str, str, str, str] | None,
+        check: Callable[[Mapping[str, Any], Mapping[str, Any]], list[str]] | None = None,
+    ) -> bool:
+        """200 을 기대하는 동작. line = 새 이력 줄(kind, target, change, reason), None 이면 changed false(쓰기 없음)."""
+        before = self.review
+        if line is not None:
+            self.expected_writes += 1
+        response, data = self._post(body)
+        if response.status_code != 200 or not isinstance(data, Mapping) or set(data) != {"analysis", "changed"}:
+            return self.report(name, [f"HTTP {response.status_code} {_detail(response)}(기대 200 · analysis·changed)"])
+        analysis = data["analysis"]
+        review = analysis.get("review") if isinstance(analysis, Mapping) else None
+        if not isinstance(review, Mapping) or not isinstance(review.get("history"), list):
+            return self.report(name, ["응답의 review 가 객체가 아님"])
+        problems: list[str] = []
+        if analysis.get("upstage_status") is not None or analysis.get("poll_error") is not None:
+            problems.append("응답의 upstage_status·poll_error 가 null 이 아님")
+        if isinstance(analysis.get("result"), Mapping) and "stages" in analysis["result"]:
+            problems.append("응답 result 에 stages 가 있음")
+        for key in ("created_at", "updated_at"):
+            if analysis.get(key) != self.first.get(key):
+                problems.append(f"분석 {key} 가 바뀜")
+        changed = data["changed"]
+        history, old = review["history"], before["history"]
+        if changed is True:
+            self.writes += 1
+        if line is None:
+            if changed is not False:
+                problems.append(f"changed {changed!r}(기대 false)")
+            if review != before:
+                problems.append("바뀐 것이 없는데 review 가 바뀜")
+        else:
+            version = before["version"] + 1
+            if changed is not True:
+                problems.append(f"changed {changed!r}(기대 true)")
+            if review.get("version") != version:
+                problems.append(f"version {review.get('version')!r}(기대 {version})")
+            if len(history) != len(old) + 1 or history[:-1] != old:
+                problems.append(f"이력 {len(history)}줄(기대 앞 {len(old)}줄 그대로 + 1줄)")
+            else:
+                kind, target, change, reason = line
+                # target 은 저장 안전화를 거친 모양이어야 한다(안전화하지 않은 응답은 여기서 불일치로 잡힌다)
+                want = {"id": f"H{version}", "actor": REVIEW_ACTOR, "kind": kind, "target": _stored_target(target), "change": change, "reason": reason}
+                problems += _line_problems(history[-1], want, "새 이력")
+                if _when(history[-1].get("at")) is None:
+                    problems.append("새 이력 at 을 읽을 수 없음")
+        if check is not None:
+            problems += check(review, before)
+        _, reread = self._reread(analysis)
+        problems += reread
+        self.review = review  # 실패해도 서버의 지금 값을 기준으로 다음 단계를 본다
+        note = f"이력 {len(history)}줄 · version {review.get('version')}" + ("" if changed else " · changed false")
+        return self.report(name, problems, note)
+
+    def refuse(self, name: str, body: Mapping[str, Any], status: int, detail: str) -> bool:
+        """오류를 기대하는 동작 — 상태 코드·문구, 그리고 다시 읽어도 review 가 그대로(쓰기 없음)."""
+        response, data = self._post(body)
+        problems: list[str] = []
+        got = data.get("detail") if isinstance(data, Mapping) else None
+        if response.status_code != status or got != detail:
+            problems.append(f"HTTP {response.status_code} {_detail(response)}(기대 {status} {detail})")
+        _, reread = self._reread(None)
+        problems += reread
+        return self.report(name, problems, f"HTTP {response.status_code} · 쓰기 없음" if not problems else "")
+
+    # --- 항목 값 확인 도우미 -------------------------------------------------------------
+
+    def last_at(self, review: Mapping[str, Any]) -> datetime | None:
+        return _when(review["history"][-1].get("at")) if review.get("history") else None
+
+    def expect_finding(self, review: Mapping[str, Any], target: Mapping[str, str], **want: Any) -> list[str]:
+        findings = review.get("findings") if isinstance(review.get("findings"), Mapping) else {}
+        value = findings.get(target["id"])
+        if not isinstance(value, Mapping) or set(value) != REVIEW_FINDING_KEYS:
+            return [f"{target['num']}: 저장 값 모양이 다름"]
+        return [f"{target['num']} {key}: {value.get(key)!r} (기대 {expected!r})" for key, expected in want.items() if value.get(key) != expected]
+
+    def touched_now(self, review: Mapping[str, Any], target: Mapping[str, str]) -> list[str]:
+        """그 항목의 updated_at = 이번 동작 시각(새 이력 at)."""
+        value = (review.get("findings") or {}).get(target["id"]) or {}
+        if _when(value.get("updated_at")) is None or _when(value.get("updated_at")) != self.last_at(review):
+            return [f"{target['num']} updated_at 이 이번 동작 시각이 아님"]
+        return []
+
+
+def _check_reviews(run: Run, analysis_id: str) -> bool:
+    """새로 만든 분석(done)에 검토 동작을 차례로 보내 확인한다. 기존 분석에는 부르지 않는다(_check_review_shape 만)."""
+    _say(f"검토 동작 확인(이번 실행이 만든 분석에만 씀 · actor {REVIEW_ACTOR}):")
+    response, first = _get(run, analysis_id)
+    if response.status_code != 200 or not isinstance(first, Mapping):
+        _say(f"  [실패] 00. 처음 조회 — HTTP {response.status_code}")
+        return False
+    targets = _review_targets(first.get("result"))
+    problems = _first_review_problems(first, targets)
+    if len({t["id"] for t in targets}) < 3:
+        problems.append(f"검토 가능 항목이 3개보다 적음({len(targets)})")
+    flow = _ReviewFlow(run, analysis_id, first)
+    if not flow.report("처음 조회 — needed·version 0·findings {}·S1·S2", problems, f"검토 가능 항목 {len(targets)}"):
+        _say("검토 동작 확인: 처음 조회가 기대와 달라 동작을 보내지 않습니다")
+        return False
+    a, b, c = targets[0], targets[1], targets[2]
+    cat = a["category"]
+    new_cat = next(x for x in CATS if x != cat)
+    same = flow.expect_finding
+    ai = {"subject": a["subject"], "exposure": a["exposure"]}
+
+    flow.write(
+        f"set_status confirmed({a['num']})",
+        {"type": "set_status", "finding_id": a["id"], "status": "confirmed", "reason": TEXT_CONFIRM},
+        ("confirm", f"{a['num']} {cat}", "미확인 → 확인함", TEXT_CONFIRM),
+        lambda r, _: same(r, a, status="confirmed", category=cat, **ai) + flow.touched_now(r, a),
+    )
+    flow.write(
+        f"set_status open({a['num']})",
+        {"type": "set_status", "finding_id": a["id"], "status": "open", "reason": TEXT_UNCONFIRM},
+        ("unconfirm", f"{a['num']} {cat}", "확인함 → 미확인", TEXT_UNCONFIRM),
+        lambda r, _: same(r, a, status="open") + flow.touched_now(r, a),
+    )
+    flow.write(
+        f"confirm_many 2건({b['num']}, {c['num']})",
+        {"type": "confirm_many", "finding_ids": [b["id"], c["id"]]},
+        ("confirm", "탐지 항목 2건", "미확인 → 확인함", f"{b['num']}, {c['num']}"),
+        lambda r, _: same(r, b, status="confirmed") + same(r, c, status="confirmed") + flow.touched_now(r, b) + flow.touched_now(r, c),
+    )
+    flow.refuse(
+        f"set_status confirmed 다시({b['num']}) → 409 상태 불일치",
+        {"type": "set_status", "finding_id": b["id"], "status": "confirmed", "reason": ""},
+        409,
+        MSG_REVIEW_STATE_CHANGED,
+    )
+    flow.write(
+        f"mark_false_positive({a['num']})",
+        {"type": "mark_false_positive", "finding_id": a["id"], "reason_type": FP_REASON, "note": TEXT_FP},
+        ("fp", f"{a['num']} {a['label']}", f"{cat} → 오탐 ({FP_REASON})", TEXT_FP),
+        lambda r, _: same(r, a, status="false_positive", fp_type=FP_REASON, fp_note=TEXT_FP) + flow.touched_now(r, a),
+    )
+    flow.write(
+        f"restore → 미확인({a['num']})",
+        {"type": "restore", "finding_id": a["id"], "note": TEXT_RESTORE},
+        ("restore", f"{a['num']} {a['label']}", "오탐 → 미확인", TEXT_RESTORE),
+        lambda r, _: same(r, a, status="open", fp_type="", fp_note="", category=cat) + flow.touched_now(r, a),
+    )
+    flow.write(
+        f"reclassify 정보 종류({a['num']})",
+        {"type": "reclassify", "finding_id": a["id"], "category": new_cat, "reason": TEXT_RECLASS},
+        ("reclass", f"{a['num']} {a['label']}", f"정보 종류: {cat} → {new_cat}", TEXT_RECLASS),
+        lambda r, _: same(r, a, status="reclassified", category=new_cat, reclass_note=TEXT_RECLASS, **ai) + flow.touched_now(r, a),
+    )
+    flow.write(
+        f"reclassify 같은 값({a['num']}) → changed false",
+        {"type": "reclassify", "finding_id": a["id"], "category": new_cat, "subject": a["subject"], "reason": TEXT_RECLASS},
+        None,
+    )
+    flow.write(
+        f"mark_false_positive 다시({a['num']})",
+        {"type": "mark_false_positive", "finding_id": a["id"], "reason_type": FP_REASON, "note": TEXT_FP},
+        ("fp", f"{a['num']} {a['label']}", f"{new_cat} → 오탐 ({FP_REASON})", TEXT_FP),
+        lambda r, _: same(r, a, status="false_positive", category=new_cat) + flow.touched_now(r, a),
+    )
+    flow.write(
+        f"restore → 분류 수정({a['num']})",
+        {"type": "restore", "finding_id": a["id"], "note": TEXT_RESTORE},
+        ("restore", f"{a['num']} {a['label']}", "오탐 → 분류 수정", TEXT_RESTORE),
+        lambda r, _: same(r, a, status="reclassified", category=new_cat, fp_type="", fp_note="", reclass_note=TEXT_RECLASS)
+        + flow.touched_now(r, a),
+    )
+
+    def memo_kept_time(text: str) -> Callable[[Mapping[str, Any], Mapping[str, Any]], list[str]]:
+        # 항목 메모는 updated_at 을 바꾸지 않는다(데모와 같다)
+        def check(review: Mapping[str, Any], before: Mapping[str, Any]) -> list[str]:
+            old = (before.get("findings") or {}).get(a["id"]) or {}
+            return same(review, a, memo=text, status="reclassified", updated_at=old.get("updated_at"))
+
+        return check
+
+    flow.write(
+        f"save_finding_memo 저장({a['num']})",
+        {"type": "save_finding_memo", "finding_id": a["id"], "text": TEXT_FINDING_MEMO},
+        ("fmemo", f"{a['num']} {new_cat}", "항목 메모 저장", TEXT_FINDING_MEMO),
+        memo_kept_time(TEXT_FINDING_MEMO),
+    )
+    flow.write(
+        f"save_finding_memo 삭제({a['num']})",
+        {"type": "save_finding_memo", "finding_id": a["id"], "text": ""},
+        ("fmemo", f"{a['num']} {new_cat}", "항목 메모 삭제", ""),
+        memo_kept_time(""),
+    )
+
+    def memo_check(review: Mapping[str, Any], _before: Mapping[str, Any]) -> list[str]:
+        problems = [] if review.get("memo") == TEXT_MEMO else ["memo 가 저장한 글과 다름"]
+        if _when(review.get("memo_at")) is None or _when(review.get("memo_at")) != flow.last_at(review):
+            problems.append("memo_at 이 이번 동작 시각이 아님")
+        return problems
+
+    flow.write(
+        "save_memo",
+        {"type": "save_memo", "text": TEXT_MEMO},
+        ("memo", ANALYSIS_TARGET, "검토 메모 저장", TEXT_MEMO),
+        memo_check,
+    )
+
+    findings_now = flow.review.get("findings") if isinstance(flow.review.get("findings"), Mapping) else {}
+    left = sum(1 for t in targets if ((findings_now.get(t["id"]) or {}).get("status") or "open") == "open")
+    rest = f" (남은 항목: 미확인 탐지 {left}건)" if left else ""
+
+    def complete_check(review: Mapping[str, Any], _before: Mapping[str, Any]) -> list[str]:
+        problems = [
+            f"{key}: {review.get(key)!r} (기대 {value!r})"
+            for key, value in {"status": "done", "reviewer": REVIEW_ACTOR, "completion_note": TEXT_COMPLETE}.items()
+            if review.get(key) != value
+        ]
+        if _when(review.get("reviewed_at")) is None or _when(review.get("reviewed_at")) != flow.last_at(review):
+            problems.append("reviewed_at 이 이번 동작 시각이 아님")
+        return problems
+
+    flow.write(
+        f"complete_review(남은 미확인 {left}건)",
+        {"type": "complete_review", "note": TEXT_COMPLETE},
+        ("complete", ANALYSIS_TARGET, f"검토 필요 → 검토 완료{rest}", TEXT_COMPLETE),
+        complete_check,
+    )
+    flow.refuse(
+        f"잠김 — set_status open({b['num']}) → 409",
+        {"type": "set_status", "finding_id": b["id"], "status": "open", "reason": ""},
+        409,
+        MSG_REVIEW_LOCKED,
+    )
+    flow.refuse("이미 완료 — complete_review → 409", {"type": "complete_review", "note": ""}, 409, MSG_REVIEW_ALREADY_DONE)
+
+    def reopen_check(review: Mapping[str, Any], _before: Mapping[str, Any]) -> list[str]:
+        want = {"status": "needed", "reviewed_at": None, "reviewer": REVIEW_ACTOR, "completion_note": TEXT_COMPLETE, "memo": TEXT_MEMO}
+        return [f"{key}: {review.get(key)!r} (기대 {value!r})" for key, value in want.items() if review.get(key) != value]
+
+    flow.write(
+        "reopen_review(reviewer·completion_note 남음, reviewed_at null)",
+        {"type": "reopen_review", "reason": TEXT_REOPEN},
+        ("reopen", ANALYSIS_TARGET, "검토 완료 → 검토 필요", TEXT_REOPEN),
+        reopen_check,
+    )
+    flow.refuse("모르는 type → 400", {"type": "delete_everything"}, 400, MSG_REVIEW_BAD_REQUEST)
+    flow.refuse("501자 글 → 400", {"type": "save_memo", "text": "가" * 501}, 400, MSG_REVIEW_TEXT_TOO_LONG)
+
+    # 마지막: 이력 id 연속·시간 순서·줄 수 = 쓴 동작 수·분석 시각 불변
+    response, last = _get(run, analysis_id)
+    problems = []
+    if response.status_code != 200 or not isinstance(last, Mapping) or not isinstance(last.get("review"), Mapping):
+        problems.append(f"마지막 조회: HTTP {response.status_code}")
+        history: list[Any] = []
+        version: Any = None
+    else:
+        review = last["review"]
+        history = review.get("history") if isinstance(review.get("history"), list) else []
+        version = review.get("version")
+        stored = history[2:]
+        ids = [line.get("id") if isinstance(line, Mapping) else None for line in stored]
+        if ids != [f"H{i}" for i in range(1, len(stored) + 1)]:
+            problems.append("이력 id 가 H1…Hn 연속이 아님")
+        times = [_when(line.get("at")) if isinstance(line, Mapping) else None for line in history]
+        if any(t is None for t in times):
+            problems.append("이력 at 을 읽을 수 없는 줄이 있음")
+        elif any(later < earlier for earlier, later in zip(times, times[1:], strict=False)):
+            problems.append("이력 at 이 줄어드는 곳이 있음")
+        if not (len(stored) == flow.expected_writes == flow.writes == version):
+            problems.append(f"저장 이력 {len(stored)}줄 · 쓴 동작 {flow.writes} · 기대 {flow.expected_writes} · version {version}")
+        for key in ("created_at", "updated_at"):
+            if last.get(key) != first.get(key):
+                problems.append(f"분석 {key} 가 처음 조회와 다름")
+        if review.get("status") != "needed":
+            problems.append(f"status {review.get('status')!r}(기대 needed)")
+    flow.report(
+        "마지막 — 이력 H1…Hn 연속·시간 순서·줄 수 = 쓴 동작 수·분석 created_at·updated_at 그대로",
+        problems,
+        f"이력 {len(history)}줄(S1·S2 포함) · 쓴 동작 {flow.writes} · version {version}",
+    )
+    ok = flow.failed == 0
+    _say(f"검토 동작 확인: {flow.steps - flow.failed}/{flow.steps} 통과 · 쓴 동작 {flow.writes}건 — {'기대대로' if ok else '기대와 다름'}")
+    return ok
+
+
+def _check_review_shape(run: Run, analysis_id: str) -> bool:
+    """--analysis-id: 기존 분석은 **읽기만** — review 블록 모양(status·findings·history S1·S2·version)만 본다(POST 없음)."""
+    response, row = _get(run, analysis_id)
+    if response.status_code != 200 or not isinstance(row, Mapping):
+        run.log(f"검토 기록 모양: 조회 실패 HTTP {response.status_code}")
+        return False
+    targets = _review_targets(row.get("result"))
+    problems = _review_shape_problems(row, targets)
+    review = row.get("review") if isinstance(row.get("review"), Mapping) else {}
+    history = review.get("history") if isinstance(review.get("history"), list) else []
+    findings = review.get("findings") if isinstance(review.get("findings"), Mapping) else {}
+    default = review.get("status") == "needed" and findings == {} and len(history) == 2 and review.get("version") == 0
+    _say(
+        f"검토 기록 모양(읽기만, 동작 보내지 않음): status={review.get('status')} · findings {len(findings)}개 · "
+        f"이력 {len(history)}줄(S1·S2 포함) · version {review.get('version')} · 기본값(검토 행 없음) {default}: "
+        f"{'맞음' if not problems else f'문제 {len(problems)}개'}"
+    )
+    for problem in problems[:6]:
+        _say(f"    - {_short(problem)}")
+    return not problems
+
+
 def _check_upstage_files(run: Run, documents: list[Mapping[str, Any]]) -> bool | None:
     """(정상 종료 때) 서버가 Upstage 파일을 지웠는지(GET /files/{id} 404). 키가 없으면 None(확인 안 함)."""
     key = run.upstage_key()
@@ -563,7 +1143,7 @@ def _flow(run: Run, args: argparse.Namespace) -> int:
     role = "비교할 원본" if args.analysis_id else "올릴 내용"
     _say(f"대상: {args.base_url} · 파일 {filename}({mime_type}) · {role} {content_path.name} {len(content):,} bytes")
     if args.analysis_id:
-        return _flow_existing(run, args.analysis_id, content)
+        return _flow_existing(run, args, args.analysis_id, content)
     _say(f"기대: {args.expect}" + (" · 올리지 않음" if args.skip_upload else "") + (" · 시작하지 않음" if args.no_start else ""))
 
     # 1. health
@@ -646,6 +1226,11 @@ def _flow(run: Run, args: argparse.Namespace) -> int:
         # 끝난 분석을 다시 읽어 확인한다(done 조회는 Upstage 를 부르지 않는다)
         ok = _verify_done(run, analysis_id) and ok
         ok = _check_file(run, analysis_id, content) and ok
+        if args.no_review:
+            _say("검토 동작 확인 건너뜀(--no-review)")
+        else:
+            # 이번 실행이 만든 분석이 done 이 된 뒤에만 검토 동작을 보낸다
+            ok = _check_reviews(run, analysis_id) and ok
     else:
         _say(f"오류 문구: {row.get('error')!r}")
         ok = ok and bool(row.get("error"))
@@ -661,7 +1246,7 @@ def _flow(run: Run, args: argparse.Namespace) -> int:
     return EXIT_OK if ok else EXIT_FAIL
 
 
-def _flow_existing(run: Run, analysis_id: str, content: bytes) -> int:
+def _flow_existing(run: Run, args: argparse.Namespace, analysis_id: str, content: bytes) -> int:
     """--analysis-id: 만들기·올리기·시작 없이 조회·원본 파일 확인만(Upstage 작업을 만들지 않는다).
 
     start_requested 가 False 라 정리 단계는 아무것도 지우지 않는다.
@@ -675,6 +1260,10 @@ def _flow_existing(run: Run, analysis_id: str, content: bytes) -> int:
     done_ok = _verify_done(run, analysis_id)
     file_ok = _check_file(run, analysis_id, content)
     ok = done_ok and file_ok
+    if args.no_review:
+        _say("검토 기록 모양 확인 건너뜀(--no-review)")
+    else:
+        ok = _check_review_shape(run, analysis_id) and ok  # 읽기만 — 검토 동작은 보내지 않는다
     _say(f"분석 id: {analysis_id}")
     _say(f"결과: {'기대대로' if ok else '기대와 다름'} (기존 분석 확인)")
     return EXIT_OK if ok else EXIT_FAIL
@@ -724,7 +1313,12 @@ def main(argv: list[str] | None = None, *, transport: httpx.BaseTransport | None
     parser.add_argument(
         "--analysis-id",
         default=None,
-        help="이미 있는 분석을 조회하고 원본 파일만 확인(만들기·올리기·시작 없음 — Upstage 작업을 만들지 않음)",
+        help="이미 있는 분석을 조회하고 원본 파일·검토 기록 모양만 확인(만들기·올리기·시작·검토 동작 없음 — Upstage 작업을 만들지 않음)",
+    )
+    parser.add_argument(
+        "--no-review",
+        action="store_true",
+        help="검토 동작 확인을 끈다(기본은 새 분석이 done 이 되면 검토 동작을 보내 확인)",
     )
     args = parser.parse_args(argv)
     try:

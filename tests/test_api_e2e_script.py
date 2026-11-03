@@ -5,13 +5,17 @@
 #  정상 완료 → 서버가 이미 지움(404 = 성공)·종료 코드 0, 정리 실패·정리 중 Ctrl+C → 종료 코드 1.
 #  done 확인(T1 findings-api): 화면용 결과(documents·findings·overall)·응답 크기·원본 파일(sha256) 확인,
 #  --analysis-id(만들기·시작 없이 조회만), 계약 위반·원본 불일치·stages 섞임 → 종료 코드 1, 원문 값·서명 URL 미출력.
-#  done 응답은 손으로 지은 가짜 결과(fake_findings)를 실제 analysis_out 으로 만든 것이다.
+#  done 응답은 손으로 지은 가짜 결과(fake_findings)를 FakeStore 에 넣고 실제 조회 로직(analysis_read_out)으로 만든 것이다.
+#  검토 동작 확인(review-actions): POST 를 실제 review_action_out 으로 처리해 — 흐름 전체 통과(단계 21·쓰기 13·analyses 불변),
+#  예상과 다른 응답(409 자리에 200·이력 문구 다름·changed 다름) → 종료 코드 1, --no-review → review-actions 요청 없음,
+#  --analysis-id → 읽기만(review-actions 요청 없음 · 모양 확인), review null → 종료 코드 1.
 # ==========================================================================
 
 from __future__ import annotations
 
 import copy
 import importlib.util
+import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -19,12 +23,14 @@ from unittest.mock import patch
 
 import httpx
 import pytest
-from api_fakes import FAKE_UPSTAGE_KEY, FakeUpstageServer
+from api_fakes import FAKE_UPSTAGE_KEY, FakeStore, FakeUpstageServer
 from fake_findings import VALUES, stored_result
 from fake_tokens import fake_jwt
 from fastapi.testclient import TestClient
 
-from imask_backend.analyses import analysis_out
+from imask_backend.analyses import ApiError, analysis_out
+from imask_backend.reviews import analysis_read_out, parse_action, parse_json, review_action_out
+from imask_backend.textsafe import escaped_json_bytes, has_unpaired_surrogates
 from imask_backend.upstage import UpstageClient
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,6 +41,11 @@ STORAGE_HOST = "fake-storage.invalid"
 DOWNLOAD_TOKEN = "FAKE-DOWNLOAD-TOKEN-7777"
 DOWNLOAD_URL = f"https://{STORAGE_HOST}/storage/v1/object/sign/documents/analyses/x/document.pdf?token={DOWNLOAD_TOKEN}"
 DONE_RESULT = stored_result()  # format·job·summary·stages·response(가짜 응답 — findings 29·boxes 28)
+CREATED_AT = "2026-11-03T06:41:36.66673+00:00"  # done 분석의 시각(검토 동작 시각 = 지금보다 앞)
+UPDATED_AT = "2026-11-03T06:42:20.213505+00:00"
+REVIEW_PATH = f"/api/py/analyses/{ANALYSIS_ID}/review-actions"
+REVIEW_STEPS = 21  # 처음 조회 1 + 동작 19(쓰기 13 · changed false 1 · 거절 5) + 마지막 확인 1
+REVIEW_WRITES = 13
 
 
 def load_script() -> Any:
@@ -43,6 +54,13 @@ def load_script() -> Any:
     assert spec.loader is not None
     spec.loader.exec_module(module)
     return module
+
+
+def _json_response(status: int, body: Any) -> httpx.Response:
+    """api/index.py 의 _json_out 처럼: 짝 없는 서로게이트가 있으면 ASCII escape JSON, 없으면 보통 JSON."""
+    if has_unpaired_surrogates(body):
+        return httpx.Response(status, content=escaped_json_bytes(body), headers={"content-type": "application/json"})
+    return httpx.Response(status, json=body)
 
 
 def _row(status: str, *, file_id: str | None = FILE_ID, **extra: Any) -> dict[str, Any]:
@@ -66,6 +84,9 @@ class FakeApi:
     start_file=False 면 성공한 시작 응답에 file id 가 없다(서버 대체 행에서 빠진 경우와 같은 모양).
     poll_mode 가 interrupt·connect 면 흐름이 첫 GET 에서 끝나므로, 그 뒤의 GET 은 정리 단계의 다시 읽기다.
     reread_mode: file(running + file id) · nofile(running, file id 없음) · connect(연결 오류) · http500
+    done 응답과 검토 동작(POST review-actions)은 FakeStore 에 넣은 done 분석으로 **실제 백엔드 로직**
+    (analysis_read_out·review_action_out)이 만든다. review_store=False 면 done 응답의 review 가 null(검토 기록을 못 읽음).
+    review_override(api, 본문, 몇 번째 POST) 가 응답을 돌려주면 그것을 쓴다(예상과 다른 응답 주입).
     """
 
     def __init__(
@@ -79,6 +100,8 @@ class FakeApi:
         file_content: bytes = BUNDLE,
         file_status: int = 200,
         tamper: Callable[[dict[str, Any], bool], None] | None = None,
+        review_store: bool = True,
+        review_override: Callable[[FakeApi, dict[str, Any], int], httpx.Response | None] | None = None,
     ) -> None:
         self.start_mode = start_mode
         self.poll_mode = poll_mode
@@ -90,14 +113,61 @@ class FakeApi:
         self.tamper = tamper  # (응답 result, include_stages) 를 고쳐 계약 위반을 주입한다
         self.requests: list[httpx.Request] = []
         self.gets = 0
+        self.review_store = review_store
+        self.review_override = review_override
+        self.review_posts: list[dict[str, Any]] = []
+        self.store = FakeStore()
+        self.store.analyses[ANALYSIS_ID] = {
+            "id": ANALYSIS_ID,
+            "name": "합성",
+            "status": "done",
+            "agent_id": None,
+            "upstage_job_id": "job_e2e",
+            "result": copy.deepcopy(DONE_RESULT),
+            "error": None,
+            "created_at": CREATED_AT,
+            "updated_at": UPDATED_AT,
+        }
+        self.store.documents["doc_e2e"] = {
+            "id": "doc_e2e",
+            "analysis_id": ANALYSIS_ID,
+            "filename": "iMASK_smoke_bundle.pdf",
+            "storage_path": f"analyses/{ANALYSIS_ID}/document.pdf",
+            "size_bytes": len(BUNDLE),
+            "mime_type": "application/pdf",
+            "upstage_file_id": FILE_ID,
+            "created_at": CREATED_AT,
+        }
+
+    def read_done(self, include: bool = False) -> dict[str, Any]:
+        """실제 조회 응답(analysis_read_out — review 블록 포함). review_store=False 면 review null."""
+        row = self.store.get_analysis(ANALYSIS_ID)
+        assert row is not None
+        if not self.review_store:
+            return analysis_out(row, include_stages=include)
+        return analysis_read_out(self.store, row, include_stages=include)
 
     def _done(self, request: httpx.Request) -> httpx.Response:
-        """실제 analysis_out 으로 만든 done 응답(?include=stages 를 따른다)."""
+        """실제 백엔드 로직으로 만든 done 응답(?include=stages 를 따른다)."""
         include = "stages" in request.url.params.get_list("include")
-        body = analysis_out({**_row("done"), "result": copy.deepcopy(DONE_RESULT)}, include_stages=include)
+        body = self.read_done(include)
         if self.tamper is not None:
             self.tamper(body["result"], include)
-        return httpx.Response(200, json=body)
+        return _json_response(200, body)
+
+    def _review(self, request: httpx.Request) -> httpx.Response:
+        """POST review-actions — 실제 parse_action·review_action_out 으로(오류는 {"detail"})."""
+        body = json.loads(request.content)
+        self.review_posts.append(body)
+        if self.review_override is not None:
+            replaced = self.review_override(self, body, len(self.review_posts))
+            if replaced is not None:
+                return replaced
+        try:
+            out = review_action_out(self.store, ANALYSIS_ID, parse_action(request.content))
+        except ApiError as exc:
+            return httpx.Response(exc.status_code, json={"detail": exc.detail})
+        return _json_response(200, out)
 
     def _reread(self) -> httpx.Response:
         if self.reread_mode == "connect":
@@ -121,6 +191,8 @@ class FakeApi:
                 return httpx.Response(self.file_status, json={"detail": "원본 파일을 찾을 수 없습니다."})
             body = {"url": DOWNLOAD_URL, "mime_type": "application/pdf", "filename": "iMASK_smoke_bundle.pdf"}
             return httpx.Response(200, json=body, headers={"Cache-Control": "no-store"})
+        if method == "POST" and path == REVIEW_PATH:
+            return self._review(request)
         if path == "/api/py/health":
             return httpx.Response(200, json={"ok": True, "configured": {}})
         if method == "POST" and path == "/api/py/analyses":
@@ -593,3 +665,458 @@ def test_real_api_cleanup_read_lost_reports_uncertain(script: Any, capsys: Any) 
     out = capsys.readouterr().out
     assert "정리 확인 못 함" in out
     assert FAKE_UPSTAGE_KEY not in out
+
+
+# --- 검토 동작 확인(review-actions) ----------------------------------------------------------
+
+
+def _review_types(api: FakeApi) -> list[str]:
+    return [str(body.get("type")) for body in api.review_posts]
+
+
+def _review_requests(api: FakeApi) -> list[httpx.Request]:
+    return [r for r in api.requests if r.url.path.endswith("/review-actions")]
+
+
+def _done_upstage() -> FakeUpstageServer:
+    upstage = FakeUpstageServer()
+    upstage.files[FILE_ID] = ("x.pdf", b"")
+    upstage.deleted.append(FILE_ID)  # 서버(조회)가 이미 지웠다
+    return upstage
+
+
+def test_review_flow_passes_against_real_review_logic(script: Any, capsys: Any) -> None:
+    api = FakeApi(poll_mode="done")
+    assert _run(script, api, _done_upstage(), []) == 0
+    out = capsys.readouterr().out
+    assert "[실패]" not in out
+    assert f"검토 동작 확인: {REVIEW_STEPS}/{REVIEW_STEPS} 통과 · 쓴 동작 {REVIEW_WRITES}건 — 기대대로" in out
+    assert "결과: 기대대로" in out
+    # 순서대로 보낸 동작(BRIEF §5.5 의 9종 + 거절 확인)
+    assert _review_types(api) == [
+        "set_status",
+        "set_status",
+        "confirm_many",
+        "set_status",
+        "mark_false_positive",
+        "restore",
+        "reclassify",
+        "reclassify",
+        "mark_false_positive",
+        "restore",
+        "save_finding_memo",
+        "save_finding_memo",
+        "save_memo",
+        "complete_review",
+        "set_status",
+        "complete_review",
+        "reopen_review",
+        "delete_everything",
+        "save_memo",
+    ]
+    assert {body.get("actor") for body in api.review_posts} == {"api_e2e"}
+    # 저장된 검토 행: 쓰기 13번 = version 13 = 이력 13줄, 다시 연 상태
+    saved = api.store.reviews[ANALYSIS_ID]
+    assert saved["version"] == REVIEW_WRITES and len(saved["history"]) == REVIEW_WRITES
+    assert [line["kind"] for line in saved["history"]] == [
+        "confirm",
+        "unconfirm",
+        "confirm",
+        "fp",
+        "restore",
+        "reclass",
+        "fp",
+        "restore",
+        "fmemo",
+        "fmemo",
+        "memo",
+        "complete",
+        "reopen",
+    ]
+    assert saved["status"] == "needed" and saved["reviewer"] == "api_e2e" and saved["reviewed_at"] is None
+    # analyses 행은 쓰지 않는다(분석 시각·걸린 시간 불변)
+    row = api.store.analyses[ANALYSIS_ID]
+    assert (row["created_at"], row["updated_at"]) == (CREATED_AT, UPDATED_AT)
+    assert "update_analysis" not in api.store.calls
+    _assert_no_values(out)
+
+
+def _accept_second_confirm(api: FakeApi, body: dict[str, Any], n: int) -> httpx.Response | None:
+    # 4번째 POST(같은 항목 다시 확인 — 409 를 기대하는 자리)에 200 을 돌려준다
+    if n == 4:
+        return httpx.Response(200, json={"analysis": api.read_done(), "changed": False})
+    return None
+
+
+def _wrong_change_text(api: FakeApi, body: dict[str, Any], n: int) -> httpx.Response | None:
+    # 첫 동작은 그대로 저장하되 응답의 새 이력 change 문구만 다르게
+    if n != 1:
+        return None
+    out = review_action_out(api.store, ANALYSIS_ID, parse_action(json.dumps(body).encode()))
+    out["analysis"]["review"]["history"][-1]["change"] = "다른 문구"
+    return httpx.Response(200, json=out)
+
+
+def _changed_true_without_write(api: FakeApi, body: dict[str, Any], n: int) -> httpx.Response | None:
+    # 같은 값 분류 수정(8번째 POST)에 changed true 로 답한다
+    if n == 8:
+        return httpx.Response(200, json={"analysis": api.read_done(), "changed": True})
+    return None
+
+
+def _wrong_409_detail(api: FakeApi, body: dict[str, Any], n: int) -> httpx.Response | None:
+    # 잠김 409 자리(15번째 POST)에 다른 409 문구
+    if n == 15:
+        return httpx.Response(409, json={"detail": "탐지 항목 상태가 바뀌었습니다. 새로 고친 뒤 다시 시도해 주세요."})
+    return None
+
+
+@pytest.mark.parametrize(
+    ("override", "message"),
+    [
+        (_accept_second_confirm, "HTTP 200"),
+        (_wrong_change_text, "새 이력 change: '다른 문구'"),
+        (_changed_true_without_write, "changed True(기대 false)"),
+        (_wrong_409_detail, "HTTP 409 탐지 항목 상태가 바뀌었습니다."),
+    ],
+    ids=["409_became_200", "history_text_differs", "changed_differs", "wrong_409_detail"],
+)
+def test_unexpected_review_response_fails(script: Any, capsys: Any, override: Any, message: str) -> None:
+    api = FakeApi(poll_mode="done", review_override=override)
+    assert _run(script, api, _done_upstage(), []) == 1
+    out = capsys.readouterr().out
+    assert "[실패]" in out
+    assert message in out
+    assert "검토 동작 확인: " in out and "— 기대와 다름" in out
+    assert "결과: 기대와 다름" in out
+
+
+def test_no_review_sends_no_review_actions(script: Any, capsys: Any) -> None:
+    api = FakeApi(poll_mode="done")
+    assert _run(script, api, _done_upstage(), ["--no-review"]) == 0
+    assert _review_requests(api) == []
+    assert api.store.reviews == {}
+    out = capsys.readouterr().out
+    assert "검토 동작 확인 건너뜀(--no-review)" in out
+    assert "결과: 기대대로" in out
+
+
+def test_analysis_id_mode_reads_review_shape_only(script: Any, capsys: Any) -> None:
+    api = FakeApi(poll_mode="done")
+    assert _run(script, api, FakeUpstageServer(), ["--analysis-id", ANALYSIS_ID]) == 0
+    assert _review_requests(api) == []
+    assert [r for r in api.requests if r.method != "GET"] == []
+    assert api.store.reviews == {}
+    out = capsys.readouterr().out
+    assert (
+        "검토 기록 모양(읽기만, 동작 보내지 않음): status=needed · findings 0개 · 이력 2줄(S1·S2 포함) · version 0"
+        " · 기본값(검토 행 없음) True: 맞음"
+    ) in out
+    assert "결과: 기대대로 (기존 분석 확인)" in out
+
+
+def test_analysis_id_mode_accepts_reviewed_analysis(script: Any, capsys: Any) -> None:
+    # 이미 검토한 기존 분석도 모양만 본다(기본값을 강제하지 않음) — 그래도 동작은 보내지 않는다
+    api = FakeApi(poll_mode="done")
+    finding_id = api.read_done()["result"]["findings"][0]["id"]
+    body = {"type": "set_status", "actor": "검토자", "finding_id": finding_id, "status": "confirmed", "reason": ""}
+    review_action_out(api.store, ANALYSIS_ID, parse_action(json.dumps(body).encode()))
+    assert _run(script, api, FakeUpstageServer(), ["--analysis-id", ANALYSIS_ID]) == 0
+    assert _review_requests(api) == []
+    assert api.store.reviews[ANALYSIS_ID]["version"] == 1
+    out = capsys.readouterr().out
+    assert "status=needed · findings 1개 · 이력 3줄(S1·S2 포함) · version 1 · 기본값(검토 행 없음) False: 맞음" in out
+
+
+def test_analysis_id_mode_no_review_skips_shape(script: Any, capsys: Any) -> None:
+    api = FakeApi(poll_mode="done", review_store=False)
+    assert _run(script, api, FakeUpstageServer(), ["--analysis-id", ANALYSIS_ID, "--no-review"]) == 0
+    assert "검토 기록 모양 확인 건너뜀(--no-review)" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("existing", [False, True], ids=["new_analysis", "analysis_id"])
+def test_review_null_fails(script: Any, capsys: Any, existing: bool) -> None:
+    # 검토 기록을 읽지 못한 응답(review null)이면 실패 — 새 분석이어도 동작을 보내지 않는다
+    api = FakeApi(poll_mode="done", review_store=False)
+    args = ["--analysis-id", ANALYSIS_ID] if existing else []
+    assert _run(script, api, _done_upstage(), args) == 1
+    assert _review_requests(api) == []
+    assert "review 가 객체가 아님" in capsys.readouterr().out
+
+
+def _run_through_real_app(script: Any, api: FakeApi) -> tuple[int, list[dict[str, Any]], list[str]]:
+    """조회·검토 동작을 실제 FastAPI 앱(TestClient)으로 — api/index.py 경로·본문 읽기(65,536 바이트 한도·413)·_json_out·
+    오류 모양까지 지난다. 만들기·시작·파일은 FakeApi 그대로. → (종료 코드, 검토 POST 마다 {type, bytes, status}, Upstage 생성 기록)"""
+    from api_fakes import FAKE_ENV
+
+    from api.index import app, get_store, get_upstage
+    from imask_backend.settings import get_settings, load_settings
+
+    built: list[str] = []
+    posts: list[dict[str, Any]] = []
+
+    def no_upstage() -> UpstageClient:
+        built.append("upstage")
+        raise AssertionError("done 조회·검토 동작은 Upstage 를 부르지 않는다")
+
+    settings = load_settings(FAKE_ENV)
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_store] = lambda: api.store
+    app.dependency_overrides[get_upstage] = lambda: no_upstage
+    analysis_path = f"/api/py/analyses/{ANALYSIS_ID}"
+    try:
+        with TestClient(app) as client:
+
+            def handle(request: httpx.Request) -> httpx.Response:
+                path = request.url.path
+                if not (path == REVIEW_PATH or (request.method == "GET" and path == analysis_path)):
+                    return api.handle(request)  # 만들기·시작·파일 등은 FakeApi 그대로
+                api.requests.append(request)
+                if request.method == "POST":
+                    assert request.headers["content-type"] == "application/json"
+                    assert int(request.headers["content-length"]) == len(request.content)
+                    api.review_posts.append(parse_json(request.content))  # 서버와 같은 파서(같은 키 두 번·UTF-8 검사)
+                response = client.request(
+                    request.method, path, params=request.url.params, headers=dict(request.headers), content=request.content
+                )
+                if request.method == "POST":
+                    posts.append({"type": api.review_posts[-1].get("type"), "bytes": len(request.content), "status": response.status_code})
+                return httpx.Response(response.status_code, content=response.content, headers={"content-type": "application/json"})
+
+            env = {"UPSTAGE_API_KEY": FAKE_UPSTAGE_KEY}
+            upstage = _done_upstage()
+
+            def client_factory(api_key: str, base_url: str, **kwargs: Any) -> UpstageClient:
+                return UpstageClient(api_key, base_url, transport=httpx.MockTransport(upstage.handle), **kwargs)
+
+            with patch.object(script, "_read_env", return_value=env), patch.object(script, "UpstageClient", client_factory):
+                code = script.main(["--skip-upload", "--interval", "0"], transport=httpx.MockTransport(handle))
+    finally:
+        app.dependency_overrides.clear()
+    return code, posts, built
+
+
+def test_review_flow_through_real_app_never_builds_upstage(script: Any, capsys: Any) -> None:
+    # 실제 FastAPI 앱을 지나도 흐름 통과, Upstage 클라이언트는 만들지 않는다
+    api = FakeApi(poll_mode="done")
+    code, posts, built = _run_through_real_app(script, api)
+    out = capsys.readouterr().out
+    assert code == 0, out[-3000:]
+    assert f"검토 동작 확인: {REVIEW_STEPS}/{REVIEW_STEPS} 통과" in out
+    assert built == []
+    assert len(api.review_posts) == 19
+    assert [p["status"] for p in posts].count(200) == 14
+    assert api.store.reviews[ANALYSIS_ID]["version"] == REVIEW_WRITES
+    row = api.store.analyses[ANALYSIS_ID]
+    assert (row["created_at"], row["updated_at"]) == (CREATED_AT, UPDATED_AT)
+
+
+# --- 특수한 추출 키(표시 이름·이력 target 경계, V-T3-1 m1·m2) -----------------------------------
+# 글자는 모두 chr() 로 만든다(소스에 보이지 않는 글자를 넣지 않게). 가짜 결과의 첫 추출 키(applicant_name — D1-01)를
+# 바꿔 실제 build_view·검토 로직·FakeStore 로 응답을 만든다. 표에 없는 키라 label 도 그 키다.
+
+FIRST_KEY = "applicant_name"
+NUL, FFFD, ELLIPSIS = chr(0), chr(0xFFFD), chr(0x2026)
+
+
+def _rename_key(value: Any, new_key: str) -> Any:
+    """저장 형식 결과 안의 추출 키 FIRST_KEY 를 new_key 로 — dict 키와 JSON 문자열 안까지(build_view 가 읽는 경로)."""
+    if isinstance(value, dict):
+        return {(new_key if k == FIRST_KEY else k): _rename_key(v, new_key) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_rename_key(v, new_key) for v in value]
+    if isinstance(value, str):
+        try:
+            decoded = json.loads(value)
+        except (ValueError, TypeError):
+            return value
+        if isinstance(decoded, (dict, list)):
+            return json.dumps(_rename_key(decoded, new_key), ensure_ascii=True)
+    return value
+
+
+def _api_with_first_key(new_key: str, **kwargs: Any) -> FakeApi:
+    api = FakeApi(poll_mode="done", **kwargs)
+    row = api.store.analyses[ANALYSIS_ID]
+    row["result"] = _rename_key(row["result"], new_key)
+    first = api.read_done()["result"]["findings"][0]
+    assert (first["field"], first["document_index"]) == (new_key, 0)  # D1-01 이 그 키
+    return api
+
+
+# (이름, 추출 키, 이름 기반 이력 target 의 저장 모양 — 계약대로 손으로 적은 기대값)
+SPECIAL_KEYS = [
+    ("FEFF_trimmed", chr(0xFEFF) + "probe" + chr(0xFEFF), "D1-01 probe"),
+    ("NEL_kept", chr(0x85) + "probe" + chr(0x85), "D1-01 " + chr(0x85) + "probe" + chr(0x85)),
+    *[(f"U+{c:04X}_kept", chr(c) + "probe" + chr(c), "D1-01 " + chr(c) + "probe" + chr(c)) for c in range(0x1C, 0x20)],
+    ("JS_spaces_trimmed", chr(0x3000) + chr(0x2028) + "probe" + chr(0x202F) + chr(0xA0), "D1-01 probe"),
+    ("only_FEFF_unnamed", chr(0xFEFF), "D1-01 이름 없는 항목"),
+    ("target_200_kept", "q" * 194, "D1-01 " + "q" * 194),
+    ("target_201_cut", "q" * 195, "D1-01 " + "q" * 193 + ELLIPSIS),
+    ("long_210_cut", "p" * 210, "D1-01 " + "p" * 193 + ELLIPSIS),
+    ("NUL_replaced", "probe" + NUL, "D1-01 probe" + FFFD),
+    ("lone_surrogate_replaced", "probe" + chr(0xD800), "D1-01 probe" + FFFD),
+    ("astral_kept", "probe" + chr(0x1F600), "D1-01 probe" + chr(0x1F600)),
+]
+
+
+@pytest.mark.parametrize(("new_key", "stored_target"), [c[1:] for c in SPECIAL_KEYS], ids=[c[0] for c in SPECIAL_KEYS])
+def test_special_extraction_keys_pass_review_checks(script: Any, capsys: Any, new_key: str, stored_target: str) -> None:
+    api = _api_with_first_key(new_key)
+    code = _run(script, api, _done_upstage(), [])
+    out = capsys.readouterr().out
+    assert "[실패]" not in out, out[-3000:]
+    assert f"검토 동작 확인: {REVIEW_STEPS}/{REVIEW_STEPS} 통과 · 쓴 동작 {REVIEW_WRITES}건 — 기대대로" in out
+    assert code == 0
+    saved = api.store.reviews[ANALYSIS_ID]
+    assert saved["version"] == REVIEW_WRITES
+    # 이름 기반 이력 줄(fp·restore·reclass·fp·restore)의 저장된 target = 계약대로 손으로 적은 값
+    named = [line["target"] for line in saved["history"] if line["kind"] in ("fp", "restore", "reclass")]
+    assert named == [stored_target] * 5
+    assert len(stored_target) <= 200
+
+
+def _unsafe_target(raw_target: str) -> Callable[[FakeApi, dict[str, Any], int], httpx.Response | None]:
+    """첫 오탐 표시(5번째 POST)의 응답에서 새 이력 target 을 안전화하지 않은 원래 이름으로 바꾼다(저장은 정상)."""
+
+    def override(api: FakeApi, body: dict[str, Any], n: int) -> httpx.Response | None:
+        if n != 5:
+            return None
+        assert body["type"] == "mark_false_positive"
+        out = review_action_out(api.store, ANALYSIS_ID, parse_action(json.dumps(body, ensure_ascii=True).encode()))
+        out["analysis"]["review"]["history"][-1]["target"] = raw_target
+        return _json_response(200, out)
+
+    return override
+
+
+@pytest.mark.parametrize(
+    ("new_key", "raw_target"),
+    [
+        ("probe" + NUL, "D1-01 probe" + NUL),  # NUL 그대로
+        ("probe" + chr(0xDC00), "D1-01 probe" + chr(0xDC00)),  # 짝 없는 서로게이트 그대로
+        ("p" * 210, "D1-01 " + "p" * 210),  # 자르지 않음
+        ("q" * 195, "D1-01 " + "q" * 195),  # 201자 그대로
+        ("q" * 195, "D1-01 " + "q" * 194 + ELLIPSIS),  # 200자를 넘는 자르기(앞 199 + … 가 아님)
+    ],
+    ids=["NUL_raw", "surrogate_raw", "untruncated_210", "untruncated_201", "wrong_cut"],
+)
+def test_unsafe_target_in_response_fails(script: Any, capsys: Any, new_key: str, raw_target: str) -> None:
+    api = _api_with_first_key(new_key, review_override=_unsafe_target(raw_target))
+    assert _run(script, api, _done_upstage(), []) == 1
+    out = capsys.readouterr().out
+    assert "[실패] 06. mark_false_positive(D1-01)" in out
+    assert "새 이력 target:" in out
+    assert "— 기대와 다름" in out
+
+
+def test_js_trim_set_is_ecmascript_whitespace_and_line_terminators(script: Any) -> None:
+    import unicodedata
+
+    zs = {c for c in range(0x110000) if unicodedata.category(chr(c)) == "Zs"}
+    expected = zs | {0x09, 0x0B, 0x0C, 0x20, 0xA0, 0xFEFF} | {0x0A, 0x0D, 0x2028, 0x2029}
+    assert {ord(c) for c in script.JS_TRIM_CHARS} == expected
+    for kept in (0x85, 0x1C, 0x1D, 0x1E, 0x1F, 0x180E, 0x200B, 0x0):  # Python strip() 이나 다른 곳과 다른 글자
+        assert chr(kept) not in script.JS_TRIM_CHARS
+    assert script._js_trim(chr(0xFEFF) + " a " + chr(0x3000)) == "a"
+    assert script._js_trim(chr(0x85) + "a" + chr(0x1F)) == chr(0x85) + "a" + chr(0x1F)
+
+
+def test_stored_target_boundaries(script: Any) -> None:
+    assert script._stored_target("x" * 200) == "x" * 200
+    assert script._stored_target("x" * 201) == "x" * 199 + ELLIPSIS
+    assert len(script._stored_target("x" * 5000)) == 200
+    assert script._stored_target("a" + NUL + chr(0xD83D) + chr(0xDE00) + "b") == "a" + FFFD * 3 + "b"  # 따로 든 서로게이트는 각각
+    assert script._stored_target(chr(0x1F600) * 200) == chr(0x1F600) * 200  # 보충 평면 글자는 한 코드 포인트
+    assert script._stored_target(NUL * 201) == FFFD * 199 + ELLIPSIS
+
+
+# --- 검토 POST 본문 직렬화(V-T3-2 m3): httpx json= 과 같은 UTF-8, 짝 없는 서로게이트만 escape ---------------------
+
+BACKSLASH = chr(92)
+SERIALIZE_CASES = [
+    ("plain_ascii", {"type": "set_status", "actor": "api_e2e", "finding_id": "0:applicant_name", "status": "open", "reason": ""}),
+    ("korean", {"type": "save_memo", "actor": "이지은", "text": "검토 메모 " + "한" * 300}),
+    ("quotes_backslash_control", {"type": "save_memo", "actor": "a", "text": 'q"' + BACKSLASH + chr(0x1F) + chr(0x7F) + NUL}),
+    ("astral", {"type": "save_finding_memo", "actor": "a", "finding_id": "0:" + chr(0x1F600), "text": chr(0x10FFFF)}),
+    ("high_surrogate", {"type": "set_status", "actor": "a", "finding_id": "0:probe" + chr(0xD800), "status": "open", "reason": ""}),
+    ("low_surrogate_in_list", {"type": "confirm_many", "actor": "a", "finding_ids": ["0:" + chr(0xDFFF), "1:x" + chr(0xDC00) + "y"]}),
+    ("separated_surrogates", {"type": "save_memo", "actor": "a", "text": chr(0xD83D) + "-" + chr(0xDE00)}),
+]
+
+
+@pytest.mark.parametrize("value", [c[1] for c in SERIALIZE_CASES], ids=[c[0] for c in SERIALIZE_CASES])
+def test_json_body_round_trips_through_server_parser(script: Any, value: dict[str, Any]) -> None:
+    body = script._json_body(value)
+    text = body.decode("utf-8")  # 늘 유효한 UTF-8
+    assert parse_json(body) == value  # 서버 본문 파서(같은 키 두 번·NaN·UTF-8 엄격)가 읽으면 넘긴 객체와 정확히 같다
+    assert json.loads(text) == value
+    surrogates = [c for c in json.dumps(value, ensure_ascii=False) if 0xD800 <= ord(c) <= 0xDFFF]
+    escapes = [BACKSLASH + "u" + f"{ord(c):04x}" for c in surrogates]
+    assert all(e in text for e in escapes)
+    if not surrogates:
+        # 서로게이트가 없으면 httpx json= 과 바이트까지 같다(같은 크기 — 서버 본문 한도 기준이 바뀌지 않음)
+        assert body == json.dumps(value, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+        assert body == httpx.Request("POST", "http://local.invalid/", json=value).content
+    else:
+        # 서로게이트 말고는 escape 하지 않는다(한글·보충 평면 글자는 UTF-8 그대로)
+        plain = {k: v for k, v in value.items() if k in ("type", "actor")}
+        assert script._json_body(plain) == httpx.Request("POST", "http://local.invalid/", json=plain).content
+        assert text.count(BACKSLASH + "u") == len(surrogates)
+
+
+def test_json_body_keeps_korean_size_like_httpx(script: Any) -> None:
+    value = {"type": "set_status", "actor": "api_e2e", "finding_id": "0:" + "한" * 11000, "status": "confirmed", "reason": ""}
+    body = script._json_body(value)
+    assert len(body) == len(httpx.Request("POST", "http://local.invalid/", json=value).content)
+    assert 33_000 < len(body) < 65_536  # 예전 ASCII escape(약 66,000 바이트 — 413)와 달리 한도 안
+
+
+def test_review_post_body_sends_lone_surrogate_id(script: Any) -> None:
+    # 짝 없는 서로게이트가 든 계약 id 도 보낸다 — 그 글자만 escape, 본문은 UTF-8 JSON
+    api = _api_with_first_key("probe" + chr(0xD800))
+    assert _run(script, api, _done_upstage(), []) == 0
+    posts = _review_requests(api)
+    assert len(posts) == 19
+    for request in posts:
+        request.content.decode("utf-8")
+        assert request.headers["content-type"] == "application/json"
+    assert parse_json(posts[0].content)["finding_id"] == "0:probe" + chr(0xD800)
+    assert (BACKSLASH + "ud800").encode() in posts[0].content
+    assert ("가" * 501).encode("utf-8") in posts[-1].content  # 마지막(501자 글) — 한글은 escape 없이 UTF-8 그대로
+
+
+@pytest.mark.parametrize(
+    "new_key",
+    ["한" * 11000, "probe" + chr(0xD800), "probe" + chr(0xDC00) + "한" * 100],
+    ids=["korean_11000", "lone_high_surrogate", "lone_low_surrogate_korean"],
+)
+def test_real_app_body_limit_accepts_long_korean_and_surrogate_ids(script: Any, capsys: Any, new_key: str) -> None:
+    # 실제 FastAPI 앱의 본문 읽기(65,536 바이트 한도)를 지난다 — 한글 11,000자 id 는 첫 요청 약 33KB 로 한도 안
+    api = _api_with_first_key(new_key)
+    code, posts, built = _run_through_real_app(script, api)
+    out = capsys.readouterr().out
+    assert "[실패]" not in out, out[-3000:]
+    assert f"검토 동작 확인: {REVIEW_STEPS}/{REVIEW_STEPS} 통과 · 쓴 동작 {REVIEW_WRITES}건 — 기대대로" in out
+    assert code == 0
+    assert built == []
+    assert len(posts) == 19 and 413 not in [p["status"] for p in posts]
+    assert max(p["bytes"] for p in posts) < 65_536
+    if new_key.startswith("한"):
+        assert posts[0]["bytes"] > 33_000  # UTF-8 그대로(한 글자 3바이트) — 예전 ASCII escape 면 약 66KB 로 413
+    assert api.store.reviews[ANALYSIS_ID]["version"] == REVIEW_WRITES
+
+
+def test_real_app_body_over_limit_is_still_413(script: Any, capsys: Any) -> None:
+    # 실제 본문이 65,536 바이트를 넘는 id(한글 23,000자 ≈ 69KB)는 서버가 413 — 검증기는 실패(종료 코드 1)로 끝난다
+    api = _api_with_first_key("한" * 23000)
+    code, posts, built = _run_through_real_app(script, api)
+    out = capsys.readouterr().out
+    assert code == 1
+    assert built == []
+    over = [p for p in posts if p["bytes"] > 65_536]
+    assert over and all(p["status"] == 413 for p in over)
+    assert all(p["status"] != 413 for p in posts if p["bytes"] <= 65_536)
+    assert "HTTP 413 요청 본문이 너무 큽니다." in out
+    assert "— 기대와 다름" in out
+    assert api.store.reviews.get(ANALYSIS_ID, {}).get("version", 0) < REVIEW_WRITES

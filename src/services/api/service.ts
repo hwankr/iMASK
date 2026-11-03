@@ -12,7 +12,16 @@
    - list: 이 탭에서 만든 id 들을 조회해 요청 시각 최신순(id 가 없으면 요청 없이 []).
      404 는 목록에서 빼고 건너뛴다. 그 밖 오류는 던진다.
    - 같은 id 를 동시에 조회하면(헤더 숫자 + 목록 화면 + 상세 폴링) 요청 하나를 나눠 쓴다.
-   - 검토·내보내기·다시 분석은 아직 백엔드가 없다 — '실제 분석에서는 아직 지원하지 않는 기능입니다.' 로 거절한다.
+   - 검토 동작(setStatus · confirmMany · markFalsePositive · restore · reclassify · saveFindingMemo · saveMemo ·
+     completeReview · reopenReview) = POST /analyses/{id}/review-actions 하나. 분석을 조회해(위와 같이 나눠 씀)
+     화면 번호(Finding.id, D1-01)를 계약 id(Finding.live.id)로 바꿔 보낸다 — 없는 분석 · 없는 번호면 요청 없이 거절.
+     처리자(actor)는 CONFIG.user.name, 빠진 사유 · 메모는 ''. 성공하면 바뀌었든 아니든 그 분석의 진행 중 조회를
+     나눠 쓰지 않게 떼고(저장 전 값을 주지 않게) 구독자에게 한 번 알린다(데모 write 와 같다 — 훅이 저장 뒤 값을
+     새로 불러온다). 실패하면 떼지도 알리지도 않고 그 오류(ApiError)로 거절한다.
+     reclassify 는 응답의 changed 를 돌려준다. confirmMany 는 빈 목록이면 요청 · 알림 없이 끝낸다.
+   - pending = 조회한 분석의 미확인(open) 탐지 항목(검토사항 · 연결은 아직 없어 빈 목록). 없는 분석이면 빈 값.
+   - 검토사항(resolveItem · reopenItem) · 연결 판단(decideLink) · 내보내기(buildExport · logExport) · 다시 분석은
+     아직 백엔드가 없다 — '실제 분석에서는 아직 지원하지 않는 기능입니다.' 로 거절한다.
      다만 retry 는 거절하지 않고 { ok: false, message: 그 문구 } 로 끝낸다 — 목록 화면(그대로 둠)의 '재시도'가
      거절을 받지 않아 처리되지 않은 오류가 되므로, 실패 결과로 돌려주면 기존 토스트가 이유를 보여 준다.
    - 분석 완료 이벤트(ServiceEvent 'done')는 보내지 않는다(탐지 0건 완료 토스트가 오해를 준다).
@@ -25,10 +34,11 @@
      ApiError(not_found, 백엔드 detail)로 거절한다 — 화면이 문구를 보인다.
    ========================================================================== */
 
+import { CONFIG } from '@/config/app';
 import type { AnalysisService, LiveExtras, LiveFile, Pending, RequestAnalysisInput, ServiceEvent } from '../analysis-service';
 import type { Analysis, UploadFile } from '../types';
 import { browserSessionStorage, type KeyValueStorage } from './browser-storage';
-import { ApiError, createApiClient, isApiError, type AnalysisOut, type ApiClient } from './client';
+import { ApiError, createApiClient, isApiError, type AnalysisOut, type ApiClient, type ReviewActionIn, type ReviewActionOut } from './client';
 import { downloadFile, fileInfoError } from './file-download';
 import { toAnalysis } from './mapping';
 import { addSessionId, readSessionIds, removeSessionIds } from './session-list';
@@ -38,6 +48,10 @@ export const MSG_ONE_FILE = '실제 분석에는 파일 1개를 올려 주세요
 export const MSG_UNSUPPORTED_FORMAT = 'PDF·PNG·JPEG 파일만 분석할 수 있습니다.';
 export const MSG_UPLOAD_FAILED = '파일을 올리지 못했습니다. 잠시 후 새 분석으로 다시 시도해 주세요.';
 export const MSG_UNSUPPORTED = '실제 분석에서는 아직 지원하지 않는 기능입니다.';
+/** 검토 동작 — 조회한 분석이 없을 때(요청하지 않는다) */
+export const MSG_NO_ANALYSIS = '분석 건을 찾을 수 없습니다.';
+/** 검토 동작 — 화면 번호의 탐지 항목이 지금 분석에 없을 때(요청하지 않는다) */
+export const MSG_NO_FINDING = '탐지 항목을 찾을 수 없습니다.';
 
 /** 목록을 조회할 때 동시에 보내는 요청 수 */
 const LIST_CONCURRENCY = 4;
@@ -88,6 +102,17 @@ const EMPTY_PENDING = (): Pending => ({ openF: [], openI: [], openL: [], any: fa
 
 const unsupported = (): Promise<never> => Promise.reject(new Error(MSG_UNSUPPORTED));
 
+/** 검토 동작 본문 — 종류별 필드(처리자는 보낼 때 붙인다) */
+type WithoutActor<T> = T extends unknown ? Omit<T, 'actor'> : never;
+type ReviewBody = WithoutActor<ReviewActionIn>;
+
+/** 화면 번호 → 계약 id(그 분석에 없으면 null) */
+function contractId(a: Analysis, fid: string): string | null {
+  const f = a.findings.find((x) => x.id === fid);
+  const id = f?.live?.id;
+  return typeof id === 'string' ? id : null;
+}
+
 /** 요청할 파일 하나 — 정확히 1개이고 브라우저 File 이 있어야 한다 */
 function pickFile(files: readonly UploadFile[] | undefined): File {
   const list = files ?? [];
@@ -137,6 +162,33 @@ export function createApiService(deps: ApiServiceDeps = {}): ApiService {
     }
   };
 
+  /** 검토 동작에 쓸 분석 — 없으면(404) 요청 없이 거절, 그 밖 조회 오류는 그대로 */
+  const reviewTarget = async (id: string): Promise<Analysis> => {
+    const a = await getOrNull(id);
+    if (!a) throw new Error(MSG_NO_ANALYSIS);
+    return a;
+  };
+
+  /** 화면 번호 하나 → 계약 id. 없으면 요청 없이 거절 */
+  const findingTarget = async (id: string, fid: string): Promise<string> => {
+    const key = contractId(await reviewTarget(id), fid);
+    if (key === null) throw new Error(MSG_NO_FINDING);
+    return key;
+  };
+
+  /**
+   * 검토 동작 하나를 보내고, 성공하면(바뀌었든 아니든) 한 번 알린다. 실패하면 알리지 않고 그 오류로 거절.
+   * 알리기 전에 그 분석의 진행 중 조회를 나눠 쓰지 않게 뗀다 — 저장 전에 시작한 GET 은 저장 전 값을 줄 수 있으므로,
+   * 알림을 받은 구독자들은 저장 뒤에 새 GET 을 시작하고 그 새 GET 끼리 다시 나눠 쓴다
+   * (떼어 낸 옛 GET 은 끝날 때 fetchOne 의 같은 Promise 검사로 새 항목을 지우지 않는다).
+   */
+  const sendReview = async (id: string, body: ReviewBody): Promise<ReviewActionOut> => {
+    const out = await client.reviewAction(id, { ...body, actor: CONFIG.user.name } as ReviewActionIn);
+    inflight.delete(id);
+    emit();
+    return out;
+  };
+
   /** /file 의 mime_type 이 비었을 때 — 분석의 파일 형식(documents 첫 행), 그것도 없으면 파일 이름의 확장자 */
   const fallbackMime = async (id: string, filename: string): Promise<string> => {
     try {
@@ -174,7 +226,12 @@ export function createApiService(deps: ApiServiceDeps = {}): ApiService {
 
     get: (id) => getOrNull(id),
 
-    pending: async () => EMPTY_PENDING(),
+    async pending(id) {
+      const a = await getOrNull(id);
+      if (!a) return EMPTY_PENDING();
+      const openF = a.findings.filter((f) => f.status === 'open');
+      return { openF, openI: [], openL: [], any: openF.length > 0 };
+    },
 
     sampleFiles: async () => [],
 
@@ -217,20 +274,70 @@ export function createApiService(deps: ApiServiceDeps = {}): ApiService {
       return id;
     },
 
+    /* ---------- 검토 동작(POST …/review-actions) ---------- */
+
+    async setStatus(id, fid, status, reason) {
+      const findingId = await findingTarget(id, fid);
+      await sendReview(id, { type: 'set_status', finding_id: findingId, status, reason: reason ?? '' });
+    },
+
+    async confirmMany(id, fids) {
+      if (!fids.length) return;
+      const a = await reviewTarget(id);
+      const ids = new Set<string>(); // 넣은 순서대로 · 중복 없이(백엔드는 중복을 400 으로 거절)
+      for (const fid of fids) {
+        const key = contractId(a, fid);
+        if (key === null) throw new Error(MSG_NO_FINDING);
+        ids.add(key);
+      }
+      await sendReview(id, { type: 'confirm_many', finding_ids: [...ids] });
+    },
+
+    async markFalsePositive(id, fid, reasonType, note) {
+      const findingId = await findingTarget(id, fid);
+      await sendReview(id, { type: 'mark_false_positive', finding_id: findingId, reason_type: reasonType, note });
+    },
+
+    async restore(id, fid, note) {
+      const findingId = await findingTarget(id, fid);
+      await sendReview(id, { type: 'restore', finding_id: findingId, note: note ?? '' });
+    },
+
+    async reclassify(id, fid, patch, reason) {
+      const findingId = await findingTarget(id, fid);
+      const body: Extract<ReviewBody, { type: 'reclassify' }> = { type: 'reclassify', finding_id: findingId, reason };
+      if (patch.cat !== undefined) body.category = patch.cat;
+      if (patch.subject !== undefined) body.subject = patch.subject;
+      if (patch.exposure !== undefined) body.exposure = patch.exposure;
+      const out = await sendReview(id, body);
+      return isObj(out) && out.changed === true;
+    },
+
+    async saveFindingMemo(id, fid, text) {
+      const findingId = await findingTarget(id, fid);
+      await sendReview(id, { type: 'save_finding_memo', finding_id: findingId, text });
+    },
+
+    async saveMemo(id, text) {
+      await reviewTarget(id);
+      await sendReview(id, { type: 'save_memo', text });
+    },
+
+    async completeReview(id, note) {
+      await reviewTarget(id);
+      await sendReview(id, { type: 'complete_review', note });
+    },
+
+    async reopenReview(id, reason) {
+      await reviewTarget(id);
+      await sendReview(id, { type: 'reopen_review', reason });
+    },
+
     /* ---------- 아직 백엔드가 없는 기능 ---------- */
     retry: async () => ({ ok: false, message: MSG_UNSUPPORTED }),
-    setStatus: unsupported,
-    confirmMany: unsupported,
-    markFalsePositive: unsupported,
-    restore: unsupported,
-    reclassify: unsupported,
-    saveFindingMemo: unsupported,
     resolveItem: unsupported,
     reopenItem: unsupported,
     decideLink: unsupported,
-    saveMemo: unsupported,
-    completeReview: unsupported,
-    reopenReview: unsupported,
     buildExport: unsupported,
     logExport: unsupported,
 

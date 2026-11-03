@@ -6,7 +6,12 @@
      네트워크 오류·시간 초과도 한국어 문구의 ApiError(code 'network', status 0)다.
    - 시간 제한(기본 60초)은 응답 헤더가 아니라 본문을 다 읽을 때까지 걸린다.
    - getFile 이 주는 서명 다운로드 주소는 권한이다 — 이 파일도, 받는 쪽(file-download.ts)도 기록·출력하지 않는다.
+   - reviewAction = 검토 동작 하나(POST /analyses/{id}/review-actions, JSON 본문 — 항목 id 는 어떤 문자든 올 수 있어
+     주소가 아니라 본문에 담는다). 시간 제한 · 오류 모양은 다른 요청과 같다(413 은 bad_request).
+   - AnalysisOut.review(검토 기록 블록)는 바깥 값이라 unknown 으로 두고 매핑(mapping.ts)이 방어적으로 읽는다.
    ========================================================================== */
+
+import type { Exposure, FpReason, InfoCategory, InfoSubject } from '@/display/rules';
 
 /** 오류 종류 */
 export type ApiErrorCode = 'not_found' | 'conflict' | 'bad_request' | 'server' | 'network';
@@ -100,6 +105,44 @@ export interface AnalysisOut {
   upstage_status: string | null;
   /** GET 응답에서만 — 이번 조회에서 Upstage 확인이 실패했을 때 */
   poll_error: string | null;
+  /**
+   * 검토 기록(상태 · 메모 · 항목별 값 · 이력) — 검토할 수 있는 분석이면 객체, 그 밖이거나 읽지 못했으면 null.
+   * 옛 백엔드는 키가 없다. 모양을 믿지 않는다(mapping.ts 가 목록 밖 · 타입 틀린 값을 버린다).
+   */
+  review?: unknown;
+}
+
+/** 검토 동작 요청 공통 — actor = 처리자 이름(화면 CONFIG.user.name) */
+interface ReviewActionBase {
+  actor: string;
+}
+
+/**
+ * POST /analyses/{id}/review-actions 본문 — 종류(type)마다 정확히 이 필드만(모두 필수, reclassify 의 분류 셋만 선택).
+ * finding_id(s) = 계약 id(Finding.live.id — 화면 번호 D1-01 이 아니다).
+ */
+export type ReviewActionIn =
+  | (ReviewActionBase & { type: 'set_status'; finding_id: string; status: 'open' | 'confirmed'; reason: string })
+  | (ReviewActionBase & { type: 'confirm_many'; finding_ids: string[] })
+  | (ReviewActionBase & { type: 'mark_false_positive'; finding_id: string; reason_type: FpReason; note: string })
+  | (ReviewActionBase & { type: 'restore'; finding_id: string; note: string })
+  | (ReviewActionBase & {
+      type: 'reclassify';
+      finding_id: string;
+      category?: InfoCategory | null;
+      subject?: InfoSubject | null;
+      exposure?: Exposure | null;
+      reason: string;
+    })
+  | (ReviewActionBase & { type: 'save_finding_memo'; finding_id: string; text: string })
+  | (ReviewActionBase & { type: 'save_memo'; text: string })
+  | (ReviewActionBase & { type: 'complete_review'; note: string })
+  | (ReviewActionBase & { type: 'reopen_review'; reason: string });
+
+/** 검토 동작 응답 — 갱신된 분석(조회와 같은 모양) + 실제로 바뀌었는지(분류 수정에서 바뀐 값이 없으면 false) */
+export interface ReviewActionOut {
+  analysis: AnalysisOut;
+  changed: boolean;
 }
 
 /** 서명 업로드 정보 — token·signed_url 은 기록·출력하지 않는다 */
@@ -160,6 +203,8 @@ export interface ApiClient {
   getAnalysis(id: string, options?: GetAnalysisOptions): Promise<AnalysisOut>;
   /** GET /api/py/analyses/{id}/file → 200 서명 다운로드 주소 */
   getFile(id: string): Promise<FileOut>;
+  /** POST /api/py/analyses/{id}/review-actions → 200 갱신된 분석 + changed */
+  reviewAction(id: string, action: ReviewActionIn): Promise<ReviewActionOut>;
 }
 
 export const DEFAULT_BASE_URL = '/api/py';
@@ -245,5 +290,6 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     startAnalysis: (id) => request<AnalysisOut>('POST', idPath(id) + '/start'),
     getAnalysis: (id, options) => request<AnalysisOut>('GET', idPath(id) + (options?.includeStages ? '?include=stages' : '')),
     getFile: (id) => request<FileOut>('GET', idPath(id) + '/file'),
+    reviewAction: (id, action) => request<ReviewActionOut>('POST', idPath(id) + '/review-actions', action),
   };
 }

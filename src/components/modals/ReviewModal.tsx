@@ -6,12 +6,15 @@
    - 저장: 입력 검사(오류 문구는 붉은 글자, 입력칸은 붉은 바탕) → 서비스 호출(그동안 저장 버튼 돌림 표시)
      → 모달 닫기 → 토스트. 화면은 서비스 변경 알림으로 새 데이터를 받아 다시 그려진다.
      검토 완료 토스트의 '보고서 보기'는 지금 기준 경로(useRouteBase — `/demo` 아래면 /demo/…)의 보고서로 간다.
+     실제 분석은 보고서가 아직 없어 붙이지 않는다(reviewModalModel 의 hasReport → openReport false).
+   - 검토 완료 모달은 남은 항목을 받은 뒤 연다. 그 조회가 처음부터 실패하면 열지 않고 SAVE_FAILED 를 오류 토스트로
+     한 번 보인 뒤 모달 자리를 비운다(pendingGate) — 다시 누르면 새로 조회한다.
    - 사유 · 메모 입력칸에 처음 포커스(원본 autoFocus), Esc · 닫기 · 배경 누름으로 닫힘, 닫히면 연 버튼으로 포커스.
    - 휴대폰(< 768px)에서는 아래에서 올라오는 시트(공통 Modal).
    ========================================================================== */
 
 import { useRouter } from 'next/navigation';
-import { useId, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Dropdown, Icon, Modal, RadioList, RiskBadge, TextField, useToast, type ModalButton } from '@/components/ui';
 import { reportHref as reportHrefFor } from '@/lib/routes';
 import type { Pending } from '@/services/analysis-service';
@@ -24,6 +27,7 @@ import {
   NOTE_MAX,
   SAVE_FAILED,
   applyReviewModal,
+  pendingGate,
   reviewModalError,
   reviewModalModel,
   type EditFieldModel,
@@ -49,10 +53,23 @@ export function ReviewModal({ analysis, ui }: ReviewModalProps) {
   return <ReviewModalView analysis={analysis} ui={ui} modal={m} pending={null} />;
 }
 
-/** 검토 완료 — 남은 항목(서비스 pending)을 받은 뒤 연다 */
+/**
+ * 검토 완료 — 남은 항목(서비스 pending)을 받은 뒤 연다. 첫 조회가 실패하면 열지 않고 SAVE_FAILED 오류 토스트를
+ * 한 번 보인 뒤 모달 자리를 비운다(다음 '검토 완료' 클릭이 이 컴포넌트를 새로 열어 다시 조회한다).
+ */
 function CompleteReviewModal({ analysis, ui, modal }: ReviewModalProps & { modal: DetailModal }) {
-  const { data } = usePending(analysis.id);
-  if (!data) return null;
+  const { data, error } = usePending(analysis.id);
+  const toast = useToast();
+  const gate = pendingGate(data, error);
+  const reported = useRef(false);
+  const { closeModal } = ui;
+  useEffect(() => {
+    if (gate !== 'fail' || reported.current) return;
+    reported.current = true;
+    toast(SAVE_FAILED, { kind: 'error' });
+    closeModal();
+  }, [gate, toast, closeModal]);
+  if (gate !== 'open' || !data) return null;
   return <ReviewModalView analysis={analysis} ui={ui} modal={modal} pending={data} />;
 }
 

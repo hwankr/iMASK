@@ -140,6 +140,7 @@ describe('requestAnalysis', () => {
       },
       getAnalysis: async () => analysisOut(),
       getFile: async () => ({ url: '', mime_type: '', filename: '' }),
+      reviewAction: async () => ({ analysis: analysisOut(), changed: true }),
     };
     const service = createApiService({ client: base, upload: async () => {}, storage });
     const err = await service.requestAnalysis({ name: 'x', files: [pdfUpload()] }).catch((e: unknown) => e);
@@ -238,9 +239,8 @@ describe('list', () => {
 });
 
 describe('그 밖의 메서드', () => {
-  it('pending 은 빈 값, sampleFiles 는 []', async () => {
+  it('sampleFiles 는 []', async () => {
     const { service } = setup();
-    expect(await service.pending(ID)).toEqual({ openF: [], openI: [], openL: [], any: false });
     expect(await service.sampleFiles()).toEqual([]);
   });
 
@@ -251,26 +251,17 @@ describe('그 밖의 메서드', () => {
     expect(seen).toHaveLength(0);
   });
 
-  it('검토 · 내보내기는 지원하지 않는다고 거절', async () => {
+  it('검토사항 · 연결 판단 · 내보내기는 지원하지 않는다고 거절(요청 없음)', async () => {
     const { service, seen } = setup();
     const calls: Promise<unknown>[] = [
-      service.setStatus(ID, 'f', 'confirmed'),
-      service.confirmMany(ID, ['f']),
-      service.markFalsePositive(ID, 'f', '기타', ''),
-      service.restore(ID, 'f'),
-      service.reclassify(ID, 'f', {}, ''),
-      service.saveFindingMemo(ID, 'f', ''),
       service.resolveItem(ID, 'r', ''),
       service.reopenItem(ID, 'r'),
       service.decideLink(ID, 'l', 'linked', ''),
-      service.saveMemo(ID, ''),
-      service.completeReview(ID, ''),
-      service.reopenReview(ID, ''),
       service.buildExport(ID, 'csv'),
       service.logExport(ID, { format: 'csv', name: '', mime: '', text: '', size: 0, preview: '' }, 'saved'),
     ];
     const results = await Promise.allSettled(calls);
-    expect(results).toHaveLength(14);
+    expect(results).toHaveLength(5);
     for (const r of results) {
       expect(r.status).toBe('rejected');
       expect((r as PromiseRejectedResult).reason.message).toBe(MSG_UNSUPPORTED);

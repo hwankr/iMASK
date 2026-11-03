@@ -7,8 +7,11 @@
    - 화면 색은 되도록 상태 표시(flag)로 넘기고 CSS 모듈이 토큰으로 칠한다. 원문 하이라이트처럼
      항목마다 색이 바뀌는 곳만 ② 의 CSS 변수 값(var(--hi-soft) 등)을 넘긴다.
    - 행동(누름)은 담지 않는다. 화면 조각이 useDetailUi(선택·이동)와 DetailActions(T7 검토 동작)를 부른다.
-   - 실제 분석(Analysis.raw 가 있음 — API 서비스만 채운다)은 읽기 전용(readOnly)이다: 검토 동작 버튼을 막고 안내를 보이며,
-     원문은 블록 대신 원본 파일 쪽(live — 파일 기준 쪽 · 위치 상자)을 그린다. 데모 분석에는 raw 가 없어 값이 전과 같다.
+   - 실제 분석(Analysis.raw 가 있음 — API 서비스만 채운다, DetailFacts.live)도 데모처럼 검토 동작을 쓴다. 다른 점:
+     결과 탭은 탐지 항목 · 분석 요약(검토사항 · 연결은 아직 없음), 검토 완료 띠에 '보고서 보기'가 없고(보고서가 아직 없음),
+     원문은 블록 대신 원본 파일 쪽(live — 파일 기준 쪽 · 위치 상자)을 그린다.
+     검토 기록을 불러오지 못한 실제 분석(raw.reviewable false)은 readOnly — 검토 동작 버튼만 막는다
+     (검토 완료 버튼 title 만 '검토 기록을 불러오지 못했습니다'). 데모 분석에는 raw 가 없어 값이 전과 같다.
    ========================================================================== */
 
 import {
@@ -31,8 +34,8 @@ import type { Analysis, AnalysisDoc, DocLink, Finding, PageBlock, ReviewItem, Se
 import { DETAIL_TABS, LIVE_DETAIL_TABS, focusAnchors, focusKey, passesFilter, type DetailFocus, type DetailTab, type DetailUiState, type FindingFilter, type MobileTab } from './detailState';
 import { FILE_FAILED, filePageOf, guideText, liveDocMeta, pageMissingText } from './liveViewerModel';
 
-/** 실제 분석에서 막아 둔 검토 동작의 안내(서비스가 거절하는 문구와 같다) */
-export const READ_ONLY_TEXT = '실제 분석에서는 아직 지원하지 않는 기능입니다.';
+/** 검토 기록을 불러오지 못한 실제 분석 — 막힌 '검토 완료' 버튼의 title */
+export const REVIEW_UNAVAILABLE_TITLE = '검토 기록을 불러오지 못했습니다';
 
 /* ---------- 원문 위치 모으기 ---------- */
 
@@ -97,7 +100,9 @@ export interface DetailFacts {
   pageTotal: number;
   nFailDocs: number;
   nDoneDocs: number;
-  /** 실제 분석 — 읽기 전용(검토 동작을 막는다) */
+  /** 실제 분석(Analysis.raw 가 있음) — 결과 탭 · 검토 완료 띠가 데모와 다르다 */
+  live: boolean;
+  /** 실제 분석인데 검토 기록을 불러오지 못함 — 검토 동작 버튼을 막는다 */
   readOnly: boolean;
 }
 
@@ -116,7 +121,8 @@ export function detailFacts(a: Analysis, s: Pick<DetailUiState, 'docId'>): Detai
     pageTotal: docs.reduce((n, d) => n + docPageCount(d), 0),
     nFailDocs: docs.filter((d) => d.status === 'failed').length,
     nDoneDocs: docs.filter((d) => d.status === 'done').length,
-    readOnly: !!a.raw,
+    live: !!a.raw,
+    readOnly: !!a.raw && !a.raw.reviewable,
   };
 }
 
@@ -143,7 +149,7 @@ export interface HeaderModel {
   /** '결과 보고서' 를 열 수 없음(결과를 기다리는 중) */
   noReport: boolean;
   reportTitle: string;
-  /** 실제 분석 — 읽기 전용(검토 완료 · 다시 열기를 막고 안내를 보인다) */
+  /** 실제 분석인데 검토 기록을 불러오지 못함 — 검토 완료를 막는다 */
   readOnly: boolean;
 }
 
@@ -163,7 +169,7 @@ export function headerModel(a: Analysis, x: DetailFacts): HeaderModel {
     showComplete: !x.locked,
     showReopen: x.locked,
     noComplete: (x.notReady && !a.retrying) || x.readOnly,
-    completeTitle: x.readOnly ? READ_ONLY_TEXT : x.notReady ? '분석이 끝난 뒤 검토를 완료할 수 있습니다' : '검토를 마치고 결과를 기록합니다',
+    completeTitle: x.readOnly ? REVIEW_UNAVAILABLE_TITLE : x.notReady ? '분석이 끝난 뒤 검토를 완료할 수 있습니다' : '검토를 마치고 결과를 기록합니다',
     noReport: x.waiting,
     reportTitle: x.waiting ? '분석이 끝나면 보고서를 볼 수 있습니다' : '검토 결과 보고서를 엽니다',
     readOnly: x.readOnly,
@@ -220,15 +226,8 @@ export function bannerModel(a: Analysis, x: DetailFacts): BannerModel | null {
       icon: 'dg-i-check-badge',
       title: '검토 완료 · ' + a.reviewer + ' · ' + fmtDT(a.reviewedAt),
       text: '위험등급과 최초 탐지 결과는 검토 완료 후에도 그대로 유지됩니다.',
-      actions: [{ key: 'openReport', label: '보고서 보기', disabled: false }],
-    };
-  if (x.readOnly)
-    return {
-      variant: 'info',
-      icon: 'dg-i-info',
-      title: '읽기 전용 화면입니다.',
-      text: '탐지 내용 확인 · 오탐 표시 · 분류 수정 · 메모 · 검토 완료는 ' + READ_ONLY_TEXT,
-      actions: [],
+      // 실제 분석은 보고서가 아직 없다
+      actions: x.live ? [] : [{ key: 'openReport', label: '보고서 보기', disabled: false }],
     };
   return null;
 }
@@ -984,7 +983,7 @@ export interface ResultsModel {
   memo: string;
   memoPreview: string;
   memoBtn: string;
-  /** 실제 분석 — 읽기 전용(검토 동작 · 메모를 막고 안내를 보인다) */
+  /** 실제 분석인데 검토 기록을 불러오지 못함 — 검토 동작 · 메모 버튼을 막는다 */
   readOnly: boolean;
 }
 
@@ -1009,7 +1008,7 @@ export function resultsModel(a: Analysis, s: DetailUiState, x: DetailFacts): Res
   const tabLabel: Record<DetailTab, string> = { findings: '탐지 항목', review: '검토 필요', links: '문서 간 연결', summary: '분석 요약' };
   const tabCount: Record<DetailTab, number | undefined> = { findings: fAll.length, review: x.openItems, links: a.links.length, summary: undefined };
   // 실제 분석은 검토사항 · 연결이 아직 없어 그 탭을 빼고 '분석 요약'(위험도 판정 · 다음 단계 · 결과 요약 · 단계별 JSON)을 둔다
-  const tabList = x.readOnly ? LIVE_DETAIL_TABS : DETAIL_TABS;
+  const tabList = x.live ? LIVE_DETAIL_TABS : DETAIL_TABS;
 
   return {
     hasTabs: x.hasResults,
@@ -1036,7 +1035,7 @@ export function resultsModel(a: Analysis, s: DetailUiState, x: DetailFacts): Res
     links: a.links.map((l) => linkModel(a, l, focus)),
     waiting: waitingModel(a, x),
     memo: a.memo,
-    memoPreview: x.readOnly ? READ_ONLY_TEXT : a.memo ? a.memo.replace(/\n/g, ' ') : '아직 작성한 메모가 없습니다.',
+    memoPreview: a.memo ? a.memo.replace(/\n/g, ' ') : '아직 작성한 메모가 없습니다.',
     memoBtn: a.memo ? '수정' : '작성',
     readOnly: x.readOnly,
   };

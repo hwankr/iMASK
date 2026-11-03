@@ -4,7 +4,9 @@ import { createService } from '@/services';
 import type { AnalysisService } from '@/services/analysis-service';
 import type { Analysis } from '@/services/types';
 import type { DetailModal } from '@/components/detail/detailState';
-import { applyReviewModal, completeModel, reviewModalError, reviewModalModel } from './reviewModalModel';
+import { toAnalysis } from '@/services/api/mapping';
+import { analysisOut, contractResult } from '@/services/api/testing';
+import { applyReviewModal, completeModel, hasReport, pendingGate, reviewModalError, reviewModalModel } from './reviewModalModel';
 
 async function get(svc: AnalysisService, id: string): Promise<Analysis> {
   const a = await svc.get(id);
@@ -205,5 +207,51 @@ describe('저장 — 서비스 호출과 토스트 문구(원본 그대로)', ()
 
     expect(await run({ type: 'reopen', note: '추가 서류', error: '' })).toEqual({ text: '검토를 다시 열었습니다 · 검토 상태가 ‘검토 필요’로 바뀌었습니다.' });
     expect((await get(svc, 'A1')).review).toBe('needed');
+  });
+});
+
+describe("검토 완료 토스트의 '보고서 보기' — 보고서가 있는 분석(데모)만", () => {
+  const liveDone = () =>
+    toAnalysis(
+      analysisOut({
+        status: 'done',
+        result: contractResult(),
+        review: { status: 'needed', memo: '', memo_at: null, reviewer: '', reviewed_at: null, completion_note: '', findings: {}, history: [], version: 0 },
+      }),
+    );
+
+  it('hasReport — 데모 true · 실제 분석 false', async () => {
+    expect(hasReport(await get(createService(), 'A1'))).toBe(true);
+    expect(hasReport(liveDone())).toBe(false);
+  });
+
+  it("실제 분석의 검토 완료 — 같은 문구, '보고서 보기' 없음(openReport false)", async () => {
+    const a = liveDone();
+    const calls: string[] = [];
+    const svc = { completeReview: async (id: string, note: string) => void calls.push(id + '|' + note) } as unknown as AnalysisService;
+    const done = await applyReviewModal(svc, a, { type: 'complete', note: '  남은 이유 ', error: '' });
+    expect(done).toEqual({ text: '검토를 완료했습니다 · 목록의 검토 상태와 요약 숫자에 반영했습니다.', openReport: false });
+    expect(calls).toEqual([a.id + '|남은 이유']);
+  });
+});
+
+describe('검토 완료 모달 열기 — 남은 항목 조회 결과(pendingGate)', () => {
+  const pending = { openF: [], openI: [], openL: [], any: false };
+
+  it('받기 전 · 오류 없음 → 기다림(모달 없음)', () => {
+    expect(pendingGate(undefined, undefined)).toBe('wait');
+  });
+
+  it('받음 → 열기(남은 항목이 없어도)', () => {
+    expect(pendingGate(pending, undefined)).toBe('open');
+  });
+
+  it('첫 조회 실패(값 없음 + 오류) → fail: 빈 pending 으로 보지 않는다(완료를 허용하지 않음)', () => {
+    expect(pendingGate(undefined, new Error('서버 오류'))).toBe('fail');
+    expect(pendingGate(undefined, 'x')).toBe('fail');
+  });
+
+  it('받은 뒤 다시 불러오다 실패(전 값 유지) → 그대로 열어 둔다', () => {
+    expect(pendingGate(pending, new Error('서버 오류'))).toBe('open');
   });
 });

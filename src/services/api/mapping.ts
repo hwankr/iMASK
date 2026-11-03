@@ -8,20 +8,26 @@
    - 완료 + 공통 계약 결과(result.documents 에 유효한 서류 1개 이상 + result.findings 배열)면 detailReady:
      docs = 분류된 서류, findings = 계약 탐지 항목(contract.ts), riskReasons·recs = overall 의 Markdown 줄.
      그 밖(대기·분석 중·실패·옛 형식·서류 0개)은 전과 같이 docs = 올린 파일 행, findings = [].
-   - 검토사항·연결·이력은 아직 없다(빈 목록). 검토 상태는 늘 'none'.
-   - 백엔드가 준 원래 값은 raw 에 둔다(결과 JSON · 올린 파일 · detailReady · overall · 오류 · 작업 번호 · 조회 상태 · 원래 시각).
+   - 검토 기록(out.review — 검토할 수 있는 분석이면 객체, 아니면 null)은 detailReady 일 때만 읽는다:
+     검토 상태 = review.status 가 'done' 이면 done, 그 밖 needed. 검토 메모 · 메모 시각 · 검토자 · 검토 완료 시각 · 완료 메모 ·
+     이력(kind 가 HKIND 키인 줄만, 시각은 서울)을 분석에, 항목별 값(review.findings)을 탐지 항목에 덧씌운다(contract.ts).
+     detailReady 인데 review 가 객체가 아니면(검토 기록을 읽지 못함) 검토 상태 'none' · 빈 값이고 raw.reviewable false.
+     그 밖(대기·분석 중·실패·옛 형식)은 review 가 있어도 'none' · 빈 이력.
+   - 검토사항·연결은 아직 없다(빈 목록).
+   - 백엔드가 준 원래 값은 raw 에 둔다(결과 JSON · 올린 파일 · detailReady · reviewable · overall · 오류 · 작업 번호 · 조회 상태 · 원래 시각).
    ========================================================================== */
 
-import { ASTATUS, type AnalysisStatus, type RiskLevel } from '@/display/rules';
+import { ASTATUS, HKIND, type AnalysisStatus, type HistoryKind, type ReviewStatus, type RiskLevel } from '@/display/rules';
 import { pad2 } from '@/lib/format';
-import type { Analysis, AnalysisDoc, DocStatus, RawAnalysisInfo } from '../types';
+import type { Analysis, AnalysisDoc, DocStatus, HistoryEntry, RawAnalysisInfo } from '../types';
 import type { AnalysisOut, DocumentOut } from './client';
-import { isDetailReady, markdownLines, readDocSources, readFile, readOverall, toLiveDocs, toLiveFindings } from './contract';
+import { isDetailReady, markdownLines, overlayFindingReviews, readDocSources, readFile, readOverall, toLiveDocs, toLiveFindings } from './contract';
 
 /** 서울 시각 = UTC + 9시간 */
 const SEOUL_OFFSET_MS = 9 * 60 * 60 * 1000;
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
 /**
  * ISO 8601 → 밀리초. 소수 초는 3자리까지만 읽는다(Postgres 는 6자리를 준다). 읽지 못하면 NaN.
@@ -119,6 +125,58 @@ export function toDoc(doc: DocumentOut, status: AnalysisStatus, error: string): 
   };
 }
 
+/* ---------- 검토 기록 ---------- */
+
+/** 분석 건에 덧씌우는 검토 기록 */
+export interface ReviewInfo {
+  review: ReviewStatus;
+  memo: string;
+  memoAt: string;
+  reviewer: string;
+  reviewedAt: string;
+  completionNote: string;
+  history: HistoryEntry[];
+}
+
+/** 검토 기록이 없을 때(검토할 수 없는 분석 · 기록을 읽지 못함) */
+const NO_REVIEW: ReviewInfo = { review: 'none', memo: '', memoAt: '', reviewer: '', reviewedAt: '', completionNote: '', history: [] };
+
+/**
+ * 이력 줄들 — kind 가 HKIND 키(자기 속성)인 객체만 받은 순서대로. 시각은 서울(못 읽으면 ''), 글이 아니면 '',
+ * id 가 빈 값 · 글이 아니면 'H<받은 배열 안 순번(1부터)>'. 배열이 아니면 [].
+ */
+export function readHistory(value: unknown): HistoryEntry[] {
+  if (!Array.isArray(value)) return [];
+  const out: HistoryEntry[] = [];
+  value.forEach((row: unknown, i) => {
+    if (!isObj(row) || typeof row.kind !== 'string' || !Object.prototype.hasOwnProperty.call(HKIND, row.kind)) return;
+    out.push({
+      id: str(row.id) || 'H' + (i + 1),
+      at: seoulDateTime(row.at),
+      actor: str(row.actor),
+      kind: row.kind as HistoryKind,
+      target: str(row.target),
+      change: str(row.change),
+      reason: str(row.reason),
+    });
+  });
+  return out;
+}
+
+/** review 블록(객체) → 분석 건의 검토 기록. 객체가 아니면 null */
+export function readReviewInfo(review: unknown): ReviewInfo | null {
+  if (!isObj(review)) return null;
+  return {
+    review: review.status === 'done' ? 'done' : 'needed',
+    memo: str(review.memo),
+    memoAt: seoulDateTime(review.memo_at),
+    reviewer: str(review.reviewer),
+    reviewedAt: seoulDateTime(review.reviewed_at),
+    completionNote: str(review.completion_note),
+    history: readHistory(review.history),
+  };
+}
+
 /** AnalysisOut → Analysis */
 export function toAnalysis(out: AnalysisOut): Analysis {
   const status = toStatus(out.status);
@@ -131,10 +189,17 @@ export function toAnalysis(out: AnalysisOut): Analysis {
   const overall = readOverall(result);
   const sources = result ? readDocSources((result as { documents?: unknown }).documents) : [];
   const detailReady = isDetailReady(status, result, sources);
+  // 검토 기록은 상세 검토 화면 대상(detailReady)일 때만 — 그 밖은 review 가 와도 보지 않는다
+  const reviewBlock: unknown = detailReady ? out.review : null;
+  const info = readReviewInfo(reviewBlock);
+  const reviewable = info !== null;
+  const shown = info ?? NO_REVIEW;
+  const findings = detailReady ? toLiveFindings((result as { findings?: unknown }).findings, sources, analyzedAt) : [];
   const raw: RawAnalysisInfo = {
     result,
     file,
     detailReady,
+    reviewable,
     overall,
     error,
     jobId: str(out.upstage_job_id),
@@ -151,20 +216,20 @@ export function toAnalysis(out: AnalysisOut): Analysis {
     analyzedAt,
     status,
     risk: riskFromLevel(overall && overall.level.trim() ? overall.level : summaryRiskLevel(result)),
-    review: 'none',
+    review: shown.review,
     docs: detailReady ? toLiveDocs(sources, file, extLabel(file?.mime, file?.name)) : documents.map((d) => toDoc(d, status, error)),
-    findings: detailReady ? toLiveFindings((result as { findings?: unknown }).findings, sources, analyzedAt) : [],
+    findings: reviewable ? overlayFindingReviews(findings, (reviewBlock as { findings?: unknown }).findings, seoulDateTime) : findings,
     items: [],
     links: [],
-    history: [],
-    memo: '',
-    memoAt: '',
+    history: shown.history,
+    memo: shown.memo,
+    memoAt: shown.memoAt,
     riskReasons: markdownLines(overall?.text),
     recs: markdownLines(overall?.nextText),
     limits: '',
-    reviewer: '',
-    reviewedAt: '',
-    completionNote: '',
+    reviewer: shown.reviewer,
+    reviewedAt: shown.reviewedAt,
+    completionNote: shown.completionNote,
     demoQueued: false,
     retrying: false,
     raw,

@@ -207,3 +207,62 @@ describe('시간 제한은 본문을 다 읽을 때까지', () => {
     await expect(createApiClient({ baseUrl, timeoutMs: 2000 }).getAnalysis(ID)).resolves.toMatchObject({ detail: 'x', id: 'a' });
   });
 });
+
+describe('reviewAction — POST /analyses/{id}/review-actions', () => {
+  it('JSON 본문(계약 id 는 본문에 — 짝 없는 서로게이트 · \u0000 · 따옴표 · / 그대로) · Content-Type · 200 응답 그대로', async () => {
+    const reply = { analysis: analysisOut({ status: 'done', review: { status: 'needed' } }), changed: false };
+    const { fetch, seen } = fakeFetch(() => json(200, reply));
+    const client = createApiClient({ fetch });
+    const fid = '0:a/b"c\ud800\u0000?#';
+    const out = await client.reviewAction(ID, { type: 'set_status', actor: '김민지', finding_id: fid, status: 'confirmed', reason: '' });
+    expect(out).toEqual(reply);
+    expect(seen).toHaveLength(1);
+    expect(seen[0].method).toBe('POST');
+    expect(seen[0].url).toBe(`/api/py/analyses/${ID}/review-actions`);
+    expect(seen[0].headers['content-type']).toBe('application/json');
+    expect(seen[0].headers.accept).toBe('application/json');
+    expect(seen[0].body).toEqual({ type: 'set_status', actor: '김민지', finding_id: fid, status: 'confirmed', reason: '' });
+  });
+
+  it('분석 id 는 주소 조각으로 감싼다', async () => {
+    const { fetch, seen } = fakeFetch(() => json(200, { analysis: analysisOut(), changed: true }));
+    await createApiClient({ fetch }).reviewAction('a b/c', { type: 'save_memo', actor: '김민지', text: '메모' });
+    expect(seen[0].url).toBe('/api/py/analyses/a%20b%2Fc/review-actions');
+    expect(seen[0].body).toEqual({ type: 'save_memo', actor: '김민지', text: '메모' });
+  });
+
+  const cases: [number, string, string][] = [
+    [400, 'bad_request', '요청 형식이 올바르지 않습니다.'],
+    [404, 'not_found', '탐지 항목을 찾을 수 없습니다.'],
+    [409, 'conflict', '검토를 완료한 분석은 바꿀 수 없습니다.'],
+    [413, 'bad_request', '요청 본문이 너무 큽니다.'],
+    [502, 'server', '서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.'],
+  ];
+  for (const [status, code, detail] of cases) {
+    it(`${status} → ApiError ${code} + 서버 detail`, async () => {
+      const { fetch } = fakeFetch(() => json(status, { detail }));
+      const err = await createApiClient({ fetch })
+        .reviewAction(ID, { type: 'complete_review', actor: '김민지', note: '' })
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ApiError);
+      expect(err).toMatchObject({ status, code, message: detail });
+    });
+  }
+
+  it('detail 이 없으면 기본 문구, 네트워크 오류 → network', async () => {
+    const { fetch } = fakeFetch(() => new Response('', { status: 413 }));
+    await expect(createApiClient({ fetch }).reviewAction(ID, { type: 'save_memo', actor: 'x', text: '' })).rejects.toMatchObject({
+      status: 413,
+      code: 'bad_request',
+      message: MSG_BAD_REQUEST,
+    });
+    const down = (async () => {
+      throw new TypeError('Failed to fetch');
+    }) as typeof globalThis.fetch;
+    await expect(createApiClient({ fetch: down }).reviewAction(ID, { type: 'save_memo', actor: 'x', text: '' })).rejects.toMatchObject({
+      status: 0,
+      code: 'network',
+      message: MSG_NETWORK,
+    });
+  });
+});

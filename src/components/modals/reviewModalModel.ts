@@ -6,6 +6,10 @@
    - 정보 종류 · 정보주체 · 노출 상태 · 오탐 사유 목록과 라벨은 ② 표시 규칙에서만 가져온다.
    - 위험등급 · 최초 탐지 결과는 바꾸지 않는다 — 서비스가 지키고, 화면은 서비스가 준 값을 그대로 보인다.
    - 'error'(분석 오류 내용) 모달은 목록 화면에서만 연다(원본 1935) — 목록의 ErrorModal 이 그린다.
+   - 검토 완료 토스트의 '보고서 보기'는 보고서가 있는 분석(데모)에만 붙인다(hasReport) — 실제 분석은 보고서가 아직 없다.
+   - 검토 완료 모달은 남은 항목(서비스 pending)을 받은 뒤 연다(pendingGate). 첫 조회가 실패하면 열지 않고
+     기존 SAVE_FAILED 를 오류 토스트로 한 번 보인 뒤 모달 자리를 비운다 — 다음 클릭이 새로 조회한다.
+     실패를 빈 pending 으로 보지 않는다(남은 항목을 모른 채 완료하지 않게).
    ========================================================================== */
 
 import { CATS, EXPOSURES, FP_REASONS, RTYPE, SUBJECTS, byRisk, riskView, type Exposure, type FpReason, type InfoCategory, type InfoSubject } from '@/display/rules';
@@ -324,6 +328,20 @@ export function reviewModalError(a: Analysis, m: DetailModal, pending: Pending |
   }
 }
 
+/** 검토 완료 모달을 열기 전 남은 항목 조회 — open 열기 / wait 기다림 / fail 열지 않음(오류 토스트 한 번 + 모달 닫기) */
+export type PendingGate = 'open' | 'wait' | 'fail';
+
+/** 남은 항목 조회 결과(usePending 의 data · error) → 검토 완료 모달을 열지. 받은 값이 있으면(다시 불러오다 실패해도) 연다 */
+export function pendingGate(data: Pending | undefined, error: unknown): PendingGate {
+  if (data) return 'open';
+  return error === undefined ? 'wait' : 'fail';
+}
+
+/** 보고서를 열 수 있는 분석인지 — 데모만(실제 분석 Analysis.raw 는 보고서가 아직 없다) */
+export function hasReport(a: Analysis): boolean {
+  return !a.raw;
+}
+
 /** 저장 뒤 토스트 — 원본 문구 그대로. openReport 면 '보고서 보기' 행동을 붙인다 */
 export interface ReviewToast {
   text: string;
@@ -357,7 +375,7 @@ export async function applyReviewModal(svc: AnalysisService, a: Analysis, m: Det
       return { text: '연결 판단을 기록했습니다 · ' + m.lid };
     case 'complete':
       await svc.completeReview(a.id, note);
-      return { text: '검토를 완료했습니다 · 목록의 검토 상태와 요약 숫자에 반영했습니다.', openReport: true };
+      return { text: '검토를 완료했습니다 · 목록의 검토 상태와 요약 숫자에 반영했습니다.', openReport: hasReport(a) };
     case 'reopen':
       await svc.reopenReview(a.id, note);
       return { text: '검토를 다시 열었습니다 · 검토 상태가 ‘검토 필요’로 바뀌었습니다.' };

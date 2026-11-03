@@ -74,6 +74,7 @@ describe('toAnalysis', () => {
       result: null,
       file: { id: 'd0c00000-0000-4000-8000-000000000001', name: 'iMASK_smoke_bundle.pdf', mime: 'application/pdf', size: 322053 },
       detailReady: false,
+      reviewable: false,
       overall: null,
       error: '',
       jobId: '',

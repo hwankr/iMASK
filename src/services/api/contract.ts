@@ -12,9 +12,26 @@
      쪽(0~1)과 전혀 겹치지 않는 상자는 그릴 수 없으므로 버린다 — 화면 변환과 같은 기준(unitBoxOnPage)이라
      위치 ID(anchors)가 그린 상자와 같아 이름표 · 스크롤 · '위치 확인 필요'가 어긋나지 않는다.
    - 원문 값(value)은 대회용 합성 자료라 화면에 보여도 된다(사용자 결정) — evidence · live.value 에 둔다.
+   - 검토 기록 덧씌우기(overlayFindingReviews): review.findings[계약 id](자기 속성만)의 확인 상태 · 분류 · 오탐 사유 ·
+     수정 사유 · 메모 · 수정 시각을 그 항목에 덧씌운다. 목록 밖 · 타입이 틀린 값은 버리고 AI 값 · 기본값을 쓴다.
+     최초 AI 결과(ai) · 위험등급(risk) · 판단 근거(reason) · 계약 원래 값(live)은 바꾸지 않는다.
    ========================================================================== */
 
-import { CATS, EXPOSURES, RISK, SUBJECTS, docTypeName, type Exposure, type InfoCategory, type InfoSubject, type RiskLevel } from '@/display/rules';
+import {
+  CATS,
+  EXPOSURES,
+  FP_REASONS,
+  FSTATUS,
+  RISK,
+  SUBJECTS,
+  docTypeName,
+  type Exposure,
+  type FindingStatus,
+  type FpReason,
+  type InfoCategory,
+  type InfoSubject,
+  type RiskLevel,
+} from '@/display/rules';
 import { pad2 } from '@/lib/format';
 import { unitBoxOnPage } from '@/lib/pageBox';
 import type { AnalysisDoc, DocSource, Finding, FindingBox, FindingLive, RawFileInfo, RawOverall } from '../types';
@@ -256,6 +273,39 @@ export function toLiveFindings(findings: unknown, sources: readonly DocSource[],
     });
   }
   return out;
+}
+
+/* ---------- 검토 기록 덧씌우기 ---------- */
+
+/**
+ * 탐지 항목들에 검토 기록(review.findings — 계약 id → 저장 값)을 덧씌운 새 목록.
+ * - 그 항목의 계약 id(live.id)가 saved 의 **자기 속성**일 때만 본다(__proto__ · constructor 등 상속 키는 없는 것).
+ * - status 는 확인 상태 키, category · subject · exposure 는 목록 값, fp_type 은 오탐 사유 목록 값(아니면 '').
+ *   글(fp_note · reclass_note · memo)은 문자열만. 그 밖은 버리고 AI 값 · 기본값을 쓴다.
+ * - updated_at 은 서울 시각으로(toTime) — 없거나 읽지 못하면 지금 값(분석 시각) 그대로.
+ * - ai · risk · reason · live 와 위치(anchors · boxes)는 그대로 둔다. saved 가 객체가 아니면 그대로 복사한다.
+ */
+export function overlayFindingReviews(findings: readonly Finding[], saved: unknown, toTime: (value: unknown) => string): Finding[] {
+  const table = isObj(saved) ? saved : null;
+  return findings.map((f) => {
+    const key = f.live?.id;
+    const v = table && typeof key === 'string' && own(table, key) ? table[key] : undefined;
+    if (!isObj(v)) return f;
+    const status: FindingStatus = typeof v.status === 'string' && own(FSTATUS, v.status) ? (v.status as FindingStatus) : 'open';
+    const fpType: FpReason | '' = pick<FpReason | ''>(FP_REASONS, v.fp_type, '');
+    return {
+      ...f,
+      status,
+      cat: pick(CATS, v.category, f.ai.cat),
+      subject: pick(SUBJECTS, v.subject, f.ai.subject),
+      exposure: pick(EXPOSURES, v.exposure, f.ai.exposure),
+      fpType,
+      fpNote: str(v.fp_note),
+      reclassNote: str(v.reclass_note),
+      memo: str(v.memo),
+      updatedAt: toTime(v.updated_at) || f.updatedAt,
+    };
+  });
 }
 
 /* ---------- 새 형식 판단 ---------- */

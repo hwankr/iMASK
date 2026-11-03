@@ -7,7 +7,9 @@
    - 서비스 변경 알림이 오면 훅이 다시 불러와 진행(대기 → 분석 중 → 문서별 완료 → 완료)이 그대로 반영된다.
    - 화면 상태는 useDetailUi(리듀서 하나), 검토 동작은 useDetailActions, 모달은 ReviewModal.
    - DetailView 는 실제 분석 상세(LiveDetailScreen — 완료된 공통 계약 결과)도 그린다(live 옵션):
-     원문 자리에 원본 파일(useLiveFile — 한 번 받음), 결과 패널에 '분석 요약' 탭(useLiveStages), 검토 동작은 읽기 전용.
+     원문 자리에 원본 파일(useLiveFile — 한 번 받음), 결과 패널에 '분석 요약' 탭(useLiveStages).
+     검토 동작은 데모와 같은 useDetailActions(실제 분석 서비스가 서버에 저장한다). 검토 기록을 불러오지 못한
+     실제 분석(readOnly)만 READ_ONLY_ACTIONS 로 아무것도 하지 않는다(버튼도 막혀 있다).
    ========================================================================== */
 
 import { useRouter } from 'next/navigation';
@@ -101,7 +103,7 @@ export interface DetailLiveOptions {
 export interface DetailViewProps {
   analysis: Analysis;
   initial?: Partial<DetailUiState>;
-  /** 실제 분석(읽기 전용) — 없으면 데모 */
+  /** 실제 분석 — 없으면 데모 */
   live?: DetailLiveOptions;
 }
 
@@ -110,9 +112,7 @@ export function DetailView({ analysis: a, initial, live }: DetailViewProps) {
   const router = useRouter();
   const base = useRouteBase();
   const ui = useDetailUi(a, initial);
-  const demoActions = useDetailActions(a, ui);
-  // 실제 분석은 읽기 전용 — 검토 동작은 아무것도 하지 않는다(버튼도 막혀 있다)
-  const actions = live ? READ_ONLY_ACTIONS : demoActions;
+  const detailActions = useDetailActions(a, ui);
   const liveId = live ? a.id : null;
   const liveExtras = live ? live.extras : null;
   const liveFile = useLiveFile(liveId, liveExtras);
@@ -121,6 +121,8 @@ export function DetailView({ analysis: a, initial, live }: DetailViewProps) {
   const mobile = ui.mobile;
 
   const x = detailFacts(a, s);
+  // 검토 기록을 불러오지 못한 실제 분석 — 검토 동작은 아무것도 하지 않는다(버튼도 막혀 있다)
+  const actions = x.readOnly ? READ_ONLY_ACTIONS : detailActions;
   const head = headerModel(a, x);
   const banner = bannerModel(a, x);
   const fail = failModel(a, x);

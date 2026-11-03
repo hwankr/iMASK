@@ -1,4 +1,4 @@
-/* 실제 분석 상세(읽기 전용) 화면 모델 — 고정 자료(fixtures/done-result.json) → toAnalysis → 모델 순서로 확인한다. */
+/* 실제 분석 상세 화면 모델 — 고정 자료(fixtures/done-result.json) + 검토 기록(review) → toAnalysis → 모델 순서로 확인한다. */
 import { describe, expect, it } from 'vitest';
 import { LOW_CONFIDENCE_NOTE, MAPPING_NOTES, RISK, findingNotes } from '@/display/rules';
 import { createService } from '@/services';
@@ -7,7 +7,7 @@ import { analysisOut, contractResult } from '@/services/api/testing';
 import type { Analysis } from '@/services/types';
 import { READ_ONLY_ACTIONS } from './detailActions';
 import {
-  READ_ONLY_TEXT,
+  REVIEW_UNAVAILABLE_TITLE,
   bannerModel,
   detailFacts,
   docModels,
@@ -24,11 +24,14 @@ import { FILE_FAILED, fileKind, filePageOf, guideText, isKnownFileMessage, liveD
 
 const M: ViewerMetrics = { width: 760 + 48 + 6, padX: 24, paperW: 760 };
 
-/** 완료 + 공통 계약 결과(고정 자료) — 필요하면 result 를 고친다 */
-function liveAnalysis(edit?: (result: Record<string, unknown>) => void): Analysis {
+/** 검토 기록이 없는 분석의 review 블록(백엔드 기본값) */
+const NEW_REVIEW = { status: 'needed', memo: '', memo_at: null, reviewer: '', reviewed_at: null, completion_note: '', findings: {}, history: [], version: 0 };
+
+/** 완료 + 공통 계약 결과(고정 자료) + 검토 기록(기본: 새 기록, null = 불러오지 못함) — 필요하면 result 를 고친다 */
+function liveAnalysis(edit?: (result: Record<string, unknown>) => void, review: unknown = NEW_REVIEW): Analysis {
   const result = contractResult();
   edit?.(result);
-  return toAnalysis(analysisOut({ status: 'done', result, upstage_job_id: 'job_test', upstage_status: 'completed' }));
+  return toAnalysis(analysisOut({ status: 'done', result, upstage_job_id: 'job_test', upstage_status: 'completed', review: structuredClone(review) }));
 }
 
 function stateOf(a: Analysis, patch: Partial<DetailUiState> = {}): DetailUiState {
@@ -49,9 +52,14 @@ async function demoAnalysis(id: string): Promise<Analysis> {
 describe('실제 분석 상세 — 고정 자료 → toAnalysis → 화면 모델', () => {
   const a = liveAnalysis();
 
-  it('고정 자료는 상세 검토 화면 대상(detailReady) · 읽기 전용', () => {
+  it('고정 자료 + 검토 기록은 상세 검토 화면 대상(detailReady) · 검토 가능(live, readOnly 아님)', () => {
     expect(a.raw?.detailReady).toBe(true);
-    expect(detailFacts(a, stateOf(a)).readOnly).toBe(true);
+    expect(a.raw?.reviewable).toBe(true);
+    expect(a.review).toBe('needed');
+    const x = detailFacts(a, stateOf(a));
+    expect(x.live).toBe(true);
+    expect(x.readOnly).toBe(false);
+    expect(x.locked).toBe(false);
   });
 
   it('처음 상태 — 고위험 미확인 항목(D1-02)을 골라 대출신청서 1쪽(파일 1쪽)', () => {
@@ -185,34 +193,35 @@ describe('실제 분석 상세 — 고정 자료 → toAnalysis → 화면 모�
     expect(docs.map((d) => d.nFind)).toEqual([9, 2, 2, 3, 3, 0]);
   });
 
-  it('머리글 — 위험등급 높음(분석 위험도) · 문서 6개 · 6페이지, 검토 완료 막힘(읽기 전용 안내)', () => {
+  it('머리글 — 위험등급 높음(분석 위험도) · 문서 6개 · 6페이지 · 검토 필요, 검토 완료 버튼 켜짐', () => {
     const h = headerModel(a, detailFacts(a, stateOf(a)));
     expect(h.risk).toBe('high');
     expect(h.docCount).toBe(6);
     expect(h.pageTotalText).toBe('6페이지');
-    expect(h.readOnly).toBe(true);
-    expect(h.noComplete).toBe(true);
-    expect(h.completeTitle).toBe(READ_ONLY_TEXT);
+    expect(h.review).toBe('needed');
+    expect(h.readOnly).toBe(false);
+    expect(h.showComplete).toBe(true);
+    expect(h.showReopen).toBe(false);
+    expect(h.noComplete).toBe(false);
+    expect(h.completeTitle).toBe('검토를 마치고 결과를 기록합니다');
     expect(h.noReport).toBe(false);
   });
 
-  it('상태 띠 — 읽기 전용 안내(보이는 글자에 지원하지 않는 기능 문구)', () => {
-    const b = bannerModel(a, detailFacts(a, stateOf(a)));
-    expect(b?.variant).toBe('info');
-    expect(b?.title).toBe('읽기 전용 화면입니다.');
-    expect(b?.text).toContain(READ_ONLY_TEXT);
-    expect(b?.actions).toEqual([]);
+  it('상태 띠 — 검토 완료 전에는 띠가 없다(읽기 전용 띠 없음)', () => {
+    expect(bannerModel(a, detailFacts(a, stateOf(a)))).toBeNull();
   });
 
-  it("결과 패널 — 탭은 탐지 항목 · 분석 요약, 읽기 전용(메모 안내), 등급은 받은 값(미평가 17 · 높음 2)", () => {
+  it("결과 패널 — 탭은 탐지 항목 · 분석 요약, 검토 메모 버튼 켜짐, 등급은 받은 값(미평가 17 · 높음 2)", () => {
     const s = stateOf(a);
     const rs = resultsModel(a, s, detailFacts(a, s));
     expect(rs.tabs.map((t) => [t.value, t.label, t.count])).toEqual([
       ['findings', '탐지 항목', 19],
       ['summary', '분석 요약', undefined],
     ]);
-    expect(rs.readOnly).toBe(true);
-    expect(rs.memoPreview).toBe(READ_ONLY_TEXT);
+    expect(rs.readOnly).toBe(false);
+    expect(rs.locked).toBe(false);
+    expect(rs.memoPreview).toBe('아직 작성한 메모가 없습니다.');
+    expect(rs.memoBtn).toBe('작성');
     expect(rs.findings).toHaveLength(19);
     expect(rs.findings.filter((f) => f.risk.key === 'unrated')).toHaveLength(17);
     expect(rs.findings.filter((f) => f.risk.key === 'high').map((f) => f.id)).toEqual(['D1-02', 'D4-02']);
@@ -234,7 +243,7 @@ describe('실제 분석 상세 — 고정 자료 → toAnalysis → 화면 모�
     expect(f('D1-01').where).toBe('대출신청서 · 1쪽');
   });
 
-  it('읽기 전용 동작 — 모두 아무것도 하지 않는다', () => {
+  it('READ_ONLY_ACTIONS(검토 기록을 불러오지 못했을 때) — 모두 아무것도 하지 않는다', () => {
     for (const fn of Object.values(READ_ONLY_ACTIONS)) expect((fn as (x?: string) => unknown)('D1-01')).toBeUndefined();
   });
 
@@ -292,11 +301,73 @@ describe('그릴 수 없는 상자(쪽과 전혀 겹치지 않음) — 이름표
   });
 });
 
+describe('실제 분석 — 검토 완료 뒤 · 검토 기록을 불러오지 못함', () => {
+  const DONE_REVIEW = {
+    ...NEW_REVIEW,
+    status: 'done',
+    reviewer: '김민지',
+    reviewed_at: '2026-11-03T01:20:00+00:00',
+    completion_note: '남은 항목 없음',
+    memo: '검토 메모\n둘째 줄',
+    memo_at: '2026-11-03T01:10:00+00:00',
+    version: 3,
+  };
+
+  it("검토 완료 — 잠김, '검토 다시 열기', 검토 완료 띠(검토자 · 서울 시각)에 '보고서 보기' 없음", () => {
+    const a = liveAnalysis(undefined, DONE_REVIEW);
+    const s = stateOf(a);
+    const x = detailFacts(a, s);
+    expect(a.review).toBe('done');
+    expect(x.locked).toBe(true);
+    expect(x.readOnly).toBe(false);
+    const h = headerModel(a, x);
+    expect(h.showComplete).toBe(false);
+    expect(h.showReopen).toBe(true);
+    const b = bannerModel(a, x);
+    expect(b?.variant).toBe('done');
+    expect(b?.title).toBe('검토 완료 · 김민지 · 2026.11.03 10:20');
+    expect(b?.actions).toEqual([]);
+    const rs = resultsModel(a, s, x);
+    expect(rs.locked).toBe(true);
+    expect(rs.memoPreview).toBe('검토 메모 둘째 줄');
+    expect(rs.memoBtn).toBe('수정');
+  });
+
+  it("검토 기록을 불러오지 못함(review null) — readOnly: 검토 완료 버튼 막힘 · title 만 '검토 기록을 불러오지 못했습니다', 띠 없음", () => {
+    const a = liveAnalysis(undefined, null);
+    expect(a.raw?.detailReady).toBe(true);
+    expect(a.raw?.reviewable).toBe(false);
+    expect(a.review).toBe('none');
+    const s = stateOf(a);
+    const x = detailFacts(a, s);
+    expect(x.live).toBe(true);
+    expect(x.readOnly).toBe(true);
+    const h = headerModel(a, x);
+    expect(h.readOnly).toBe(true);
+    expect(h.showComplete).toBe(true);
+    expect(h.noComplete).toBe(true);
+    expect(h.completeTitle).toBe(REVIEW_UNAVAILABLE_TITLE);
+    expect(REVIEW_UNAVAILABLE_TITLE).toBe('검토 기록을 불러오지 못했습니다');
+    expect(bannerModel(a, x)).toBeNull();
+    const rs = resultsModel(a, s, x);
+    expect(rs.readOnly).toBe(true);
+    expect(rs.tabs.map((t) => t.value)).toEqual(['findings', 'summary']);
+    expect(rs.memoPreview).toBe('아직 작성한 메모가 없습니다.');
+  });
+
+  it('review 키가 없는 옛 응답도 불러오지 못함과 같다', () => {
+    const a = toAnalysis(analysisOut({ status: 'done', result: contractResult() }));
+    expect(a.raw?.reviewable).toBe(false);
+    expect(detailFacts(a, stateOf(a)).readOnly).toBe(true);
+  });
+});
+
 describe('데모 분석은 그대로 — 읽기 전용 · 원본 파일 갈래를 타지 않는다', () => {
   it('데모 A1 — readOnly false, 뷰어 live null, 결과 탭 3개, 메모 · 띠 · 머리글 그대로', async () => {
     const a = await demoAnalysis('A1');
     const s = stateOf(a);
     const x = detailFacts(a, s);
+    expect(x.live).toBe(false);
     expect(x.readOnly).toBe(false);
     expect(viewerModel(a, s, x, M).live).toBeNull();
     expect(resultsModel(a, s, x).tabs.map((t) => t.value)).toEqual([...DETAIL_TABS]);
@@ -308,6 +379,16 @@ describe('데모 분석은 그대로 — 읽기 전용 · 원본 파일 갈래�
     const f = findingModel(a, a.findings[0], null);
     expect(f.hasRule).toBe(true);
     expect(f.notes).toEqual([]);
+  });
+
+  it("데모 A5(검토 완료) — 검토 완료 띠에 '보고서 보기'가 그대로 있다", async () => {
+    const a = await demoAnalysis('A5');
+    const x = detailFacts(a, stateOf(a));
+    expect(x.live).toBe(false);
+    expect(x.locked).toBe(true);
+    const b = bannerModel(a, x);
+    expect(b?.variant).toBe('done');
+    expect(b?.actions).toEqual([{ key: 'openReport', label: '보고서 보기', disabled: false }]);
   });
 });
 

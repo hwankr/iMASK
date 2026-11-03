@@ -420,6 +420,11 @@ export interface RawAnalysisInfo {
   file: RawFileInfo | null;
   /** result 가 공통 계약(서류 1개 이상 + findings 배열)을 담은 완료 분석이라 상세 검토 화면으로 보일 수 있는지 */
   detailReady: boolean;
+  /**
+   * 검토 동작을 저장할 수 있는지 — detailReady 이고 백엔드가 검토 기록(review 객체)을 줬다.
+   * detailReady 인데 false 면 검토 기록을 읽지 못한 것(상세 화면은 검토 버튼만 막는다).
+   */
+  reviewable: boolean;
   /** 계약 overall(묶음 전체 위험도 판정 · 다음 단계 안내). 없으면 null, 빠진 값은 '' */
   overall: RawOverall | null;
   /** 실패 이유(백엔드 문구 그대로) */

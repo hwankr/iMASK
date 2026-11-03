@@ -163,17 +163,6 @@
   color: var(--ink-3);
 }
 
-/* 실제 분석(읽기 전용) — 막아 둔 검토 동작 안내 */
-.readOnly {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-6);
-}
-.readOnly > :first-child {
-  flex: none;
-  margin-top: var(--space-2);
-}
-
 /* 실제 분석 항목 안내(분류 확인 필요 · 인식 신뢰도 낮음) */
 .notes {
   display: flex;

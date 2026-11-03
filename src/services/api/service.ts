@@ -7,8 +7,11 @@
      '분석 시작 결과를 확인하지 못했습니다…'). 그때도 id 를 목록에 넣고 알린 뒤, 그 id 를 담은 ApiError
      (analysisId)로 거절한다 — 화면은 오류와 함께 '분석 건 확인하기'(상세 → 실제 상태)를 보여 준다.
      만들기·업로드 실패는 id 를 넣지 않는다(파일이 올라가지 않아 시작될 수 없음).
-   - get: GET /analyses/{id} → 매핑. 404 → null, 그 밖 오류는 ApiError 를 던진다. 알림은 보내지 않는다
+   - get: GET /analyses/{id} → 매핑. 404 → null, 그 밖 오류는 ApiError 를 던진다
      (진행 확인 폴링은 상세 화면이 3초마다 한다 — 조회할 때마다 백엔드가 Upstage 상태를 한 번 확인한다).
+     조회(get · list · 검토 동작 전 조회 모두)에서 진행 중(대기 · 분석 중)으로 본 분석이 끝난 것(완료 · 일부 실패 · 실패)을
+     처음 보면 구독자에게 한 번 알린다 — 헤더 '검토 필요' 숫자 · 목록이 다시 불러와 완료를 바로 반영한다.
+     처음 본 분석 · 이미 끝난 것으로 본 분석은 알리지 않는다(끝난 뒤 늦게 온 옛 '분석 중' 응답도 무시).
    - list: 이 탭에서 만든 id 들을 조회해 요청 시각 최신순(id 가 없으면 요청 없이 []).
      404 는 목록에서 빼고 건너뛴다. 그 밖 오류는 던진다.
    - 같은 id 를 동시에 조회하면(헤더 숫자 + 목록 화면 + 상세 폴링) 요청 하나를 나눠 쓴다.
@@ -24,7 +27,8 @@
      아직 백엔드가 없다 — '실제 분석에서는 아직 지원하지 않는 기능입니다.' 로 거절한다.
      다만 retry 는 거절하지 않고 { ok: false, message: 그 문구 } 로 끝낸다 — 목록 화면(그대로 둠)의 '재시도'가
      거절을 받지 않아 처리되지 않은 오류가 되므로, 실패 결과로 돌려주면 기존 토스트가 이유를 보여 준다.
-   - 분석 완료 이벤트(ServiceEvent 'done')는 보내지 않는다(탐지 0건 완료 토스트가 오해를 준다).
+   - 분석 완료 이벤트(ServiceEvent 'done')는 보내지 않는다(탐지 0건 완료 토스트가 오해를 준다) — 위의 완료 알림은
+     이벤트 없는 listener() 다.
    - 데이터를 메모리에 두지 않는다(id 목록만 sessionStorage) — 조회 결과는 요청마다 새로 만든 값이다.
    - 실제 분석 전용 통로(LiveExtras — 화면은 getLiveExtras()/useLiveExtras() 로 받는다):
      loadFile(id) = 부를 때마다 GET …/file 로 새 서명 주소(10분 유효)를 받고 그 주소에서 내용을 받는다
@@ -100,6 +104,9 @@ type Listener = (event?: ServiceEvent) => void;
 
 const EMPTY_PENDING = (): Pending => ({ openF: [], openI: [], openL: [], any: false });
 
+/** 끝난 분석 상태(백엔드는 끝난 분석의 상태를 다시 바꾸지 않는다) */
+const SETTLED_STATUSES: ReadonlySet<string> = new Set(['done', 'partial', 'failed']);
+
 const unsupported = (): Promise<never> => Promise.reject(new Error(MSG_UNSUPPORTED));
 
 /** 검토 동작 본문 — 종류별 필드(처리자는 보낼 때 붙인다) */
@@ -152,14 +159,34 @@ export function createApiService(deps: ApiServiceDeps = {}): ApiService {
     return p;
   };
 
-  /** 조회 — 404 는 null */
+  /**
+   * 분석별로 마지막으로 본 상태가 끝났는지(true) · 진행 중인지(false). 끝난 것으로 본 뒤에는 되돌리지 않는다
+   * (늦게 끝난 옛 조회가 '분석 중'을 주어도 다시 알리지 않게).
+   */
+  const settled = new Map<string, boolean>();
+  /** 상태를 적고, 진행 중으로 본 적 있는 분석이 이번에 끝났으면 true */
+  const noteSettled = (id: string, status: string): boolean => {
+    const was = settled.get(id);
+    if (was === true) return false;
+    const now = SETTLED_STATUSES.has(status);
+    settled.set(id, now);
+    return was === false && now;
+  };
+
+  /**
+   * 조회 — 404 는 null. 진행 중으로 본 분석이 끝난 것을 보면(상세 화면의 3초 조회 등) 한 번 알린다 — 헤더 '검토 필요'
+   * 숫자·목록이 다시 불러와 완료(검토 필요)를 바로 반영하게(데모는 진행이 바뀔 때 알린다). 처음 본 분석은 알리지 않는다.
+   */
   const getOrNull = async (id: string): Promise<Analysis | null> => {
+    let analysis: Analysis;
     try {
-      return toAnalysis(await fetchOne(id));
+      analysis = toAnalysis(await fetchOne(id));
     } catch (err) {
       if (isApiError(err) && err.code === 'not_found') return null;
       throw err;
     }
+    if (noteSettled(id, analysis.status)) emit();
+    return analysis;
   };
 
   /** 검토 동작에 쓸 분석 — 없으면(404) 요청 없이 거절, 그 밖 조회 오류는 그대로 */

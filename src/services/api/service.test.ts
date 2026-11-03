@@ -206,6 +206,94 @@ describe('get', () => {
   });
 });
 
+/** 차례로 다른 상태를 돌려주는 가짜 백엔드(id 별) — 끝나면 마지막 상태 그대로 */
+function statusRoute(byId: Record<string, string[]>): Route {
+  const seenCount: Record<string, number> = {};
+  return (req) => {
+    const id = Object.keys(byId).find((k) => req.url.includes(k)) ?? ID;
+    const list = byId[id];
+    const n = (seenCount[id] = (seenCount[id] ?? 0) + 1);
+    const status = list[Math.min(n, list.length) - 1];
+    const done = status === 'done';
+    return json(200, analysisOut({ id, status, result: done ? doneResult() : null, upstage_job_id: status === 'queued' ? null : 'job_1' }));
+  };
+}
+
+describe('분석이 끝난 것을 보면 알린다(헤더 검토 필요 숫자 · 목록이 다시 불러오게)', () => {
+  it('진행 중으로 본 분석이 완료되면 한 번 — 이벤트 없는 알림, 다시 조회해도 더 알리지 않는다', async () => {
+    const { service } = setup(statusRoute({ [ID]: ['running', 'running', 'done', 'done'] }));
+    const notified = vi.fn();
+    service.subscribe(notified);
+    await service.get(ID);
+    await service.get(ID);
+    expect(notified).not.toHaveBeenCalled();
+    const done = await service.get(ID);
+    expect(done).toMatchObject({ status: 'done', review: 'none' }); // review 블록 없는 응답 — 알림은 상태 기준
+    expect(notified).toHaveBeenCalledTimes(1);
+    expect(notified.mock.calls[0]).toEqual([]);
+    await service.get(ID);
+    expect(notified).toHaveBeenCalledTimes(1);
+  });
+
+  it('대기 → 실패 · 분석 중 → 일부 실패도 끝난 것으로 알린다', async () => {
+    const other = 'cd34ab12-0000-4000-8000-000000000000';
+    const { service } = setup(statusRoute({ [ID]: ['queued', 'failed'], [other]: ['running', 'partial'] }));
+    const notified = vi.fn();
+    service.subscribe(notified);
+    await service.get(ID);
+    await service.get(other);
+    expect(notified).not.toHaveBeenCalled();
+    await service.get(ID);
+    expect(notified).toHaveBeenCalledTimes(1);
+    await service.get(other);
+    expect(notified).toHaveBeenCalledTimes(2);
+  });
+
+  it('처음 본 분석이 이미 끝났으면 알리지 않는다', async () => {
+    const { service } = setup(statusRoute({ [ID]: ['done'] }));
+    const notified = vi.fn();
+    service.subscribe(notified);
+    await service.get(ID);
+    await service.list();
+    expect(notified).not.toHaveBeenCalled();
+  });
+
+  it('끝난 것으로 본 뒤 늦게 온 옛 "분석 중" 응답은 무시한다(되돌려 다시 알리지 않음)', async () => {
+    const { service } = setup(statusRoute({ [ID]: ['running', 'done', 'running', 'done'] }));
+    const notified = vi.fn();
+    service.subscribe(notified);
+    await service.get(ID); // running
+    await service.get(ID); // done → 알림
+    await service.get(ID); // (옛) running
+    await service.get(ID); // done
+    expect(notified).toHaveBeenCalledTimes(1);
+  });
+
+  it('목록 조회와 상세 조회가 같은 기록을 쓴다 — 목록에서 분석 중, 상세 조회에서 완료 → 한 번', async () => {
+    const { service } = setup(statusRoute({ [ID]: ['running', 'done'] }), { ids: [ID] });
+    const notified = vi.fn();
+    service.subscribe(notified);
+    expect((await service.list()).map((a) => a.status)).toEqual(['running']);
+    await service.get(ID);
+    expect(notified).toHaveBeenCalledTimes(1);
+  });
+
+  it('알림을 받은 구독자가 목록을 다시 불러와도 알림이 되풀이되지 않는다', async () => {
+    const { service, seen } = setup(statusRoute({ [ID]: ['running', 'done'] }), { ids: [ID] });
+    const reloads: Promise<unknown>[] = [];
+    const notified = vi.fn(() => {
+      reloads.push(service.list()); // 헤더 useAnalyses 처럼
+    });
+    service.subscribe(notified);
+    await service.get(ID);
+    await service.get(ID);
+    await Promise.all(reloads);
+    expect(notified).toHaveBeenCalledTimes(1);
+    expect(reloads).toHaveLength(1);
+    expect(seen).toHaveLength(3);
+  });
+});
+
 describe('list', () => {
   it('이 탭 목록의 id 를 조회해 요청 시각 최신순, 404 는 목록에서 뺀다', async () => {
     const older = 'old00000-0000-4000-8000-000000000000';

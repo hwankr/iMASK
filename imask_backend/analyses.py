@@ -16,6 +16,15 @@
 #  서명 URL·토큰·JWT 를 가린 **뒤에** 길이를 자른다. 원본 응답의 최상위 model(에이전트 id)은 저장하지 않는다.
 #  조회 중 Upstage 404: job id 를 저장하고(updated_at) 2분이 지났으면 작업이 없어진 것으로 보고 failed.
 #  그 밖의 조회 오류(401·403·429·5xx·연결)는 상태를 바꾸지 않고 다음 조회에서 다시 시도한다.
+#
+#  응답 모양(analysis_out): result 에서 원본(response)과 단계별 결과(stages)를 빼고, 화면이 바로 쓰는
+#  documents·findings·overall(imask_backend.findings.build_view — 조회할 때 계산, 저장 형식은 그대로)을 더한다.
+#  stages 는 include_stages(조회의 ?include=stages)일 때만 넣는다. 넣을 stages 는 response_stages() 한 경계를
+#  지난다 — 만들다 예외(파싱 RecursionError 포함)가 나거나 반복문으로 잰 중첩 깊이가 MAX_STAGES_DEPTH(64, 실제는
+#  10 안쪽 — 응답 직렬화기 한도 약 97 보다 충분히 낮게)를 넘으면 값 없는 경고 후 stages: [] (조회가 500 이 되지 않게).
+#  짝 없는 서로게이트가 든 문자열·키도 여기서는 원문 그대로 둔다 — api/index.py 의 응답 도우미가 그런 응답만
+#  ASCII escape JSON 으로 보낸다(imask_backend.textsafe, 코디네이터 결정 T1-fix5).
+#  원본 파일 주소(file_link): 문서 행의 storage_path 로 10분짜리 서명 다운로드 URL. 서명 URL 은 로그에 남기지 않는다.
 # ==========================================================================
 
 from __future__ import annotations
@@ -36,6 +45,7 @@ from .files import (
     content_matches,
     safe_storage_name,
 )
+from .findings import build_view, view_stages
 from .redaction import redact, redact_value
 from .results import parse_stages, summarize
 from .settings import STORAGE_BUCKET, Settings
@@ -87,6 +97,13 @@ MSG_JOB_NOT_FOUND = "Upstage 작업을 찾을 수 없습니다. 새 분석으로
 # 조건부 갱신에 져서(다른 요청이 먼저 저장) 최신 행을 다시 읽어야 하는데 그것도 실패했을 때
 MSG_REREAD_FAILED = "분석 상태를 다시 읽지 못했습니다. 다음 조회에서 다시 확인합니다."
 MSG_START_REREAD_FAILED = "분석 시작 결과를 확인하지 못했습니다. 잠시 후 분석 건을 다시 조회해 주세요."
+MSG_ORIGINAL_MISSING = "원본 파일을 찾을 수 없습니다."
+MSG_ORIGINAL_LINK_FAILED = "원본 파일 주소를 만들지 못했습니다. 잠시 후 다시 시도해 주세요."
+
+# 원본 파일 서명 다운로드 URL 유효 시간(초) — BRIEF §5: 10분
+SIGNED_DOWNLOAD_SECONDS = 600
+# ?include=stages 로 넣을 stages 의 최대 중첩 깊이(실제 단계는 10 안쪽, 응답 직렬화기 한도는 약 97)
+MAX_STAGES_DEPTH = 64
 
 
 class ApiError(Exception):
@@ -134,15 +151,66 @@ def document_out(doc: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def nesting_exceeds(value: Any, limit: int) -> bool:
+    """dict·list 중첩 깊이가 limit 를 넘는지 — 재귀 없이 반복문으로 잰다(맨 바깥 컨테이너가 깊이 1)."""
+    stack: list[tuple[Any, int]] = [(value, 1)]
+    while stack:
+        current, depth = stack.pop()
+        if isinstance(current, Mapping):
+            children: Iterable[Any] = current.values()
+        elif isinstance(current, (list, tuple)):
+            children = current
+        else:
+            continue
+        if depth > limit:
+            return True
+        stack.extend((child, depth + 1) for child in children)
+    return False
+
+
+def response_stages(result: Mapping[str, Any]) -> list[Any]:
+    """?include=stages 로 넣을 stages(저장된 것, 없으면 response 에서 parse_stages). 정상 stages 는 그대로.
+
+    만들다 예외가 나거나(깊은 JSON 의 RecursionError 등) 중첩이 MAX_STAGES_DEPTH 를 넘으면 값 없는 경고 후 [].
+    """
+    try:
+        stored = result.get("stages")
+        stages = stored if isinstance(stored, list) else view_stages(result)
+        if nesting_exceeds(stages, MAX_STAGES_DEPTH):
+            logger.warning("단계별 결과의 중첩이 한도(%d)를 넘어 stages 를 빈 목록으로 보냅니다", MAX_STAGES_DEPTH)
+            return []
+        return list(stages)
+    except Exception as exc:
+        logger.warning("단계별 결과를 만들지 못해 stages 를 빈 목록으로 보냅니다: %s", type(exc).__name__)
+        return []
+
+
+def result_out(result: Mapping[str, Any], *, include_stages: bool = False) -> dict[str, Any]:
+    """저장된 result → 응답의 result. 원본(response)·stages 를 빼고 documents·findings·overall 을 더한다.
+
+    format·job·summary 등 나머지 키는 그대로. include_stages 면 stages(response_stages — 저장된 것, 없으면 response 에서
+    parse_stages, 너무 깊거나 만들지 못하면 []).
+    """
+    out = {key: value for key, value in result.items() if key not in ("response", "stages")}
+    out.update(build_view(result))
+    if include_stages:
+        out["stages"] = response_stages(result)
+    return out
+
+
 def analysis_out(
-    row: Mapping[str, Any], *, upstage_status: str | None = None, poll_error: str | None = None
+    row: Mapping[str, Any],
+    *,
+    include_stages: bool = False,
+    upstage_status: str | None = None,
+    poll_error: str | None = None,
 ) -> dict[str, Any]:
-    """analyses 행 → AnalysisOut. agent_id 는 빼고, result 에서는 원본(response)을 뺀다(응답 크기)."""
+    """analyses 행 → AnalysisOut. agent_id 는 빼고, result 는 result_out(원본·stages 없이 화면용 값).
+
+    문자열·키는 원문 그대로(짝 없는 서로게이트 포함) — 응답으로 보내는 방식은 api/index.py 의 _json_out 이 정한다.
+    """
     result = row.get("result")
-    if isinstance(result, Mapping):
-        result = {key: value for key, value in result.items() if key != "response"}
-    else:
-        result = None
+    result = result_out(result, include_stages=include_stages) if isinstance(result, Mapping) else None
     documents = row.get("documents")
     return {
         "id": row.get("id"),
@@ -629,3 +697,29 @@ def poll_analysis(
         reason = _failure_reason(job, secrets)
         values = {"status": FAILED, "error": _scrub(MSG_UPSTAGE_FAILED.format(reason=reason), secrets)}
     return _finish(store, client, row, analysis_id, values, secrets, shown_status)
+
+
+# --- 4. 원본 파일 주소 ---------------------------------------------------------------
+
+
+def file_link(store: Store, analysis_id: str) -> dict[str, Any]:
+    """분석 건의 원본 파일 서명 다운로드 URL(10분) → {"url", "mime_type", "filename"}. 상태와 상관없이.
+
+    404: uuid 아님·행 없음(분석 건) → 문서 행 없음·storage_path 빔·객체 없음(원본 파일). 502: 주소 만들기 실패.
+    filename 은 원래 이름(documents.filename). 서명 URL 은 로그에 남기지 않는다.
+    """
+    analysis_id = _uuid_or_404(analysis_id)
+    row = _load(store, analysis_id)  # StoreError → api 가 502
+    documents = row.get("documents")
+    docs = [d for d in documents if isinstance(d, Mapping)] if isinstance(documents, list) else []
+    doc = docs[0] if docs else None  # 분석 1건 = 묶음 파일 1개
+    path = doc.get("storage_path") if doc is not None else None
+    if doc is None or not isinstance(path, str) or not path.strip():
+        raise ApiError(404, MSG_ORIGINAL_MISSING)
+    try:
+        url = store.create_signed_download_url(path, SIGNED_DOWNLOAD_SECONDS)
+    except StoreError:
+        raise ApiError(502, MSG_ORIGINAL_LINK_FAILED) from None
+    if not isinstance(url, str) or not url:
+        raise ApiError(404, MSG_ORIGINAL_MISSING)
+    return {"url": url, "mime_type": doc.get("mime_type"), "filename": doc.get("filename")}

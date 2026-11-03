@@ -3,6 +3,7 @@
 #  - FakeStore 는 imask_backend.store.Store 와 같은 메서드를 메모리 dict 로 구현한다.
 #    조건부 갱신(expect_status·expect_no_job)과 cascade 삭제, updated_at 갱신을 흉내 낸다.
 #    fail 에 메서드 이름을 넣으면 그 메서드가 StoreError 를 던진다. before_update 로 경쟁을 흉내 낸다.
+#    create_signed_download_url 은 객체가 없으면 None, 있으면 JWT 꼴 토큰을 단 가짜 서명 URL(받은 인자는 기록).
 #  - FakeUpstageServer 는 httpx.MockTransport 처리기다. 진짜 UpstageClient 를 그대로 쓰게 해서
 #    요청 본문(config_id·include)까지 확인한다. 네트워크는 쓰지 않는다.
 #  값은 모두 지어낸 가짜다(FAKE_*). JWT·Supabase 키 꼴 값은 fake_tokens 가 실행 중에 만든다.
@@ -60,6 +61,7 @@ class FakeStore:
         self.before_update: Callable[[str, Mapping[str, Any]], None] | None = None
         self.fail_message: str | None = None  # 넣으면 StoreError 문구로 쓴다(가림 경계 시험용)
         self.signed_uploads: list[dict[str, str]] = []
+        self.signed_downloads: list[tuple[str, int]] = []  # (path, expires_in)
         self.get_count = 0
         self.fail_get_calls: set[int] = set()  # n 번째 get_analysis 만 실패(예: 마지막 다시 읽기)
 
@@ -222,6 +224,14 @@ class FakeStore:
     def download(self, path: str) -> bytes | None:
         self._call("download")
         return self.objects.get(path)
+
+    def create_signed_download_url(self, path: str, expires_in: int) -> str | None:
+        self._call("create_signed_download_url")
+        self.signed_downloads.append((path, expires_in))
+        if path not in self.objects:
+            return None
+        token = fake_jwt({"fake": uuid.uuid4().hex, "url": path})
+        return f"https://fake-project.supabase.co/storage/v1/object/sign/documents/{path}?token={token}"
 
 
 class FakeUpstageServer:

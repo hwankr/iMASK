@@ -79,8 +79,8 @@ class Ctx:
     def start(self, analysis_id: str) -> httpx.Response:
         return self.client.post(f"/api/py/analyses/{analysis_id}/start", headers=CODE)
 
-    def get(self, analysis_id: str) -> httpx.Response:
-        return self.client.get(f"/api/py/analyses/{analysis_id}", headers=CODE)
+    def get(self, analysis_id: str, params: Any = None) -> httpx.Response:
+        return self.client.get(f"/api/py/analyses/{analysis_id}", headers=CODE, params=params)
 
 
 def _install(env: dict[str, str]) -> tuple[FakeStore, FakeUpstageServer, list[UpstageClient]]:
@@ -582,7 +582,19 @@ def test_get_non_running_returns_stored_without_upstage(ctx: Ctx, status: str) -
     assert set(body) == ANALYSIS_KEYS
     assert body["status"] == status
     assert body["upstage_status"] is None and body["poll_error"] is None
-    assert body["result"] == {"format": "imask-upstage-v1", "summary": {"risk_level": "상"}, "stages": []}
+    # 응답 모양이 바뀜(T1 findings-api): stages·response 는 빼고 화면용 documents·findings·overall 을 더한다.
+    # 원본(response)에 단계가 없으므로 셋 다 빈 값이다(저장된 summary 는 그대로 옮긴다).
+    assert body["result"] == {
+        "format": "imask-upstage-v1",
+        "summary": {"risk_level": "상"},
+        "documents": [],
+        "findings": [],
+        "overall": {"level": None, "text": "", "next_stage": None, "next_text": ""},
+    }
+    # ?include=stages 면 저장된 stages 를 그대로 넣는다
+    with_stages = ctx.get(analysis_id, params={"include": "stages"}).json()["result"]
+    assert with_stages["stages"] == []
+    assert "response" not in with_stages
     assert ctx.server.requests == []
     assert ctx.upstage_made == []  # 클라이언트도 만들지 않는다
     assert ctx.store.updates == []
@@ -625,9 +637,9 @@ def test_get_completed_saves_result_and_deletes_file(ctx: Ctx, caplog: pytest.Lo
     assert body["status"] == "done"
     assert body["error"] is None
     assert body["upstage_status"] == "completed"
-    # API 응답: response(원본) 없음
+    # API 응답: response(원본)·stages 없음, 화면용 documents·findings·overall 있음(T1 findings-api)
     result = body["result"]
-    assert set(result) == {"format", "job", "summary", "stages"}
+    assert set(result) == {"format", "job", "summary", "documents", "findings", "overall"}
     assert result["format"] == "imask-upstage-v1"
     assert result["job"]["id"] == "job_up1"
     assert result["job"]["config_id"] == FAKE_CONFIG_ID
@@ -637,8 +649,13 @@ def test_get_completed_saves_result_and_deletes_file(ctx: Ctx, caplog: pytest.Lo
     assert summary["risk_level"] == "상"
     assert summary["final_stage"] == "권장_조치"
     assert summary["other_document_count"] == 1
-    assert result["stages"] and result["stages"][0]["name"] == "step_1_parse"
+    assert [d["type"] for d in result["documents"]] == summary["document_types"]
+    assert result["overall"]["level"] == "상" and result["overall"]["next_stage"] == "권장_조치"
     _assert_clean(response.text)
+    # 단계별 결과는 ?include=stages 일 때만(이미 done 이라 Upstage 를 다시 부르지 않는다)
+    staged = ctx.get(analysis_id, params={"include": "stages"}).json()["result"]
+    assert staged["stages"] and staged["stages"][0]["name"] == "step_1_parse"
+    assert "response" not in staged
 
     # DB: response 저장, 최상위 model(에이전트 id) 없음
     stored = ctx.store.analyses[analysis_id]
@@ -804,7 +821,8 @@ def test_get_conditional_update_lost_returns_reread_row(ctx: Ctx) -> None:
     body = response.json()
     assert response.status_code == 200
     assert body["status"] == "done"
-    assert body["result"]["stages"] == ["first"]  # 먼저 반영된 결과 그대로
+    assert body["result"]["summary"] == {"risk_level": "상"}  # 먼저 반영된 결과 그대로
+    assert ctx.get(analysis_id, params={"include": "stages"}).json()["result"]["stages"] == ["first"]
     assert ctx.store.analyses[analysis_id]["result"] == winner
     assert ctx.server.calls("DELETE")  # 두 번째 삭제는 404 → 성공으로 본다
 

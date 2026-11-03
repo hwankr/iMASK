@@ -8,6 +8,10 @@
 #    POST /api/py/analyses                 분석 건 + 서명 업로드 URL 만들기 → 201
 #    POST /api/py/analyses/{id}/start      Upstage 작업 시작(완료를 기다리지 않음) → 200
 #    GET  /api/py/analyses/{id}            조회. running 이면 Upstage 상태를 한 번 확인 → 200
+#                                          result 는 documents·findings·overall(?include=stages 면 stages 도)
+#    GET  /api/py/analyses/{id}/file       원본 파일 서명 다운로드 URL(10분) → 200, Cache-Control: no-store
+#  분석 건·원본 파일 응답은 _json_out 한 곳을 지난다 — 짝 없는 서로게이트가 있을 때만 ASCII escape JSON(이름·값 원문
+#  그대로), 없으면 정상 경로 그대로(바이트 불변). 상태 코드·헤더는 같다.
 #  /api/py/analyses 로 시작하는 요청은 본문 검사·404 판정보다 먼저 X-Demo-Code 를 DEMO_ACCESS_CODE 와
 #  hmac.compare_digest 로 비교한다(미들웨어). 오류 본문은 늘 {"detail": "<짧은 한국어 문장>"}.
 #  설정은 요청 때 읽는다(get_settings 캐시) — 환경변수가 빠져도 import 는 실패하지 않는다.
@@ -21,7 +25,7 @@ import hmac
 import logging
 import sys
 import traceback
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from http import HTTPStatus
 from pathlib import Path
 from typing import Annotated, Any
@@ -32,9 +36,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from fastapi import Depends, FastAPI, Request  # noqa: E402
+from fastapi import Depends, FastAPI, Query, Request  # noqa: E402
 from fastapi.exceptions import RequestValidationError  # noqa: E402
-from fastapi.responses import JSONResponse  # noqa: E402
+from fastapi.responses import JSONResponse, Response  # noqa: E402
 from pydantic import BaseModel, Field, StrictInt, StrictStr  # noqa: E402
 from starlette.exceptions import HTTPException as StarletteHTTPException  # noqa: E402
 
@@ -43,6 +47,7 @@ from imask_backend.analyses import (  # noqa: E402
     UpstageFactory,
     analysis_out,
     create_analysis,
+    file_link,
     poll_analysis,
     start_analysis,
 )
@@ -50,6 +55,7 @@ from imask_backend.config import ConfigError  # noqa: E402
 from imask_backend.redaction import redact  # noqa: E402
 from imask_backend.settings import Settings, get_settings  # noqa: E402
 from imask_backend.store import Store, StoreError, cached_store  # noqa: E402
+from imask_backend.textsafe import escaped_json_bytes, has_unpaired_surrogates  # noqa: E402
 from imask_backend.upstage import UpstageClient  # noqa: E402
 
 ACCESS_HEADER = "x-demo-code"
@@ -215,6 +221,24 @@ class CreateAnalysisIn(BaseModel):
     mime_type: StrictStr
 
 
+# --- 응답 도우미 -------------------------------------------------------------------
+
+
+def _json_out(content: Any, *, status_code: int = 200, headers: Mapping[str, str] | None = None) -> Any:
+    """분석 건·원본 파일 응답의 한 경계(코디네이터 결정 T1-fix5).
+
+    짝 없는 서로게이트가 **하나라도 있을 때만** ASCII escape JSON 본문(textsafe.escaped_json_bytes — 이름·값 원문 그대로,
+    NaN·inf 는 null)을 Response 로 돌려준다(상태 코드·헤더 그대로). 없으면 지금 경로 그대로 — 헤더가 없으면 dict 를
+    돌려줘 FastAPI 가 직렬화하고(정상 응답 바이트 불변), 헤더가 있으면 JSONResponse.
+    """
+    if has_unpaired_surrogates(content):
+        body = escaped_json_bytes(content)
+        return Response(content=body, status_code=status_code, media_type="application/json", headers=dict(headers or {}))
+    if headers:
+        return JSONResponse(content=content, status_code=status_code, headers=dict(headers))
+    return content
+
+
 # --- 경로 -------------------------------------------------------------------------
 
 
@@ -223,20 +247,45 @@ def health(settings: SettingsDep) -> dict[str, Any]:
     return {"ok": True, "configured": settings.configured()}
 
 
-@app.post("/api/py/analyses", status_code=201)
-def create(body: CreateAnalysisIn, store: StoreDep) -> dict[str, Any]:
+# 분석 건 경로는 _json_out 이 Response 를 돌려줄 수 있어 반환 타입을 Any 로 두고 응답 모양은 response_model 로 적는다
+@app.post("/api/py/analyses", status_code=201, response_model=dict[str, Any])
+def create(body: CreateAnalysisIn, store: StoreDep) -> Any:
     row, upload = create_analysis(
         store, name=body.name, filename=body.filename, size=body.size, mime_type=body.mime_type
     )
-    return {"analysis": analysis_out(row), "upload": upload}
+    return _json_out({"analysis": analysis_out(row), "upload": upload}, status_code=201)
 
 
-@app.post("/api/py/analyses/{analysis_id}/start")
-def start(analysis_id: str, store: StoreDep, upstage: UpstageDep, settings: SettingsDep) -> dict[str, Any]:
-    return analysis_out(start_analysis(store, upstage, settings, analysis_id))
+@app.post("/api/py/analyses/{analysis_id}/start", response_model=dict[str, Any])
+def start(analysis_id: str, store: StoreDep, upstage: UpstageDep, settings: SettingsDep) -> Any:
+    return _json_out(analysis_out(start_analysis(store, upstage, settings, analysis_id)))
 
 
-@app.get("/api/py/analyses/{analysis_id}")
-def read(analysis_id: str, store: StoreDep, upstage: UpstageDep, settings: SettingsDep) -> dict[str, Any]:
+def _include_tokens(values: list[str] | None) -> set[str]:
+    """?include= 를 여러 번 또는 쉼표로. 모르는 값은 무시한다(오류 아님)."""
+    return {token.strip().lower() for value in values or [] for token in value.split(",") if token.strip()}
+
+
+@app.get("/api/py/analyses/{analysis_id}", response_model=dict[str, Any])
+def read(
+    analysis_id: str,
+    store: StoreDep,
+    upstage: UpstageDep,
+    settings: SettingsDep,
+    include: Annotated[list[str] | None, Query()] = None,
+) -> Any:
     polled = poll_analysis(store, upstage, settings, analysis_id)
-    return analysis_out(polled.row, upstage_status=polled.upstage_status, poll_error=polled.poll_error)
+    return _json_out(
+        analysis_out(
+            polled.row,
+            include_stages="stages" in _include_tokens(include),
+            upstage_status=polled.upstage_status,
+            poll_error=polled.poll_error,
+        )
+    )
+
+
+@app.get("/api/py/analyses/{analysis_id}/file")
+def original_file(analysis_id: str, store: StoreDep) -> Response:
+    # 서명 URL 은 10분짜리 권한이라 캐시에 남기지 않는다(로그에도 쓰지 않음)
+    return _json_out(file_link(store, analysis_id), headers={"Cache-Control": "no-store"})

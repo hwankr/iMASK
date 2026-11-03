@@ -109,7 +109,7 @@ function LiveView({ a, refreshError }: { a: Analysis; refreshError: string }) {
             ) : null}
             {refreshError ? (
               <p className={styles.soft}>
-                <Icon name="dg-i-info" size={15} /> 서버에서 상태를 받지 못했습니다: {refreshError} 3초 뒤 다시 확인합니다.
+                <Icon name="dg-i-info" size={15} /> 서버에서 상태를 받지 못했습니다. 잠시 뒤 다시 확인합니다.
               </p>
             ) : null}
           </section>

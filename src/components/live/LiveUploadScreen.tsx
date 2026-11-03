@@ -36,7 +36,7 @@ import styles from './LiveUploadScreen.module.css';
 
 const MSG_REQUEST_FAILED = '분석을 시작하지 못했습니다. 잠시 후 다시 시도해 주세요.';
 const MSG_CREATED_UNKNOWN = '분석 건은 만들어졌지만 시작됐는지 확인하지 못했습니다. 상세 화면에서 실제 상태를 확인하세요.';
-const STARTED_TOAST = '분석을 시작했습니다. 이 화면에서 3초마다 진행 상태를 확인합니다.';
+const STARTED_TOAST = '분석을 시작했습니다.';
 
 type FocusTarget = 'file' | 'alert';
 

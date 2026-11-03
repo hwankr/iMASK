@@ -60,6 +60,7 @@ describe('모달 화면 모델 — 원본 modalVM', () => {
     expect([cat.title, subject.title, exposure.title]).toEqual(['정보 종류', '정보주체', '노출 상태']);
     expect([cat.changed, subject.changed, exposure.changed]).toEqual([false, f.subject !== '기타', false]);
     expect(m?.edit?.aiText).toBe(f.ai.cat + ' · ' + f.ai.subject + ' · ' + f.ai.exposure);
+    expect(m?.note).toMatchObject({ label: '수정 사유', req: '(선택)' }); // 사유는 선택(2026-11-04)
     expect(m?.buttons.map((b) => b.label)).toEqual(['취소', '수정 저장']);
   });
 
@@ -81,8 +82,8 @@ describe('모달 화면 모델 — 원본 modalVM', () => {
     expect(yes?.target?.meta).toBe('부족한 근거: ' + (l.missing || '없음'));
     expect(yes?.buttons.map((b) => b.label)).toEqual(['취소', '판단 기록']);
 
-    expect(reviewModalModel(a, { type: 'memo', note: '', error: '' }, null)).toMatchObject({ title: '검토 메모', width: 'md', target: null, note: { rows: 6, req: '(선택)' } });
-    expect(reviewModalModel(a, { type: 'fmemo', fid: 'F-01', note: '', error: '' }, null)).toMatchObject({ title: '항목 메모', note: { rows: 4, label: '메모' } });
+    expect(reviewModalModel(a, { type: 'memo', note: '', error: '' }, null)).toMatchObject({ title: '검토 메모', width: 'md', target: null, note: { rows: 6, req: '(선택)' }, info: '메모는 검토 이력에 남습니다.' });
+    expect(reviewModalModel(a, { type: 'fmemo', fid: 'F-01', note: '', error: '' }, null)).toMatchObject({ title: '항목 메모', note: { rows: 4, label: '메모' }, info: '메모는 검토 이력에 남습니다.' });
     expect(reviewModalModel(a, { type: 'restore', fid: 'F-01', note: '', error: '' }, null)?.buttons.map((b) => b.label)).toEqual(['닫기', '오탐 표시 취소']);
     expect(reviewModalModel(a, { type: 'reopen', note: '', error: '' }, null)).toMatchObject({ title: '검토 다시 열기', info: null });
   });
@@ -139,7 +140,9 @@ describe('입력 검사 — 원본 submitModal', () => {
     expect(err({ type: 'fp', fid: 'F-01', reason: FP_REASONS[0], note: ' 가 ', error: '' })).toBe('오탐으로 판단한 사유를 적어 주세요.');
     expect(err({ type: 'fp', fid: 'F-01', reason: FP_REASONS[0], note: '관리번호', error: '' })).toBe('');
     expect(err({ type: 'edit', fid: 'F-20', cat: f.cat, subject: f.subject, exposure: f.exposure, note: '충분한 사유', error: '' })).toBe('바꿀 분류를 하나 이상 선택해 주세요.');
-    expect(err({ type: 'edit', fid: 'F-20', cat: f.cat, subject: '기타', exposure: f.exposure, note: '', error: '' })).toBe('수정 사유를 적어 주세요.');
+    // 분류 수정 사유는 선택 — 바꾼 분류가 있으면 사유가 비어도 통과
+    expect(err({ type: 'edit', fid: 'F-20', cat: f.cat, subject: '기타', exposure: f.exposure, note: '', error: '' })).toBe('');
+    expect(err({ type: 'edit', fid: 'F-20', cat: f.cat, subject: '기타', exposure: f.exposure, note: ' 가 ', error: '' })).toBe('');
     expect(err({ type: 'restore', fid: 'F-01', note: '', error: '' })).toBe('오탐 표시를 취소하는 이유를 적어 주세요.');
     expect(err({ type: 'resolve', rid: 'R-01', note: 'x', error: '' })).toBe('확인한 내용이나 처리 결과를 적어 주세요.');
     expect(err({ type: 'link', lid: 'L-01', decision: 'linked', note: '', error: '' })).toBe('판단 근거를 적어 주세요.');

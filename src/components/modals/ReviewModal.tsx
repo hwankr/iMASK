@@ -209,7 +209,7 @@ function ReviewModalView({ analysis: a, ui, modal: m, pending }: ViewProps) {
                   ))}
                 </div>
               </div>
-              <p className={styles.pendingNote}>남은 항목을 먼저 확인하거나, 남은 이유를 적고 검토를 완료할 수 있습니다. 완료 후에도 보고서의 ‘남아 있는 검토사항’에 그대로 표시됩니다.</p>
+              <p className={styles.pendingNote}>남은 항목을 확인하거나, 남은 이유를 적고 완료할 수 있습니다.</p>
             </>
           ) : (
             <div className={styles.allDone}>
@@ -221,7 +221,7 @@ function ReviewModalView({ analysis: a, ui, modal: m, pending }: ViewProps) {
             <span className={styles.keepIcon}>
               <Icon name="dg-i-info" size={16} strokeWidth={2} />
             </span>
-            <span>검토를 완료하면 검토 상태만 ‘검토 완료’로 바뀝니다. 위험등급({model.complete.riskLabel})과 최초 탐지 결과는 그대로 유지됩니다.</span>
+            <span>검토를 완료해도 위험등급({model.complete.riskLabel})과 최초 탐지 결과는 바뀌지 않습니다.</span>
           </div>
         </>
       ) : null}

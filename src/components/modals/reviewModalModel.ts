@@ -190,7 +190,7 @@ export function reviewModalModel(a: Analysis, m: DetailModal, pending: Pending |
           ],
           aiText: f.ai.cat + ' · ' + f.ai.subject + ' · ' + f.ai.exposure,
         },
-        note: note('수정 사유', '(필수 · 검토 이력에 남습니다)', '예: 상담 직원 서명란에 적힌 직원 성명'),
+        note: note('수정 사유', '(선택)', '예: 상담 직원 서명란에 적힌 직원 성명'),
         info: '분류를 바꿔도 위험등급은 다시 계산하지 않습니다. 위험등급 재검토가 필요하면 사유에 함께 남겨 주세요.',
         buttons: [CANCEL, btn('수정 저장', 'submit', 'primary')],
       };
@@ -204,7 +204,7 @@ export function reviewModalModel(a: Analysis, m: DetailModal, pending: Pending |
         sub: '이 탐지 항목에 대해 다른 담당자가 알아야 할 내용을 남깁니다.',
         target: findingTarget(a, f),
         note: note('메모', '(선택)', '예: 원본 보관 전 마스킹 사본으로 교체 필요', 4),
-        info: '메모는 시각과 함께 검토 이력에 남습니다.',
+        info: '메모는 검토 이력에 남습니다.',
         buttons: [CANCEL, btn('메모 저장', 'submit', 'primary')],
       };
     }
@@ -215,7 +215,7 @@ export function reviewModalModel(a: Analysis, m: DetailModal, pending: Pending |
         title: '검토 메모',
         sub: '분석 건 전체에 대한 검토 의견을 남깁니다. 보고서의 ‘검토자 메모’에 표시됩니다.',
         note: note('검토 메모', '(선택)', '검토 의견, 후속 조치, 고객 확인 결과 등을 적습니다.', 6),
-        info: '메모는 시각과 함께 검토 이력에 남습니다.',
+        info: '메모는 검토 이력에 남습니다.',
         buttons: [CANCEL, btn('메모 저장', 'submit', 'primary')],
       };
     case 'restore': {
@@ -296,6 +296,7 @@ export function reviewModalModel(a: Analysis, m: DetailModal, pending: Pending |
 /**
  * 입력 검사(원본 submitModal 의 검사 부분) — 통과하면 ''.
  * complete 는 저장 직전에 다시 받은 pending 으로 검사한다.
+ * 분류 수정 사유는 선택이다(2026-11-04 사용자 결정 — 원본은 필수) — 바꾼 분류가 있는지만 본다.
  */
 export function reviewModalError(a: Analysis, m: DetailModal, pending: Pending | null): string {
   const note = (m.note || '').trim();
@@ -305,7 +306,7 @@ export function reviewModalError(a: Analysis, m: DetailModal, pending: Pending |
     case 'edit': {
       const f = a.findings.find((x) => x.id === m.fid);
       if (f && m.cat === f.cat && m.subject === f.subject && m.exposure === f.exposure) return '바꿀 분류를 하나 이상 선택해 주세요.';
-      return note.length < 2 ? '수정 사유를 적어 주세요.' : '';
+      return '';
     }
     case 'restore':
       return note.length < 2 ? '오탐 표시를 취소하는 이유를 적어 주세요.' : '';

@@ -1,7 +1,7 @@
 'use client';
 
 /* ==========================================================================
-   상세 — 실제 분석 모드(/analyses/[id], NEXT_PUBLIC_IMASK_SERVICE=api)
+   상세 — 실제 분석 모드(/analyses/[id], 실제 모드 빌드 · 주소 기준 모드 'api')
    - useAnalysis(id) 로만 데이터를 받는다. 대기·분석 중인 동안 3초마다 refresh()(앞 요청이 끝난 뒤 다음,
      탭이 숨겨지면 쉬고 다시 보이면 바로 한 번). 조회할 때마다 백엔드가 Upstage 상태를 한 번 확인한다.
    - 대기·분석 중: 흐르는 막대 + 안내 + Upstage 상태(+ 확인 실패 문구). 실패: 오류 문구 그대로 + '새 분석'.
@@ -10,6 +10,8 @@
      완료지만 옛 형식(서류 0개 등): 요약 + 단계별 결과(JSON 나무).
    - 401 → 접근 코드 입력 + '다시 불러오기'. 404 → 안내 + '새 분석'(데모처럼 목록으로 보내지 않는다).
    - 상태가 바뀌면 화면 낭독기에 알린다.
+   - 이동 주소(목록 · 새 분석)는 기준 경로 함수(src/lib/routes.ts · useRouteBase)로 만든다 — 이 화면은 `/demo` 밖에서만
+     그려지므로 기준이 '' 이고 주소는 예전과 같다.
    ========================================================================== */
 
 import Link from 'next/link';
@@ -17,8 +19,9 @@ import { useRouter } from 'next/navigation';
 import type { FormEvent } from 'react';
 import { AnalysisStatusLabel, Banner, Button, Icon, IndeterminateBar, Skeleton, VisuallyHidden, cx } from '@/components/ui';
 import { fmtDT, fmtSize } from '@/lib/format';
+import { listHref, newAnalysisHref } from '@/lib/routes';
 import { apiErrorCode } from '@/services';
-import { useAnalysis, useLiveExtras } from '@/services/react';
+import { useAnalysis, useLiveExtras, useRouteBase } from '@/services/react';
 import type { Analysis } from '@/services/types';
 import { DetailView } from '@/components/detail/DetailScreen';
 import { AccessCodeField } from './AccessCodeField';
@@ -26,8 +29,6 @@ import { LiveResult } from './LiveResult';
 import { useClock, usePolling, useStatusAnnounce } from './liveHooks';
 import { elapsedText, isPolling, upstageStatusText } from './liveModel';
 import styles from './LiveDetailScreen.module.css';
-
-const NEW_HREF = '/analyses/new';
 
 export function LiveDetailScreen({ id }: { id: string }) {
   const { data, error, refresh } = useAnalysis(id);
@@ -58,6 +59,7 @@ function messageOf(error: unknown): string {
 
 function LiveView({ a, unauthorized, refreshError, onRetry }: { a: Analysis; unauthorized: boolean; refreshError: string; onRetry: () => Promise<void> }) {
   const router = useRouter();
+  const base = useRouteBase();
   const raw = a.raw;
   const polling = isPolling(a.status);
   const now = useClock(polling);
@@ -70,7 +72,7 @@ function LiveView({ a, unauthorized, refreshError, onRetry }: { a: Analysis; una
     <div className={styles.screen}>
       <div className={styles.page}>
         <div>
-          <Link href="/" className={styles.back}>
+          <Link href={listHref(base)} className={styles.back}>
             <Icon name="dg-i-arrow-left" size={17} strokeWidth={2.2} />
             문서 분석
           </Link>
@@ -133,7 +135,7 @@ function LiveView({ a, unauthorized, refreshError, onRetry }: { a: Analysis; una
             variant="failed"
             title="분석에 실패했습니다"
             description={raw?.error || '실패 이유를 받지 못했습니다.'}
-            actions={[{ label: '새 분석', onClick: () => router.push(NEW_HREF) }]}
+            actions={[{ label: '새 분석', onClick: () => router.push(newAnalysisHref(base)) }]}
           />
         ) : null}
 
@@ -201,16 +203,17 @@ function LoadFailed({ message, onRetry }: { message: string; onRetry: () => Prom
 }
 
 function NotFound() {
+  const base = useRouteBase();
   return (
     <div className={styles.screen}>
       <div className={cx(styles.page, styles.narrow)}>
         <h1 className={styles.title}>분석 건을 찾을 수 없습니다</h1>
         <p className={styles.lead}>주소가 틀렸거나 지워진 분석입니다. 새 분석을 시작하거나 목록에서 다시 고르세요.</p>
         <div className={styles.actions}>
-          <Button href={NEW_HREF} variant="primary" icon="dg-i-plus">
+          <Button href={newAnalysisHref(base)} variant="primary" icon="dg-i-plus">
             새 분석
           </Button>
-          <Button href="/" variant="secondary">
+          <Button href={listHref(base)} variant="secondary">
             목록으로
           </Button>
         </div>

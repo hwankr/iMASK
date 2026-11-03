@@ -5,6 +5,8 @@ import type { CSSProperties, MouseEvent } from 'react';
 import { AnalysisStatusLabel, Button, Icon, ReviewStatusPill, RiskBadge, VisuallyHidden, cx } from '@/components/ui';
 import { riskView } from '@/display/rules';
 import { staggerStyle } from '@/lib/hooks/useStagger';
+import { detailHref } from '@/lib/routes';
+import { useRouteBase } from '@/services/react';
 import { LayersIcon, SearchIcon } from './ListIcons';
 import type { ListModel, ListRow } from './listModel';
 import styles from './AnalysisTable.module.css';
@@ -22,7 +24,7 @@ export interface AnalysisTableProps {
 /**
  * 분석 목록 표(768px 이상) — Main 173–176.
  * 열 7개, 행 높이 72px(14 + 위험 타일 44 + 14), 숫자는 고정폭 숫자.
- * 행을 누르면 상세 검토로 가고, 키보드는 행 끝의 '상세 보기'(링크)를 쓴다. 실패 건은 '오류 확인'·'재시도'.
+ * 행을 누르면 상세 검토로 가고, 키보드는 행 끝의 '상세 보기'(링크 — 지금 기준 경로의 상세)를 쓴다. 실패 건은 '오류 확인'·'재시도'.
  */
 export function AnalysisTable({ model, replay, onOpen, onShowError, onRetry, onReset }: AnalysisTableProps) {
   return (
@@ -96,6 +98,7 @@ function TableRow({
   onRetry: (id: string) => void;
 }) {
   const risk = riskView(r.risk);
+  const base = useRouteBase();
   const stop = (fn: () => void) => (e: MouseEvent) => {
     e.stopPropagation();
     fn();
@@ -146,7 +149,7 @@ function TableRow({
             </>
           ) : null}
           <Link
-            href={`/analyses/${encodeURIComponent(r.id)}`}
+            href={detailHref(base, r.id)}
             aria-label={r.name + ' 상세 보기'}
             className={cx(styles.act, styles.actOpen)}
             data-row-action="open"

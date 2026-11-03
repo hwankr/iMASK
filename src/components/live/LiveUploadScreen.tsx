@@ -1,7 +1,7 @@
 'use client';
 
 /* ==========================================================================
-   새 분석 — 실제 분석 모드(/analyses/new, NEXT_PUBLIC_IMASK_SERVICE=api)
+   새 분석 — 실제 분석 모드(/analyses/new, 실제 모드 빌드 · 주소 기준 모드 'api')
    - 접근 코드 · 분석명 · 파일 1개(PDF·PNG·JPEG, 20MB 이하)를 받아 서비스의 requestAnalysis 로 보낸다.
      서비스가 만들기 → 서명 업로드 → 시작을 하고 단계마다 onProgress 로 알린다(화면은 진행 단계를 보여 준다).
    - 요청 중에는 입력을 잠근다. 성공하면 상세(/analyses/{id})로 간다 — 상세 화면이 3초마다 상태를 확인한다.
@@ -9,6 +9,8 @@
    - 업로드까지 끝낸 뒤 시작 결과를 모르는 오류(5xx·네트워크·시간 초과)면 서비스가 오류에 분석 id 를 담아 준다 —
      오류 상자에 '분석 건 확인하기'(상세 → 실제 상태)를 함께 보인다. 성공했다고 표시하지 않는다.
    - 데이터는 서비스 인터페이스로만 다룬다(접근 코드 저장만 예외 — src/services 의 함수).
+   - 이동 주소(목록 · 상세)는 기준 경로 함수(src/lib/routes.ts · useRouteBase)로 만든다 — 이 화면은 `/demo` 밖에서만
+     그려지므로 기준이 '' 이고 주소는 예전과 같다.
    ========================================================================== */
 
 import Link from 'next/link';
@@ -16,9 +18,10 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useId, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { Button, Icon, Spinner, TextField, buttonClass, cx, useToast } from '@/components/ui';
 import { fmtSize } from '@/lib/format';
+import { detailHref, listHref } from '@/lib/routes';
 import { apiErrorAnalysisId, apiErrorCode } from '@/services';
 import type { RequestStep } from '@/services/analysis-service';
-import { useService } from '@/services/react';
+import { useRouteBase, useService } from '@/services/react';
 import { AccessCodeField } from './AccessCodeField';
 import { useAccessCode } from './liveHooks';
 import {
@@ -43,6 +46,7 @@ type FocusTarget = 'code' | 'file' | 'alert';
 
 export function LiveUploadScreen() {
   const router = useRouter();
+  const base = useRouteBase();
   const service = useService();
   const toast = useToast();
   const code = useAccessCode();
@@ -131,7 +135,7 @@ export function LiveUploadScreen() {
         (id) => {
           if (!alive.current) return;
           toast(STARTED_TOAST);
-          router.push('/analyses/' + encodeURIComponent(id));
+          router.push(detailHref(base, id));
         },
         (err: unknown) => {
           if (!alive.current) return;
@@ -156,7 +160,7 @@ export function LiveUploadScreen() {
         <div className={styles.content}>
           <div className={styles.head}>
             <div>
-              <Link href="/" className={cx(styles.back, busy && styles.backOff)} aria-disabled={busy || undefined} tabIndex={busy ? -1 : undefined}>
+              <Link href={listHref(base)} className={cx(styles.back, busy && styles.backOff)} aria-disabled={busy || undefined} tabIndex={busy ? -1 : undefined}>
                 <Icon name="dg-i-arrow-left" size={17} strokeWidth={2.2} />
                 문서 분석
               </Link>
@@ -188,7 +192,7 @@ export function LiveUploadScreen() {
                 {createdId ? (
                   <>
                     <span className={styles.alertNote}>{MSG_CREATED_UNKNOWN}</span>
-                    <Link href={'/analyses/' + encodeURIComponent(createdId)} className={styles.alertLink}>
+                    <Link href={detailHref(base, createdId)} className={styles.alertLink}>
                       분석 건 확인하기
                       <Icon name="dg-i-chev-right" size={15} strokeWidth={2.2} />
                     </Link>
@@ -282,7 +286,7 @@ export function LiveUploadScreen() {
               {busy ? steps.find((s) => s.state === 'current')?.label + '…' : '분석 시작을 누르면 파일을 올리고 바로 분석을 시작합니다.'}
             </span>
             <div className={styles.buttons}>
-              <Button variant="secondary" size="xl" onClick={() => router.push('/')} disabled={busy}>
+              <Button variant="secondary" size="xl" onClick={() => router.push(listHref(base))} disabled={busy}>
                 취소
               </Button>
               <Button type="submit" variant="primary" size="xl" className={styles.start} loading={busy}>

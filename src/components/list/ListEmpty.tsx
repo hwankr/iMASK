@@ -1,11 +1,14 @@
 import { Button } from '@/components/ui';
+import { newAnalysisHref } from '@/lib/routes';
+import { useRouteBase } from '@/services/react';
 import styles from './ListEmpty.module.css';
 
 /**
- * 분석 이력 없음 — Main 205–233. 그림, 제목·설명, 단계 3개, '첫 문서 분석하기'(→ /analyses/new),
+ * 분석 이력 없음 — Main 205–233. 그림, 제목·설명, 단계 3개, '첫 문서 분석하기'(→ /analyses/new, `/demo` 아래면 /demo/analyses/new),
  * '샘플 분석 건 둘러보기'(데모 버튼 — 데모 서비스일 때만), 데모 안내.
  */
 export function ListEmpty({ onLoadSamples }: { onLoadSamples?: () => void }) {
+  const base = useRouteBase();
   return (
     <section aria-labelledby="dg-empty-title" className={styles.empty}>
       <EmptyArt />
@@ -31,7 +34,7 @@ export function ListEmpty({ onLoadSamples }: { onLoadSamples?: () => void }) {
         </li>
       </ol>
       <div className={styles.ctas}>
-        <Button href="/analyses/new" variant="primary" size="xl" raised icon="dg-i-upload" iconStrokeWidth={2.2} className={styles.cta}>
+        <Button href={newAnalysisHref(base)} variant="primary" size="xl" raised icon="dg-i-upload" iconStrokeWidth={2.2} className={styles.cta}>
           첫 문서 분석하기
         </Button>
         {onLoadSamples ? (

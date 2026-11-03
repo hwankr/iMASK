@@ -6,7 +6,8 @@ import { Suspense, useState, type ReactNode } from 'react';
 import { Icon, useToast } from '@/components/ui';
 import { useIsMobile } from '@/lib/hooks/useMediaQuery';
 import { useReplayToggle } from '@/lib/hooks/useStagger';
-import { useAnalyses, useDemoControls, useService } from '@/services/react';
+import { detailHref, newAnalysisHref } from '@/lib/routes';
+import { useAnalyses, useDemoControls, useRouteBase, useService } from '@/services/react';
 import { AnalysisCardList } from './AnalysisCardList';
 import { AnalysisTable } from './AnalysisTable';
 import { ErrorModal } from './ErrorModal';
@@ -33,6 +34,7 @@ export interface ListScreenProps {
 /**
  * / 분석 목록 — 프로토타입 Main.dc.html 114–239(목록 화면), listVM · rowVM(1919–1991).
  * 데이터는 useAnalyses() 로만 받는다. 불러오는 중에는 목록 자리에 뼈대를 보여 준다.
+ * /demo 도 같은 화면이다 — 이동 주소(상세 · 새 분석)는 지금 기준 경로(useRouteBase)로 만든다.
  */
 export function ListScreen({ initialFilters, syncWithUrl = true }: ListScreenProps) {
   if (!syncWithUrl) return <LocalListScreen initialFilters={initialFilters} />;
@@ -56,6 +58,7 @@ function LocalListScreen({ initialFilters }: { initialFilters?: Partial<ListFilt
 
 function ListView({ filters, setFilters }: { filters: ListFilters; setFilters: SetListFilters }) {
   const router = useRouter();
+  const base = useRouteBase();
   const service = useService();
   const demo = useDemoControls();
   const toast = useToast();
@@ -71,7 +74,7 @@ function ListView({ filters, setFilters }: { filters: ListFilters; setFilters: S
   }
 
   const m = listModel(data, filters);
-  const openDetail = (id: string) => router.push(`/analyses/${encodeURIComponent(id)}`);
+  const openDetail = (id: string) => router.push(detailHref(base, id));
   const resetFilters = () => setFilters(CLEARED_FILTERS);
   const retry = (id: string) => {
     if (!service) return;
@@ -146,6 +149,7 @@ function ListFrame({
   onRetry?: () => void;
   children?: ReactNode;
 }) {
+  const base = useRouteBase();
   return (
     <div className={styles.screen}>
       <div className={styles.page}>
@@ -164,7 +168,7 @@ function ListFrame({
               <span className={styles.leadSkeleton} aria-hidden="true" />
             ) : null}
           </div>
-          <Link href="/analyses/new" className={styles.newButton}>
+          <Link href={newAnalysisHref(base)} className={styles.newButton}>
             <Icon name="dg-i-plus" size={18} strokeWidth={2.4} />새 분석
           </Link>
         </div>

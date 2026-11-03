@@ -2,7 +2,8 @@
 
 /* ==========================================================================
    보고서 화면 — /analyses/[id]/report (Main.dc.html 603–702)
-   - 데이터는 useAnalysis(id) 로만 받는다. 불러오는 중에는 뼈대, 없는 ID 면 목록(/)으로 돌려보낸다(replace).
+   - 데이터는 useAnalysis(id) 로만 받는다. 불러오는 중에는 뼈대, 없는 ID 면 목록(/ — `/demo` 아래면 /demo)으로 돌려보낸다(replace).
+   - 이동 주소(목록 · '상세 검토로 돌아가기')는 지금 기준 경로(useRouteBase)로 만든다(src/lib/routes.ts).
    - 위험등급·근거는 서비스 값 그대로, 민감한 값은 마스킹된 표시값만 보여 준다(reportModel).
    - 결과 내보내기: service.buildExport → 브라우저 다운로드(lib/download) → 'handed' → service.logExport
      (검토 이력에 '결과 내보내기' 기록 — 변경 알림으로 보고서의 08 구역이 다시 그려진다).
@@ -15,7 +16,8 @@ import { CONFIG } from '@/config/app';
 import type { ExportFormat } from '@/display/rules';
 import { downloadFile } from '@/lib/download';
 import { fmtDT, nowStr } from '@/lib/format';
-import { useAnalysis, useService } from '@/services/react';
+import { detailHref, listHref } from '@/lib/routes';
+import { useAnalysis, useRouteBase, useService } from '@/services/react';
 import type { Analysis, ExportFile } from '@/services/types';
 import { ExportModal } from './ExportModal';
 import { BUILD_FAILED_MESSAGE, freshExport, type ExportUiState } from './exportModel';
@@ -40,12 +42,13 @@ export interface ReportScreenProps {
 /** 보고서 화면 — 데이터를 불러와 보고서를 그린다 */
 export function ReportScreen({ id, initial }: ReportScreenProps) {
   const router = useRouter();
+  const base = useRouteBase();
   const { data, error, refresh } = useAnalysis(id);
 
-  /* 없는 ID — 프로토타입처럼 목록으로(기록을 남기지 않음) */
+  /* 없는 ID — 프로토타입처럼 그 기준의 목록으로(기록을 남기지 않음) */
   useEffect(() => {
-    if (data === null) router.replace('/');
-  }, [data, router]);
+    if (data === null) router.replace(listHref(base));
+  }, [data, router, base]);
 
   if (data === undefined) {
     if (error)
@@ -67,6 +70,7 @@ export function ReportScreen({ id, initial }: ReportScreenProps) {
 
 function ReportBody({ analysis: a, initial }: { analysis: Analysis; initial?: ReportInitial }) {
   const service = useService();
+  const base = useRouteBase();
   const v = reportView(a);
   /* 보고서를 연 시각(원본 generatedAt: fmtDT(nowStr())) — 다시 그려도 바뀌지 않게 처음 값을 둔다 */
   const [generatedAt] = useState(() => fmtDT(nowStr()));
@@ -137,7 +141,7 @@ function ReportBody({ analysis: a, initial }: { analysis: Analysis; initial?: Re
     <div className={styles.screen}>
       <div className={styles.bar}>
         <div className={styles.barInner}>
-          <Button href={`/analyses/${encodeURIComponent(a.id)}`} variant="ghost" icon="dg-i-arrow-left" className={styles.back}>
+          <Button href={detailHref(base, a.id)} variant="ghost" icon="dg-i-arrow-left" className={styles.back}>
             상세 검토로 돌아가기
           </Button>
           <div className={styles.barRight}>

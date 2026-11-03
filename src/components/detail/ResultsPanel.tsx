@@ -3,11 +3,12 @@
 import Link from 'next/link';
 import type { CSSProperties, ReactNode } from 'react';
 import { Button, FilterChips, Icon, SegmentedTabs, Spinner, Switch, IndeterminateBar, cx, tabPanelProps } from '@/components/ui';
+import { useRouteBase } from '@/services/react';
 import type { DetailActions } from './detailActions';
 import type { ResultsModel, WaitingModel } from './detailModel';
 import type { DetailTab, FindingFilter } from './detailState';
 import type { PanelProps } from './DocList';
-import { TRY_SAMPLE_HREF } from './DocViewer';
+import { trySampleHref } from './DocViewer';
 import { FindingRow } from './FindingRow';
 import { LinkCards } from './LinkCards';
 import { ReviewItems } from './ReviewItems';
@@ -39,6 +40,7 @@ export interface ResultsPanelProps {
 }
 
 function Waiting({ w }: { w: WaitingModel }) {
+  const base = useRouteBase();
   return (
     <div className={styles.wait}>
       <div className={styles.waitHead}>
@@ -61,7 +63,7 @@ function Waiting({ w }: { w: WaitingModel }) {
       </ol>
       <p className={styles.waitHint}>{w.hint}</p>
       {w.demo ? (
-        <Link href={TRY_SAMPLE_HREF} className={cx(viewerStyles.bigBtn, styles.tryBtn)}>
+        <Link href={trySampleHref(base)} className={cx(viewerStyles.bigBtn, styles.tryBtn)}>
           <Icon name="dg-i-play" size={17} strokeWidth={2.2} />
           샘플 문서로 체험하기
         </Link>

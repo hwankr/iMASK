@@ -2,7 +2,8 @@
 
 /* ==========================================================================
    상세 검토 화면(/analyses/[id]) — 원본 Main.dc.html 328–602 · detailVM.
-   - 데이터는 useAnalysis(id) 로만 받는다. 불러오는 중에는 뼈대, 없는 ID 면 목록(/)으로 돌려보낸다(replace).
+   - 데이터는 useAnalysis(id) 로만 받는다. 불러오는 중에는 뼈대, 없는 ID 면 목록(/ — `/demo` 아래면 /demo)으로 돌려보낸다(replace).
+   - 이동 주소는 지금 기준 경로(useRouteBase)로 만든다(src/lib/routes.ts) — `/demo` 아래에서는 `/demo` 밖으로 나가지 않는다.
    - 서비스 변경 알림이 오면 훅이 다시 불러와 진행(대기 → 분석 중 → 문서별 완료 → 완료)이 그대로 반영된다.
    - 화면 상태는 useDetailUi(리듀서 하나), 검토 동작은 useDetailActions, 모달은 ReviewModal.
    - DetailView 는 실제 분석 상세(LiveDetailScreen — 완료된 공통 계약 결과)도 그린다(live 옵션):
@@ -14,8 +15,9 @@ import { useEffect } from 'react';
 import { Banner, Button, SegmentedTabs, cx, type BannerAction } from '@/components/ui';
 import { LiveSummaryTab } from '@/components/live/LiveSummaryTab';
 import { useLiveStages } from '@/components/live/liveHooks';
+import { listHref, reportHref } from '@/lib/routes';
 import type { LiveExtras } from '@/services';
-import { useAnalysis } from '@/services/react';
+import { useAnalysis, useRouteBase } from '@/services/react';
 import type { Analysis } from '@/services/types';
 import { ReviewModal } from '@/components/modals/ReviewModal';
 import { READ_ONLY_ACTIONS, useDetailActions } from './detailActions';
@@ -36,7 +38,7 @@ import type { DetailUiState, MobileTab } from './detailState';
 import { DetailHeader } from './DetailHeader';
 import { DetailSkeleton } from './DetailSkeleton';
 import { DocList, DocRail, type PanelProps } from './DocList';
-import { DocViewer, TRY_SAMPLE_HREF } from './DocViewer';
+import { DocViewer, trySampleHref } from './DocViewer';
 import { FailedBody } from './FailedBody';
 import { useLiveFile } from './liveFile';
 import { ResultsPanel } from './ResultsPanel';
@@ -62,12 +64,13 @@ export interface DetailScreenProps {
 /** 상세 검토 화면 — 데이터를 불러와 화면을 그린다 */
 export function DetailScreen({ id, initial }: DetailScreenProps) {
   const router = useRouter();
+  const base = useRouteBase();
   const { data, error, refresh } = useAnalysis(id);
 
-  /* 없는 ID — 프로토타입처럼 목록으로(기록을 남기지 않음) */
+  /* 없는 ID — 프로토타입처럼 그 기준의 목록으로(기록을 남기지 않음) */
   useEffect(() => {
-    if (data === null) router.replace('/');
-  }, [data, router]);
+    if (data === null) router.replace(listHref(base));
+  }, [data, router, base]);
 
   if (data === undefined) {
     if (error)
@@ -105,6 +108,7 @@ export interface DetailViewProps {
 /** 상세 검토 화면 본체 — 데모 분석, 또는 실제 분석(live) */
 export function DetailView({ analysis: a, initial, live }: DetailViewProps) {
   const router = useRouter();
+  const base = useRouteBase();
   const ui = useDetailUi(a, initial);
   const demoActions = useDetailActions(a, ui);
   // 실제 분석은 읽기 전용 — 검토 동작은 아무것도 하지 않는다(버튼도 막혀 있다)
@@ -139,12 +143,12 @@ export function DetailView({ analysis: a, initial, live }: DetailViewProps) {
     /* 다시 분석하는 동안 띠의 버튼이 사라졌다가 다시 생긴다 — 끝난 뒤 포커스를 돌려줄 자리(focusRescue) */
     dataSlot: b.key === 'retryFailed' ? 'retry-failed' : undefined,
     onClick: () => {
-      if (b.key === 'trySample') router.push(TRY_SAMPLE_HREF);
+      if (b.key === 'trySample') router.push(trySampleHref(base));
       else if (b.key === 'showFailedDoc') {
         const d = a.docs.find((doc) => doc.status === 'failed');
         if (d) ui.pickDoc(d.id);
       } else if (b.key === 'retryFailed') actions.retry();
-      else router.push(`/analyses/${encodeURIComponent(a.id)}/report`);
+      else router.push(reportHref(base, a.id));
     },
   }));
 

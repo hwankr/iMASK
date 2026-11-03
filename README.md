@@ -3,7 +3,8 @@
 은행 여신 담당자가 대출 서류 묶음(PDF·이미지)에서 찾은 민감정보 탐지 결과(위험등급과 판단 근거)를 검토하고, 보고서로 내보내는 웹 서비스 **iMASK**입니다. 1단계 화면 껍데기(데모)에 Upstage 워크플로우로 실제 분석하는 모드를 더했습니다.
 
 - 기본은 브라우저 안의 **데모 서비스**가 샘플 데이터로 응답합니다. 샘플 속 이름·주민등록번호·전화번호·계좌번호·주소·금액은 모두 가상입니다. 화면의 '데모 데이터' 표시도 이 때문에 있습니다.
-- `NEXT_PUBLIC_IMASK_SERVICE=api` 로 켜는 **실제 분석 모드**에서는 서류 묶음 하나를 올리면 **FastAPI 백엔드**(`api/`)가 **Upstage Studio 워크플로우**로 분석하고, 화면은 진행 상태를 보여 주고, 끝나면 데모와 같은 상세 검토 화면(올린 PDF·이미지 원문 위의 탐지 위치 상자·마스킹 미리보기·분석 요약)을 **읽기 전용**으로 보여 줍니다([실제 분석 모드](#실제-분석-모드)). 검토 동작(확인·오탐·분류 수정·메모·검토 완료)·보고서는 아직 데모 모드에만 있습니다.
+- `NEXT_PUBLIC_IMASK_SERVICE=api` 로 켜는 **실제 분석 모드**에서는 서류 묶음 하나를 올리면 **FastAPI 백엔드**(`api/`)가 **Upstage Studio 워크플로우**로 분석하고, 화면은 진행 상태를 보여 주고, 끝나면 데모와 같은 상세 검토 화면(올린 PDF·이미지 원문 위의 탐지 위치 상자·마스킹 미리보기·분석 요약)을 **읽기 전용**으로 보여 줍니다([실제 분석 모드](#실제-분석-모드)). 검토 동작(확인·오탐·분류 수정·메모·검토 완료)·보고서는 아직 데모에만 있습니다.
+- 모드는 **주소 기준**입니다. **`/demo` 아래는 언제나 데모**이고, 그 밖은 빌드 모드(`NEXT_PUBLIC_IMASK_SERVICE`)를 따릅니다. 그래서 실제 분석 모드로 빌드한 운영 사이트에서도 `/demo` 로 들어가면 데모(샘플 6건·상세 검토·보고서·내보내기)가 그대로 동작합니다. 실제 분석 화면 헤더의 **'데모 체험하기'** 링크가 `/demo` 로 갑니다.
 - Next.js 16(App Router), TypeScript strict, CSS Modules와 디자인 토큰(CSS 변수)으로 만들었습니다. Tailwind, CSS-in-JS, UI 라이브러리는 쓰지 않습니다.
 
 ## 화면
@@ -14,8 +15,9 @@
 | `/analyses/new` | 새 분석 | 파일 선택 검사(PDF·PNG·JPG, 파일당 20MB, 최대 10개), 업로드 진행, 분석 요청 |
 | `/analyses/[id]` | 상세 검토 | 문서 목록, 원문(샘플 문서 화면)과 하이라이트, 결과 패널(탐지 항목 · 검토 필요 · 문서 간 연결 탭, 필터 칩, '현재 문서만 보기'). 아래 검토 동작을 하고 검토를 완료합니다 |
 | `/analyses/[id]/report` | 검토 결과 보고서 | 검토 결과 정리, 내보내기(CSV·JSON 파일을 브라우저 다운로드로 저장) |
+| `/demo` · `/demo/analyses/new` · `/demo/analyses/[id]` · `/demo/analyses/[id]/report` | 위 네 화면(데모) | **빌드 모드와 상관없이 언제나 데모 서비스**로 위 네 화면을 그립니다. 화면 안 이동(목록·새 분석·상세·보고서·완료 토스트·헤더 메뉴·로고)은 모두 `/demo` 아래에 머뭅니다 |
 
-위 표는 데모 모드입니다. 실제 분석 모드에서는 새 분석·상세·보고서가 다른 화면으로 바뀝니다([화면별 동작](#화면별-동작)).
+위 표의 루트 주소(`/`·`/analyses/…`)는 데모 모드 빌드 기준입니다. 실제 분석 모드로 빌드하면 루트 주소의 새 분석·상세·보고서가 다른 화면으로 바뀌고([화면별 동작](#화면별-동작)), `/demo` 아래는 그대로 데모입니다.
 
 휴대폰(768px 미만), 태블릿(768–1199px), 데스크톱(1200px 이상) 배치가 각각 있습니다. 휴대폰에서는 목록이 카드로 바뀌고, 상세 검토는 원문·탐지 결과·문서 탭으로 나뉘며, 모달은 아래에서 올라오는 시트가 됩니다.
 
@@ -34,7 +36,10 @@
 
 ### 화면 이동과 목록 상태
 
-목록의 검색·필터·정렬은 URL 검색 파라미터에 있고, 목록 화면이 마지막 값을 탭의 `sessionStorage`(`imask:list-query`)에 기억합니다(`src/components/list/listReturn.ts`). 다른 화면에서 목록으로 갈 때는 프로토타입처럼 이 값을 이어 씁니다.
+목록의 검색·필터·정렬은 URL 검색 파라미터에 있고, 목록 화면이 마지막 값을 탭의 `sessionStorage` 에 기억합니다(`src/components/list/listReturn.ts`). 다른 화면에서 목록으로 갈 때는 프로토타입처럼 이 값을 이어 씁니다.
+
+- 기억은 **기준 경로마다 따로**입니다 — 루트(`/`)는 `imask:list-query`, 데모(`/demo`)는 `imask:demo:list-query`. `/demo` 에서 건 필터가 실제 분석 화면의 헤더·'목록으로' 링크로 새지 않습니다(그 반대도).
+- 화면 안 이동 주소는 모두 `src/lib/routes.ts` 의 함수(`listHref`·`newAnalysisHref`·`detailHref`·`reportHref`, 기준 경로 붙이기 `withBase`)에 지금 기준 경로(`useRouteBase()` — `''` 또는 `'/demo'`)를 넘겨 만듭니다. `/demo` 아래에서는 아래 이동이 모두 `/demo` 기준입니다(예: 헤더 '검토 필요' → `/demo?review=needed`).
 
 | 이동 | 목록 상태 |
 |---|---|
@@ -73,6 +78,7 @@ npm run dev          # next dev (Turbopack) → http://localhost:3000
 | `/analyses/A1` | 상세 검토 — 샘플 '대출상담 서류 묶음' |
 | `/analyses/A1/report` | A1의 검토 결과 보고서 |
 | `/analyses/A3` · `/analyses/A4` · `/analyses/A6` | 상세 검토 — 분석 중 · 일부 문서 처리 실패 · 전체 분석 실패 샘플 |
+| `/demo` · `/demo/analyses/new?sample=1` · `/demo/analyses/A1` · `/demo/analyses/A1/report` | 위와 같은 데모 화면을 `/demo` 아래에서 — 실제 분석 모드 빌드(운영)에서도 데모입니다. `/demo` 아래의 없는 주소는 404, 없는 분석 ID 는 `/demo` 로 돌아갑니다 |
 | `/dev/states` | 개발용 — 화면 상태 23개 목록([아래](#devstates-사용법) 참고) |
 | `/dev/components` | 개발용 — 공통 컴포넌트와 디자인 기준 보드 |
 
@@ -118,14 +124,18 @@ src/
 │  │                        미리 해 둔 검토 동작(seed.ts), /dev/states 상태 준비(scenarios.ts)
 │  ├─ api/                  실제 분석 구현 — 백엔드 클라이언트(client.ts), 응답 → 화면 타입(mapping.ts),
 │  │                        서명 업로드(upload.ts), 접근 코드·이 탭의 분석 id(access-code.ts·session-list.ts)
-│  ├─ mode.ts               서비스 모드(NEXT_PUBLIC_IMASK_SERVICE — demo | api)
-│  ├─ index.ts              createService() — 모드에 따라 데모·실제 분석 서비스를 고르는 한 곳
-│  └─ react.tsx             ServiceProvider와 훅(useService·useAnalyses·useAnalysis·usePending …)
+│  ├─ mode.ts               서비스 모드 — 빌드 모드 SERVICE_MODE(NEXT_PUBLIC_IMASK_SERVICE — demo | api)와
+│  │                        주소 기준 모드 modeForPath(/demo 아래는 언제나 demo)
+│  ├─ index.ts              createServiceFor(mode) · createServiceCache() — 모드별 데모·실제 분석 서비스를 만드는 한 곳
+│  └─ react.tsx             ServiceProvider(주소 기준 모드 · 기준 경로, 모드별 브라우저 싱글턴)와
+│                           훅(useService·useServiceMode·useRouteBase·useAnalyses·useAnalysis·usePending …)
 ├─ app/                     ⑤ 라우트 — layout.tsx·providers.tsx·fonts.ts·globals.css,
-│                             page.tsx(/), analyses/(새 분석·상세·보고서), dev/(states·components)
+│                             page.tsx(/), analyses/(새 분석·상세·보고서 — 주소 기준 모드로 데모·실제 분석 화면을 고름),
+│                             demo/(/demo 아래 같은 네 화면 — 언제나 데모, [...rest] 는 /demo 아래 404), dev/(states·components)
 ├─ components/              ⑤ 화면 컴포넌트
 │  ├─ ui/                   공통 컴포넌트(버튼·입력·드롭다운·탭·모달·토스트·상태 표기 …)
-│  ├─ layout/               헤더, AppShell(<main>·토스트·알림 영역·아이콘 스프라이트), 데모 표시
+│  ├─ layout/               헤더(실제 분석 화면의 '데모 체험하기' 링크 포함), AppShell(<main>·토스트·알림 영역·
+│  │                        아이콘 스프라이트), 데모 표시, ByServiceMode(주소 기준 모드로 두 화면 중 하나를 그림)
 │  ├─ list/                 분석 목록
 │  ├─ upload/               새 분석
 │  ├─ detail/               상세 검토(데모·실제 분석 공용) — 실제 분석 원문은 LivePaper(쪽 · 위치 상자) ·
@@ -135,7 +145,8 @@ src/
 │  └─ report/               보고서와 내보내기
 ├─ styles/tokens.css        디자인 토큰(CSS 변수) — 색·크기 리터럴은 이 파일에만 있다
 ├─ lib/                     형식 도우미(format.ts), 브라우저 다운로드(download.ts), 쪽 위 상자 · 캔버스 배율(pageBox.ts),
-│                             공통 훅(hooks/)
+│                             주소 기준 경로 · 이동 주소(routes.ts), 공통 훅(hooks/),
+│                             지킴 테스트(navigation-guard.test.ts — SERVICE_MODE · 환경변수 · 이동 주소 리터럴)
 └─ dev/                     /dev/states 상태 정의(states.ts)와 미리보기
 scripts/check-tokens.mjs    토큰 규칙 검사기(같은 폴더에 검사기·ESLint 경계 테스트)
 scripts/upstage_smoke.py    Upstage 워크플로우 직접 호출 확인 · scripts/api_e2e.py 백엔드 끝까지 확인
@@ -152,7 +163,7 @@ supabase/                   DB 변경 기록 — migrations/에 적용한 SQL을
 
 ## 실제 분석 모드
 
-기본은 데모 모드입니다. 환경변수 `NEXT_PUBLIC_IMASK_SERVICE` 가 정확히 `api` 이면 화면이 데모 서비스 대신 **실제 분석 서비스**(`src/services/api/`)를 씁니다. 서류 묶음 하나를 올리면 [FastAPI 백엔드](#fastapi-백엔드-api)가 Upstage Studio 워크플로우로 분석하고, 화면은 진행 상태와, 끝나면 데모와 같은 상세 검토 화면(원본 파일 원문 · 탐지 위치 상자 · 마스킹 미리보기 · 분석 요약, 읽기 전용)을 보여 줍니다. **합성 자료만 올립니다** — 실제 고객 서류나 본인 서류는 올리지 않습니다.
+기본은 데모 모드입니다. 환경변수 `NEXT_PUBLIC_IMASK_SERVICE` 가 정확히 `api` 이면 루트 주소(`/`·`/analyses/…`·`/dev/…`)의 화면이 데모 서비스 대신 **실제 분석 서비스**(`src/services/api/`)를 씁니다. **`/demo` 아래는 이 값과 상관없이 언제나 데모 서비스**입니다 — 샘플·검토 동작·보고서·내보내기가 그대로 됩니다. 서류 묶음 하나를 올리면 [FastAPI 백엔드](#fastapi-백엔드-api)가 Upstage Studio 워크플로우로 분석하고, 화면은 진행 상태와, 끝나면 데모와 같은 상세 검토 화면(원본 파일 원문 · 탐지 위치 상자 · 마스킹 미리보기 · 분석 요약, 읽기 전용)을 보여 줍니다. **합성 자료만 올립니다** — 실제 고객 서류나 본인 서류는 올리지 않습니다.
 
 ### 켜는 법(로컬)
 
@@ -168,7 +179,7 @@ supabase/                   DB 변경 기록 — migrations/에 적용한 SQL을
 
 - 브라우저 업로드에 `NEXT_PUBLIC_SUPABASE_URL`·`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` 도 필요합니다. Next 는 저장소 루트의 `.env` 도 읽지만, 브라우저 코드에는 `NEXT_PUBLIC_` 이 붙은 값만 들어갑니다.
 - `NEXT_PUBLIC_*` 값은 **빌드(또는 `next dev` 시작) 때** 코드에 들어갑니다. 바꾸면 개발 서버를 다시 띄우고, Vercel 에서는 다시 배포합니다.
-- 헤더 배지가 '데모 데이터' 대신 **'실제 분석'** 으로 보이면 켜진 것입니다.
+- 헤더 배지가 '데모 데이터' 대신 **'실제 분석'** 으로 보이면 켜진 것입니다. 실제 분석 화면 헤더에만 배지 앞에 작은 **'데모 체험하기'** 링크(→ `/demo`, 휴대폰 폭에서는 '데모')가 있습니다. 이 링크는 미리 받지 않으므로(`prefetch={false}`) 실제 분석 화면을 열 때의 요청은 그대로입니다. `/demo` 에서 실제 분석 화면으로 돌아가는 링크는 아직 없습니다(뒤로 가기나 주소 입력).
 
 ### 흐름
 
@@ -210,11 +221,13 @@ supabase/                   DB 변경 기록 — migrations/에 적용한 SQL을
 | `/analyses/new` | 실제 분석 새 화면(`src/components/live/LiveUploadScreen.tsx`) — 합성 자료 안내, 접근 코드, 분석명, 파일 1개, 진행 단계 |
 | `/analyses/[id]` | 실제 분석 상세(`src/components/live/LiveDetailScreen.tsx`) — 대기·분석 중: 머리(분석명·상태·분석 번호 `DG-YYYYMMDD-XXXX`·요청 시각·파일·경과 시간), 진행 중 안내와 Upstage 상태. 실패: 실패 문구와 '새 분석'. **완료 + 공통 계약 결과**(`raw.detailReady`): 데모와 같은 상세 검토 화면(`DetailView` — 3단 배치·휴대폰 탭)을 새로 고침 없이 바로 그립니다 — 문서 목록(한국어 서류 이름, `1페이지 · 파일 3쪽`), 원문 자리에 올린 파일의 그 서류 쪽(PDF 는 캔버스, PNG·JPEG 는 이미지)과 탐지 위치 상자(위험등급 색 · 누르면 그 항목 · 고르면 강조와 이름표 · 마스킹 미리보기면 검은 상자), 위치 없는 항목은 '위치 확인 필요', 기타 서류는 '기타 서류 안내', 결과 패널은 '탐지 항목'과 '분석 요약'(위험도 판정·다음 단계 문구를 글자 그대로, 결과 요약 줄, 접은 원본 단계별 JSON). 원본 파일을 받지 못하면 이유와 '다시 시도'(결과 패널은 그대로). 검토 동작 버튼은 막혀 있고 '실제 분석에서는 아직 지원하지 않는 기능입니다' 안내가 보입니다. **완료지만 옛 형식**(서류 0개 등): 완료 요약(분류한 서류 수와 종류·정보를 추출한 서류 수·위험도·마지막 단계·기타 서류·걸린 시간·Upstage 작업 번호)과 단계별 결과(단계마다 접고 펴는 JSON — 펼칠 때만 그립니다). 없는 id 면 안내와 '새 분석'(목록으로 보내지 않습니다). |
 | `/analyses/[id]/report` | '실제 분석 보고서는 아직 없습니다' 안내와 상세로 가는 링크 |
+| `/demo/**` | **데모 그대로** — 헤더 배지 '데모 데이터'(데모 링크 없음), '검토 필요' 숫자는 데모 목록 기준, 샘플 6건·상세 검토 동작·보고서·내보내기·`?sample=1`·분석 완료 토스트가 모두 됩니다. 데모 서비스(브라우저 메모리)는 처음 `/demo` 를 열 때 만들어 탭 안에서 이어지고(`/` 로 갔다가 클라이언트 이동으로 돌아와도 검토가 남음), `/demo` 만 다니면 실제 분석 서비스는 만들지 않아 `/api/py` 요청이 없습니다. 새로 고침하면 샘플 상태로 돌아갑니다. |
 
 ### 실제 분석 모드에서 안 되는 것
 
 - 검토 동작(탐지 내용 확인·확인 취소·오탐 표시·분류 수정·항목 메모)·검토사항·문서 간 연결·검토 메모·검토 완료·보고서·내보내기. 상세 검토 화면은 읽기 전용이라 그 버튼을 막고 안내를 보입니다. 서비스의 검토·내보내기 메서드는 `실제 분석에서는 아직 지원하지 않는 기능입니다.` 로 거절하고, 다시 분석(`retry`)은 같은 문구의 실패 결과를 돌려줍니다(목록의 '재시도'를 누르면 그 문구가 토스트로 보입니다).
-- 샘플 문서(`sampleFiles()` 는 빈 목록, `?sample=1` 은 무시), '샘플 분석 건 둘러보기', `/dev/states` 미리보기(`DemoControls` 가 없습니다).
+- 루트 주소에서는 샘플 문서(`sampleFiles()` 는 빈 목록, `?sample=1` 은 무시)와 '샘플 분석 건 둘러보기'가 없습니다 — 이것들과 위의 검토 동작·보고서·내보내기는 **`/demo` 아래 데모**에서 됩니다.
+- `/dev/**`(`/dev/states` 미리보기 등)는 `/demo` 밖이라 실제 분석 서비스를 쓰므로 여전히 동작하지 않습니다(`DemoControls` 가 없습니다).
 - 마스킹한 파일 만들기(마스킹 미리보기는 화면에서만 가립니다), 결과 표·보고서, 다른 탭이나 다른 사람이 만든 분석 목록, 분석 지우기.
 - 원본 PDF 에 들어 있지 않은 글꼴(표준 14 글꼴 · CJK 미리 정의 CMap)·JPEG 2000 이미지는 pdf.js 의 글꼴 · wasm 자료를 함께 내보내지 않아 대체 글꼴로 보이거나 빠질 수 있습니다(합성 묶음은 글꼴을 품고 있어 해당 없음).
 
@@ -430,18 +443,27 @@ npx supabase db push                                   # 아직 적용 안 된 �
 
 화면은 `src/services/react.tsx` 의 훅으로만 데이터를 다루고, 훅은 `AnalysisService` 인터페이스만 부릅니다. 데모 서비스(`src/services/demo/`)와 실제 분석 서비스(`src/services/api/`)가 같은 인터페이스를 구현하고, 어느 것을 쓸지는 한 곳에서 고릅니다.
 
-### 1. 고르는 곳 — `src/services/index.ts` 의 `createService()`
+### 1. 고르는 곳 — 주소 기준 `ServiceProvider`(`src/services/react.tsx`)
 
 ```ts
-/** 데이터 서비스를 만든다 — 모드에 따라 실제 분석 서비스 또는 데모 서비스 */
-export function createService(): AnalysisService {
-  return SERVICE_MODE === 'api' ? createApiService() : createDemoService();
+// src/services/mode.ts — /demo 아래는 언제나 데모, 그 밖은 빌드 모드
+export function modeForPath(pathname: string | null | undefined, buildMode: ServiceMode): ServiceMode {
+  return isDemoPath(pathname) ? 'demo' : buildMode;
+}
+
+// src/services/index.ts — 모드별 서비스 만들기
+export function createServiceFor(mode: ServiceMode): AnalysisService {
+  return mode === 'api' ? createApiService() : createDemoService();
 }
 ```
 
-- `SERVICE_MODE`(`src/services/mode.ts`)는 `NEXT_PUBLIC_IMASK_SERVICE` 가 정확히 `api` 일 때만 `'api'`, 그 밖(없음 포함)은 `'demo'` 입니다. `process.env.NEXT_PUBLIC_IMASK_SERVICE` 를 글자 그대로 참조해야 Next 가 빌드 때 값을 넣습니다(`process.env[name]` 처럼 쓰면 브라우저 코드에 값이 들어가지 않습니다).
-- 라우트 페이지 3개(`src/app/analyses/new`·`[id]`·`[id]/report`)와 헤더 배지(`AppHeader`)도 같은 `SERVICE_MODE` 로 화면을 고릅니다. 실제 분석 화면은 `src/components/live/` 에 따로 있고, 데모 화면은 그대로입니다. 목록(`/`)은 두 모드가 같은 화면을 씁니다.
-- `react.tsx` 가 브라우저에서 처음 한 번 `createService()` 를 불러 앱 전체가 같은 서비스를 씁니다. 서버 렌더와 하이드레이션 첫 렌더에서는 서비스가 없고(`useService()` 가 `null`), 화면은 불러오는 중 화면을 보여 줍니다.
+- 빌드 모드 `SERVICE_MODE`(`src/services/mode.ts`)는 `NEXT_PUBLIC_IMASK_SERVICE` 가 정확히 `api` 일 때만 `'api'`, 그 밖(없음 포함)은 `'demo'` 입니다. `process.env.NEXT_PUBLIC_IMASK_SERVICE` 를 글자 그대로 참조해야 Next 가 빌드 때 값을 넣습니다(`process.env[name]` 처럼 쓰면 브라우저 코드에 값이 들어가지 않습니다). 이 환경변수는 `mode.ts` 와, pdf.js 묶음을 빼는 `src/components/detail/liveFile.ts` 의 빌드 분기에서만 읽습니다.
+- `ServiceProvider` 가 `usePathname()` 으로 **화면의 모드**(`modeForPath(경로, SERVICE_MODE)`)와 **기준 경로**(`routeBaseFor(경로)` — `''` 또는 `'/demo'`, `src/lib/routes.ts`)를 한 번 계산해 내립니다. 화면은 `useServiceMode()`·`useRouteBase()` 로 받습니다. 모드·기준 경로는 서버에서도 주소로 정해지므로 첫 그림부터 맞습니다(하이드레이션 불일치 없음). `SERVICE_MODE` 는 `src/services` 밖에서 읽지 않고 `@/services` 로 다시 내보내지도 않습니다.
+- 서비스는 **모드별 브라우저 싱글턴**(`createServiceCache()` — 데모 하나, 실제 분석 하나)입니다. 그 모드를 처음 쓸 때 만들고, 화면을 옮겨도 그대로 써서 상태가 이어집니다. 서버 렌더와 하이드레이션 첫 렌더에서는 서비스가 없고(`useService()` 가 `null`), 화면은 불러오는 중 화면을 보여 줍니다. `/` ↔ `/demo` 를 오가면 새 서비스 값이 올 때까지 불러오는 중이라 다른 서비스의 값(예: 헤더 '검토 필요' 숫자)이 남지 않습니다.
+- 루트 라우트 페이지 3개(`src/app/analyses/new`·`[id]`·`[id]/report`)는 `ByServiceMode`(`src/components/layout/ByServiceMode.tsx` — `useServiceMode()` 로 둘 중 하나를 그림)에 데모 화면과 실제 분석 화면을 함께 넘깁니다. `/demo` 아래 페이지(`src/app/demo/`)는 실제 분석 화면을 거치지 않고 데모 화면을 바로 그립니다. 헤더 배지와 '데모 체험하기' 링크(`AppHeader`)도 `useServiceMode()` 로 정합니다. 실제 분석 화면은 `src/components/live/` 에 따로 있고, 목록(`/`·`/demo`)은 두 모드가 같은 화면을 씁니다.
+- 화면 안 이동 주소는 `src/lib/routes.ts` 의 함수(`listHref`·`newAnalysisHref`·`detailHref`·`reportHref`, 기준 경로 붙이기 `withBase`)에 `useRouteBase()` 값을 넘겨 만듭니다. 기준이 `''` 이면 예전과 바이트 단위로 같은 주소입니다.
+- 지킴 테스트(`src/lib/navigation-guard.test.ts`, `npm test`)가 소스를 읽어 `src/app`·`src/components`·`src/lib`·`src/dev` 의 `SERVICE_MODE` 사용, `mode.ts`·`liveFile.ts` 밖의 `NEXT_PUBLIC_IMASK_SERVICE` 사용, 화면 코드의 이동 주소 리터럴(`'/analyses…'`·`href="/"`·`push('/')` 등)을 파일:줄로 알려 줍니다.
+- `createService()` 는 빌드 모드의 서비스를 만듭니다(테스트용 — 테스트 환경은 값이 없어 데모). 화면은 쓰지 않습니다.
 - 실제 분석 화면은 데이터를 서비스로만 다루고, 예외로 접근 코드 저장 함수(`readAccessCode`·`saveAccessCode` …)와 오류 판별(`apiErrorCode`·`apiErrorAnalysisId`)만 `@/services` 에서 가져다 씁니다.
 
 ### 2. 인터페이스 계약 — `AnalysisService`
@@ -479,7 +501,7 @@ export function createService(): AnalysisService {
 
 ### 4. 데모 전용 조작 — `DemoControls`
 
-`getDemoControls(service)`(`src/services/index.ts`)는 데모 서비스일 때만 `DemoControls` 를 주고, 그 밖에는 `null` 을 돌려줍니다. 화면에서는 `useDemoControls()` 로 받습니다.
+`getDemoControls(service)`(`src/services/index.ts`)는 데모 서비스일 때만 `DemoControls` 를 주고, 그 밖에는 `null` 을 돌려줍니다. 화면에서는 `useDemoControls()` 로 받습니다(서비스가 주소 기준이라 실제 분석 모드 빌드에서도 `/demo` 아래에서는 데모 조작이 있습니다).
 
 | 메서드 | 하는 일 |
 |---|---|
@@ -489,7 +511,7 @@ export function createService(): AnalysisService {
 
 쓰는 곳과, 실제 분석 모드라 `null` 일 때:
 
-| 쓰는 곳 | 실제 분석 모드(`getDemoControls` 가 `null`)일 때 |
+| 쓰는 곳 | 실제 분석 서비스(`getDemoControls` 가 `null` — 실제 분석 모드 빌드의 `/demo` 밖)일 때 |
 |---|---|
 | 목록이 비었을 때의 '샘플 분석 건 둘러보기' 버튼(`src/components/list/ListScreen.tsx` → `reset()`) | 버튼이 나오지 않습니다. 목록 화면의 나머지는 그대로 동작합니다. |
 | `/dev/**` — `/dev/states/[state]` 미리보기(`src/dev/PreparedState.tsx` → `prepare()`) | 상태를 만들지 않아 미리보기 화면이 그려지지 않습니다(위쪽 상태 이동 막대만 보임). |
@@ -530,6 +552,7 @@ export function createService(): AnalysisService {
 - **움직임과 접근성**: 곡선은 `--ease` 하나입니다. `prefers-reduced-motion: reduce` 이면 `globals.css` 의 전역 규칙으로 모든 움직임이 즉시 끝납니다(JS 부드러운 스크롤도 즉시 이동). 포커스는 `:focus-visible` 강조색 윤곽선으로 보이고, 탭(화살표)·드롭다운(화살표·Home·End·Enter·Esc)·모달(포커스 가둠·Esc·닫으면 원래 자리로)은 키보드로 다룹니다. 상태 변화는 `aria-live` 알림 영역으로 읽어 줍니다.
 - **휴대폰 누름 영역은 44px 이상**(`--touch-min`)입니다. 디자인상 더 작은 조작(아이콘 버튼, 작은 버튼, 탭, 필터 칩, 스위치, 띠 버튼)은 보이는 크기를 그대로 두고 투명 `::after` 로 누르는 영역만 넓힙니다. 이웃과 간격이 좁은 곳은 넓힌 영역이 겹치지 않게 나눕니다 — 필터 칩·스위치는 감싼 요소가 `--filter-chip-hit-top/bottom`·`--switch-hit-top/bottom` 으로 넓힐 양을 정하고, 줄이 바뀌는 버튼 줄(상세 항목 행동·필터 칩)은 휴대폰에서만 줄 간격을 8px(= 44 − 36)로 둡니다.
 - 컴포넌트 파일은 `Button.tsx` + `Button.module.css` 처럼 짝을 맞춥니다.
+- **화면 안 이동 주소는 `src/lib/routes.ts` 함수 + `useRouteBase()` 로만 만듭니다**(`/demo` 아래에서 `/demo` 밖으로 새지 않게). 화면의 모드 판단은 `useServiceMode()` 로 합니다(`SERVICE_MODE` 를 직접 읽지 않음). `npm test` 의 지킴 테스트가 둘 다 검사합니다.
 
 ---
 
@@ -542,7 +565,7 @@ export function createService(): AnalysisService {
 - 위쪽 막대 `← 상태 목록 · n / 23 · 상태 이름 · 이전 · 다음` 으로 목록에 돌아가거나 이전·다음 상태로 옮겨 갑니다. 키보드로는 `[`(이전)·`]`(다음)을 누릅니다(입력칸에 글자를 쓰는 중에는 무시). 상태를 바꿀 때마다 데모 서비스를 그 상태로 다시 준비합니다.
 - **휴대폰 전용 상태 2개는 목록에 없고 주소로만 엽니다**: `/dev/states/detail-docs`(문서 탭), `/dev/states/detail-results`(탐지 결과 탭). 막대에 번호 대신 '휴대폰 전용'이 나오며, 휴대폰 폭(768px 미만)으로 봅니다.
 - 상태를 열 때마다 데모 데이터를 샘플로 되돌린 뒤 그 상태를 만듭니다. 같은 탭에서 실제 화면으로 넘어가면 그 데이터가 이어지므로, 처음 샘플로 돌아가려면 새로 고침합니다.
-- 실제 분석 모드에서는 `DemoControls` 가 없어 상태를 만들지 못합니다(데모 서비스 전용).
+- 실제 분석 모드 빌드에서는 `/dev/**` 가 `/demo` 밖이라 실제 분석 서비스를 쓰고 `DemoControls` 가 없어 상태를 만들지 못합니다(데모 서비스 전용 — 데모는 `/demo` 에서 봅니다).
 
 ---
 

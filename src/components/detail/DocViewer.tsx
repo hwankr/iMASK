@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { Icon, IconButton, SkeletonCard, Spinner, cx } from '@/components/ui';
 import { useReplayToggle } from '@/lib/hooks';
+import { newAnalysisHref, type RouteBase } from '@/lib/routes';
+import { useRouteBase } from '@/services/react';
 import { liveFilePlaceholder, type PlaceholderModel, type ViewerModel } from './detailModel';
 import type { PanelProps } from './DocList';
 import { LivePaper } from './LivePaper';
@@ -13,8 +15,10 @@ import { PaperPage } from './PaperPage';
 import { Tip } from './Tip';
 import styles from './DocViewer.module.css';
 
-/** 체험용 샘플로 새 분석을 시작하는 주소(T5 가 ?sample=1 을 읽는다) */
-export const TRY_SAMPLE_HREF = '/analyses/new?sample=1';
+/** 체험용 샘플로 새 분석을 시작하는 주소(T5 가 ?sample=1 을 읽는다) — 그 기준 경로(`/demo` 아래면 `/demo/analyses/new?sample=1`) */
+export function trySampleHref(base: RouteBase): string {
+  return newAnalysisHref(base, { sample: true });
+}
 
 export interface DocViewerProps {
   v: ViewerModel;
@@ -65,6 +69,7 @@ function Placeholder({
   role?: 'status' | 'alert';
 }) {
   const action = ph.action;
+  const base = useRouteBase();
   return (
     <div className={styles.ph} role={role}>
       <span className={cx(styles.phIcon, ph.tone === 'err' && styles.phErr, ph.tone === 'run' && styles.phRun)}>
@@ -74,7 +79,7 @@ function Placeholder({
       <span className={styles.phText}>{ph.text}</span>
       {ph.skeleton ? <SkeletonCard look="viewer" lines={[46, 92, 78, 86, 58]} className={styles.phSkeleton} /> : null}
       {action && action.key === 'trySample' ? (
-        <Link href={TRY_SAMPLE_HREF} className={cx(styles.bigBtn, styles.phBtn)}>
+        <Link href={trySampleHref(base)} className={cx(styles.bigBtn, styles.phBtn)}>
           <Icon name={action.icon} size={17} strokeWidth={2.2} />
           {action.label}
         </Link>

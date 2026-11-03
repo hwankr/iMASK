@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import { Icon, Spinner, VisuallyHidden, cx } from '@/components/ui';
+import { newAnalysisHref } from '@/lib/routes';
+import { useRouteBase } from '@/services/react';
 import type { DetailActions } from './detailActions';
 import type { FailModel } from './detailModel';
 import { SpriteIcon } from './SpriteIcon';
@@ -18,9 +20,10 @@ export interface FailedBodyProps {
 
 /**
  * 전체 분석 실패(Main 586–594) — 실패 안내, 파일별 오류, 다음에 할 수 있는 일,
- * '다시 시도'(T7) · '새 분석으로 다시 올리기'(→ /analyses/new) · '검토 메모'(T7), 검토 메모, 위험등급 안내.
+ * '다시 시도'(T7) · '새 분석으로 다시 올리기'(→ /analyses/new, `/demo` 아래면 /demo/analyses/new) · '검토 메모'(T7), 검토 메모, 위험등급 안내.
  */
 export function FailedBody({ fail, locked, memo, memoPreview, memoBtn, actions }: FailedBodyProps) {
+  const base = useRouteBase();
   return (
     <div className={styles.wrap}>
       <div className={styles.inner}>
@@ -72,7 +75,7 @@ export function FailedBody({ fail, locked, memo, memoPreview, memoBtn, actions }
             <Icon name="dg-i-refresh" size={17} strokeWidth={2.2} />
             {fail.retryLabel}
           </button>
-          <Link href="/analyses/new" className={cx(styles.btn, styles.secondary)}>
+          <Link href={newAnalysisHref(base)} className={cx(styles.btn, styles.secondary)}>
             <Icon name="dg-i-upload" size={17} strokeWidth={2.1} />새 분석으로 다시 올리기
           </Link>
           <button type="button" className={cx(styles.btn, styles.ghost)} disabled={locked} onClick={actions.editMemo}>

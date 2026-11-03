@@ -5,6 +5,7 @@
    상세 화면 상태의 모달 자리(ui.state.modal)를 그린다. 모양은 공통 Modal(T2), 값은 reviewModalModel.
    - 저장: 입력 검사(오류 문구는 붉은 글자, 입력칸은 붉은 바탕) → 서비스 호출(그동안 저장 버튼 돌림 표시)
      → 모달 닫기 → 토스트. 화면은 서비스 변경 알림으로 새 데이터를 받아 다시 그려진다.
+     검토 완료 토스트의 '보고서 보기'는 지금 기준 경로(useRouteBase — `/demo` 아래면 /demo/…)의 보고서로 간다.
    - 사유 · 메모 입력칸에 처음 포커스(원본 autoFocus), Esc · 닫기 · 배경 누름으로 닫힘, 닫히면 연 버튼으로 포커스.
    - 휴대폰(< 768px)에서는 아래에서 올라오는 시트(공통 Modal).
    ========================================================================== */
@@ -12,8 +13,9 @@
 import { useRouter } from 'next/navigation';
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { Dropdown, Icon, Modal, RadioList, RiskBadge, TextField, useToast, type ModalButton } from '@/components/ui';
+import { reportHref as reportHrefFor } from '@/lib/routes';
 import type { Pending } from '@/services/analysis-service';
-import { usePending, useService } from '@/services/react';
+import { usePending, useRouteBase, useService } from '@/services/react';
 import type { Analysis } from '@/services/types';
 import { planPickFinding, type DetailModal } from '@/components/detail/detailState';
 import type { DetailUi } from '@/components/detail/useDetailUi';
@@ -65,6 +67,7 @@ function ReviewModalView({ analysis: a, ui, modal: m, pending }: ViewProps) {
   const service = useService();
   const toast = useToast();
   const router = useRouter();
+  const base = useRouteBase();
   const ids = useId();
   const noteId = `${ids}-note`;
   const errId = `${ids}-err`;
@@ -98,7 +101,7 @@ function ReviewModalView({ analysis: a, ui, modal: m, pending }: ViewProps) {
       setBusy(true);
       const done = await applyReviewModal(service, cur.a, cur.m);
       ui.closeModal();
-      const reportHref = `/analyses/${encodeURIComponent(cur.a.id)}/report`;
+      const reportHref = reportHrefFor(base, cur.a.id);
       toast(done.text, done.openReport ? { action: { label: '보고서 보기', onClick: () => router.push(reportHref) } } : {});
       rescueFocus(opener);
     } catch {

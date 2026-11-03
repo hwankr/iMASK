@@ -3,10 +3,11 @@
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
-import { listHomeHref, listNavHref, reviewNeededHref, useRememberedListQuery } from '@/components/list/listReturn';
+import { activeNav, listHomeHref, listNavHref, reviewNeededHref, useRememberedListQuery, type NavKey } from '@/components/list/listReturn';
 import { cx } from '@/components/ui/cx';
 import { Icon } from '@/components/ui/Icon';
-import { SERVICE_MODE } from '@/services/mode';
+import { DEMO_BASE, type RouteBase } from '@/lib/routes';
+import { useRouteBase, useServiceMode } from '@/services/react';
 import { DemoBadge } from './DemoBadge';
 import styles from './AppHeader.module.css';
 
@@ -23,29 +24,25 @@ export interface AppHeaderProps {
   reviewNeededCount: number | null;
 }
 
-type NavKey = 'analyses' | 'review';
-
-/** 실제 분석 모드(NEXT_PUBLIC_IMASK_SERVICE=api)의 헤더 표시 — 데모 모드는 DemoBadge 기본값('데모 데이터') */
+/** 실제 분석 모드(주소 기준 모드 'api')의 헤더 표시 — 데모 모드는 DemoBadge 기본값('데모 데이터') */
 const LIVE_BADGE = { label: '실제 분석', title: 'Upstage 워크플로우로 실제 분석합니다. 합성 자료만 올려 주세요.' } as const;
 
-/** 주 메뉴 활성 — `/` 이고 `review=needed` 면 '검토 필요', 그 밖에는 '문서 분석' */
-export function activeNav(pathname: string | null, review: string | null): NavKey {
-  return pathname === '/' && review === 'needed' ? 'review' : 'analyses';
-}
+/** 실제 분석 화면에서 데모(`/demo`)로 가는 보조 링크 — 폭 768 미만은 짧은 글자(390 미만은 밑줄 글자), 접근 가능한 이름은 그대로 */
+const DEMO_LINK = { label: '데모 체험하기', short: '데모', title: '샘플 데이터로 동작하는 데모 화면으로 이동합니다' } as const;
 
 /**
- * 메뉴 이동 주소는 마지막으로 본 목록(listReturn)에서 만든다 — 프로토타입 nav:
+ * 메뉴 이동 주소는 그 기준 경로(루트 · `/demo`)에서 마지막으로 본 목록(listReturn)으로 만든다 — 프로토타입 nav:
  * '문서 분석'은 '검토 필요' 필터만 풀고, '검토 필요'는 검색·위험·상태를 풀고 검토 필요만 건다(정렬은 둘 다 유지).
  */
-function NavItems({ active, count }: { active: NavKey; count: number | null }) {
-  const query = useRememberedListQuery();
+function NavItems({ active, count, base }: { active: NavKey; count: number | null; base: RouteBase }) {
+  const query = useRememberedListQuery(base);
   return (
     <>
-      <Link href={listNavHref(query)} aria-current={active === 'analyses' ? 'page' : undefined} className={cx(styles.navItem, active === 'analyses' && styles.navOn)}>
+      <Link href={listNavHref(base, query)} aria-current={active === 'analyses' ? 'page' : undefined} className={cx(styles.navItem, active === 'analyses' && styles.navOn)}>
         문서 분석
         <span aria-hidden="true" className={styles.bar} />
       </Link>
-      <Link href={reviewNeededHref(query)} aria-current={active === 'review' ? 'page' : undefined} className={cx(styles.navItem, active === 'review' && styles.navOn)}>
+      <Link href={reviewNeededHref(base, query)} aria-current={active === 'review' ? 'page' : undefined} className={cx(styles.navItem, active === 'review' && styles.navOn)}>
         검토 필요
         {count === null ? (
           <span aria-hidden="true" className={cx(styles.count, styles.countPending)} />
@@ -59,26 +56,29 @@ function NavItems({ active, count }: { active: NavKey; count: number | null }) {
 }
 
 /** URL(경로 + ?review)로 활성 메뉴를 계산한다. useSearchParams 는 Suspense 안에서만 쓴다. */
-function NavFromUrl({ count }: { count: number | null }) {
+function NavFromUrl({ count, base }: { count: number | null; base: RouteBase }) {
   const pathname = usePathname();
   const params = useSearchParams();
-  return <NavItems active={activeNav(pathname, params.get('review'))} count={count} />;
+  return <NavItems active={activeNav(pathname, params.get('review'))} count={count} base={base} />;
 }
 
 /** 정적 렌더(쿼리를 모를 때)의 자리 — 경로만으로 계산해 '문서 분석'을 켠다 */
-function NavFallback({ count }: { count: number | null }) {
-  return <NavItems active="analyses" count={count} />;
+function NavFallback({ count, base }: { count: number | null; base: RouteBase }) {
+  return <NavItems active="analyses" count={count} base={base} />;
 }
 
 /**
  * 헤더 — Main 98–112. 로고 버튼(첫 화면), 브랜드 글자(폭 480 이상), 주 메뉴(문서 분석 · 검토 필요 + 건수),
- * 오른쪽 데모 표시(실제 분석 모드면 '실제 분석')와 사용자 칩(폭 960 이상: 첫 글자 동그라미 · 이름 · 팀).
- * 선택 밑줄은 scaleX 로 움직인다(.32s).
+ * 오른쪽 데모 표시(실제 분석 모드면 '데모 체험하기' 링크 + '실제 분석')와 사용자 칩(폭 960 이상: 첫 글자 동그라미 · 이름 · 팀).
+ * 모드 · 기준 경로는 주소 기준(useServiceMode · useRouteBase) — `/demo` 아래는 빌드 모드와 상관없이 데모 표시이고
+ * 링크도 `/demo` 기준이다. 선택 밑줄은 scaleX 로 움직인다(.32s).
  */
 export function AppHeader({ brandName, user, reviewNeededCount }: AppHeaderProps) {
   const count = reviewNeededCount === null ? null : Math.max(0, Math.floor(reviewNeededCount));
+  const mode = useServiceMode();
+  const base = useRouteBase();
   // 로고 = 프로토타입 goHome: 검색·필터를 모두 풀고 정렬만 둔다
-  const homeHref = listHomeHref(useRememberedListQuery());
+  const homeHref = listHomeHref(base, useRememberedListQuery(base));
   return (
     <header className={styles.header}>
       <Link href={homeHref} aria-label={`${brandName} 첫 화면으로 이동`} className={styles.home}>
@@ -86,12 +86,21 @@ export function AppHeader({ brandName, user, reviewNeededCount }: AppHeaderProps
         <span className={styles.brand}>{brandName}</span>
       </Link>
       <nav aria-label="주 메뉴" className={styles.nav}>
-        <Suspense fallback={<NavFallback count={count} />}>
-          <NavFromUrl count={count} />
+        <Suspense fallback={<NavFallback count={count} base={base} />}>
+          <NavFromUrl count={count} base={base} />
         </Suspense>
       </nav>
-      <div className={styles.right}>
-        {SERVICE_MODE === 'api' ? <DemoBadge label={LIVE_BADGE.label} title={LIVE_BADGE.title} /> : <DemoBadge />}
+      <div className={cx(styles.right, mode === 'api' && styles.rightLive)}>
+        {mode === 'api' ? (
+          /* 미리 받지 않는다(prefetch={false}) — 실제 분석 화면을 열 때 /demo 를 받지 않게 */
+          <Link href={DEMO_BASE} prefetch={false} aria-label={DEMO_LINK.label} title={DEMO_LINK.title} className={styles.demoLink}>
+            <span className={styles.demoLinkLong}>{DEMO_LINK.label}</span>
+            <span aria-hidden="true" className={styles.demoLinkShort}>
+              {DEMO_LINK.short}
+            </span>
+          </Link>
+        ) : null}
+        {mode === 'api' ? <DemoBadge label={LIVE_BADGE.label} title={LIVE_BADGE.title} /> : <DemoBadge />}
         <div className={styles.user}>
           <span aria-hidden="true" className={styles.avatar}>
             {user.name.slice(0, 1)}

@@ -5,13 +5,15 @@ import type { CSSProperties } from 'react';
 import { AnalysisStatusLabel, Icon, ReviewStatusPill, RiskBadge, cx } from '@/components/ui';
 import { riskView } from '@/display/rules';
 import { staggerStyle } from '@/lib/hooks/useStagger';
+import { detailHref } from '@/lib/routes';
+import { useRouteBase } from '@/services/react';
 import { LayersIcon } from './ListIcons';
 import type { ListModel } from './listModel';
 import styles from './AnalysisCardList.module.css';
 
 /**
  * 휴대폰 카드 목록(768px 미만) — Main 180–200. `<ul>` 카드마다 위험 타일, 이름, '문서 n개 · 접수 일시',
- * 상태 3종(위험등급 · 분석 상태 · 검토 상태)을 라벨과 함께 아래로, 버튼(실패 건 '오류 확인', '상세 보기').
+ * 상태 3종(위험등급 · 분석 상태 · 검토 상태)을 라벨과 함께 아래로, 버튼(실패 건 '오류 확인', '상세 보기' — 지금 기준 경로의 상세).
  */
 export function AnalysisCardList({
   model,
@@ -24,6 +26,7 @@ export function AnalysisCardList({
   onShowError: (id: string) => void;
   onReset: () => void;
 }) {
+  const base = useRouteBase();
   return (
     <ul className={styles.list}>
       {model.rows.map((r, i) => {
@@ -72,7 +75,7 @@ export function AnalysisCardList({
                     오류 확인
                   </button>
                 ) : null}
-                <Link href={`/analyses/${encodeURIComponent(r.id)}`} aria-label={r.name + ' 상세 보기'} className={cx(styles.btn, styles.btnOpen)} data-row-action="open">
+                <Link href={detailHref(base, r.id)} aria-label={r.name + ' 상세 보기'} className={cx(styles.btn, styles.btnOpen)} data-row-action="open">
                   상세 보기
                   <Icon name="dg-i-chev-right" size={16} strokeWidth={2.2} />
                 </Link>

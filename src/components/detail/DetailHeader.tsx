@@ -3,6 +3,8 @@
 import type { CSSProperties } from 'react';
 import { listReturnHref, useRememberedListQuery } from '@/components/list/listReturn';
 import { AnalysisStatusLabel, Button, IconButton, ReviewStatusPill, RiskBadge, cx } from '@/components/ui';
+import { reportHref as reportHrefFor } from '@/lib/routes';
+import { useRouteBase } from '@/services/react';
 import type { DetailActions } from './detailActions';
 import type { HeaderModel } from './detailModel';
 import styles from './DetailHeader.module.css';
@@ -17,12 +19,14 @@ export interface DetailHeaderProps {
 /**
  * 상세 머리글(Main 331–357) — 목록으로, 제목 · 문서 수 · 쪽 수 · 접수 · 분석 ID(고정폭),
  * '결과 보고서'(→ /analyses/[id]/report), '검토 완료' · '검토 다시 열기'(T7 모달), 상태 3종, 탐지 확인 진행.
+ * 이동 주소는 지금 기준 경로(useRouteBase — `/demo` 아래면 `/demo/…`)로 만든다.
  * 휴대폰에서는 보고서 버튼이 아이콘 버튼이 되고 라벨이 짧아진다.
  */
 export function DetailHeader({ model: m, analysisId, mobile, actions }: DetailHeaderProps) {
-  const reportHref = `/analyses/${encodeURIComponent(analysisId)}/report`;
-  // 목록으로 = 프로토타입 goList: 마지막 목록의 검색·필터·정렬을 그대로 둔다
-  const listHref = listReturnHref(useRememberedListQuery());
+  const base = useRouteBase();
+  const reportHref = reportHrefFor(base, analysisId);
+  // 목록으로 = 프로토타입 goList: 그 기준 경로에서 마지막으로 본 목록의 검색·필터·정렬을 그대로 둔다
+  const listHref = listReturnHref(base, useRememberedListQuery(base));
   const pct = { '--pct': m.progress.pct + '%' } as CSSProperties;
   return (
     <div className={styles.head}>

@@ -14,8 +14,9 @@ import {
 import { listReturnHref, useRememberedListQuery } from '@/components/list/listReturn';
 import { Icon, TextField, useToast } from '@/components/ui';
 import { CONFIG } from '@/config/app';
+import { detailHref } from '@/lib/routes';
 import type { AnalysisService } from '@/services/analysis-service';
-import { useService } from '@/services/react';
+import { useRouteBase, useService } from '@/services/react';
 import type { UploadFile } from '@/services/types';
 import { DropZone } from './DropZone';
 import { FileList } from './FileList';
@@ -65,10 +66,12 @@ type PendingFocus = { kind: 'row'; index: number } | { kind: 'remove'; id: strin
 /**
  * /analyses/new 새 분석 — 프로토타입 Main.dc.html 240–327(마크업) · 1677–1729(동작) · 1992–2035(uploadVM).
  * 데이터는 서비스(sampleFiles · requestAnalysis)로만 다룬다. 실제 업로드는 하지 않는다.
+ * 이동 주소('취소' → 기억한 목록, 요청 뒤 상세)는 지금 기준 경로(useRouteBase — `/demo` 아래면 /demo/…)로 만든다.
  */
 export function UploadScreen({ initial, sampleFromQuery = false }: UploadScreenProps) {
   const router = useRouter();
-  const listQuery = useRememberedListQuery();
+  const base = useRouteBase();
+  const listQuery = useRememberedListQuery(base);
   const service = useService();
   const toast = useToast();
   const [up, setUp] = useState<UploadState>(() => initUpload(initial));
@@ -186,7 +189,7 @@ export function UploadScreen({ initial, sampleFromQuery = false }: UploadScreenP
   /* ---------- 이동 · 시작(원본 cancel · startAnalysis) ---------- */
   const cancel = () => {
     // 원본 cancel(2033): 목록으로 — 마지막 목록의 검색·필터·정렬을 그대로 둔다
-    if (!busy) router.push(listReturnHref(listQuery));
+    if (!busy) router.push(listReturnHref(base, listQuery));
   };
 
   const onSubmit = (e: FormEvent<HTMLFormElement>) => {
@@ -205,7 +208,7 @@ export function UploadScreen({ initial, sampleFromQuery = false }: UploadScreenP
     service.requestAnalysis({ name: check.name, files: check.files }).then(
       (id) => {
         if (!alive.current) return;
-        router.push('/analyses/' + encodeURIComponent(id));
+        router.push(detailHref(base, id));
         toast(REQUESTED_TOAST);
       },
       () => {

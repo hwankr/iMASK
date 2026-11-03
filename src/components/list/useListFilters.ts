@@ -2,6 +2,7 @@
 
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { useRouteBase } from '@/services/react';
 import { DEFAULT_FILTERS, filtersToQuery, parseFilters, type ListFilters } from './listModel';
 import { rememberListQuery } from './listReturn';
 
@@ -34,10 +35,11 @@ interface UrlFilterState {
  *   쓴 값이 늦게 돌아오는 것은 pending 목록으로 알아본다.
  * - `initial` 은 처음 그릴 때 URL 에 없는 값의 기본값이다(URL 값이 이긴다). URL 에는 사용자가 바꿀 때 함께 들어간다.
  * - 지금 필터를 listReturn 에 기억해 두어, 다른 화면의 '목록으로' 이동(상세 뒤로 · 헤더 메뉴 · 새 분석 취소)이
- *   프로토타입처럼 목록 상태를 이어 가게 한다.
+ *   프로토타입처럼 목록 상태를 이어 가게 한다. 기억은 기준 경로(useRouteBase — 루트 / `/demo`)마다 따로다.
  */
 export function useUrlListFilters(initial?: Partial<ListFilters>): [ListFilters, SetListFilters] {
   const params = useSearchParams();
+  const base = useRouteBase();
   const urlQuery = filtersToQuery(parseFilters(params));
   const [state, setState] = useState<UrlFilterState>(() => ({
     filters: { ...DEFAULT_FILTERS, ...initial, ...fromUrlOnly(params) },
@@ -61,8 +63,8 @@ export function useUrlListFilters(initial?: Partial<ListFilters>): [ListFilters,
 
   const shownQuery = filtersToQuery(current.filters);
   useEffect(() => {
-    rememberListQuery(shownQuery);
-  }, [shownQuery]);
+    rememberListQuery(base, shownQuery);
+  }, [base, shownQuery]);
 
   const update: SetListFilters = (patch) => {
     const next = { ...current.filters, ...patch };

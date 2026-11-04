@@ -6,7 +6,8 @@
    - 실제 분석(Analysis.raw 가 있음 — 화면은 원문 값을 지운 안전한 사본을 넘긴다)도 데모와 같은 구역 01~08 · 대상 문서 표의
      '남은 검토사항' 열 · '남아 있는 검토사항' 구역(서버가 계산한 검토사항 중 미해결)을 쓴다. 다른 점(데모 값은 그대로):
      요약 카드 3장(탐지 항목 · 담당자 확인 · 남은 검토사항 — '문서 간 연결' 카드는 아직 없어 뺀다, 미평가가 있으면 탐지 항목
-     아랫줄에 ' · 미평가 n'), 정보 종류별 표의 '미평가' 열(1건 이상일 때), 전체 탐지 항목은 서류 순번 → 서류 안 순번의 숫자 순
+     아랫줄에 ' · 미평가 n'), 위험등급별 탐지 분포 막대의 마지막 '미평가' 조각(1건 이상일 때 — 데모 막대는 높음 · 보통 · 낮음만),
+     정보 종류별 표의 '미평가' 열(1건 이상일 때), 전체 탐지 항목은 서류 순번 → 서류 안 순번의 숫자 순
      (D2-01 이 D10-01 앞), 빈 위험 사유 · 권장 조치는 '-', 꼬리말 한 문장.
    - 수정 표의 수정 시각 = 이력 대상(target)이 항목 번호와 같거나 '번호 + 공백'으로 시작하는 마지막 오탐 · 분류 수정 줄
      (D1-10 이 'D1-100 …' 줄을 잡지 않게).
@@ -75,6 +76,9 @@ const HISTORY_FG: Record<HistoryKind, string> = {
 /** 분포·요약에 세는 위험등급(높은 순) — 라벨·색은 ② RISK 에서 가져온다 */
 const COUNTED_LEVELS = ['high', 'medium', 'low'] as const satisfies readonly RiskLevel[];
 
+/** 실제 분석의 분포 막대 등급 — 높음 · 보통 · 낮음 뒤 마지막에 미평가(워크플로우가 등급을 주지 않은 항목) */
+const LIVE_DIST_LEVELS = [...COUNTED_LEVELS, 'unrated'] as const satisfies readonly RiskLevel[];
+
 /** 꼬리말 — 마스킹 안내(두 모드 공통 문장) */
 export const FOOTER_MASKED = '민감한 값은 마스킹해 표시했습니다. 원문 값은 보고서와 내보내기 파일에 포함하지 않습니다.';
 
@@ -117,9 +121,9 @@ export interface KpiCard {
   warn: boolean;
 }
 
-/** 위험등급별 탐지 분포 막대 한 조각 */
+/** 위험등급별 탐지 분포 막대 한 조각 — 0건 조각은 없다. 'unrated' 는 실제 분석에만(마지막 조각) */
 export interface DistSegment {
-  key: 'high' | 'medium' | 'low';
+  key: 'high' | 'medium' | 'low' | 'unrated';
   label: string;
   n: number;
   /** 막대·범례 색(② RISK[key].solid) */
@@ -317,7 +321,10 @@ export function reportView(a: Analysis): ReportView {
       };
     });
 
-  const dist: DistSegment[] = COUNTED_LEVELS.map((key) => ({ key, label: RISK[key].label, n: c[key], color: RISK[key].solid }))
+  /* 데모는 높음 · 보통 · 낮음만, 실제 분석은 미평가도 마지막 조각으로(0건 조각은 빼고 index 는 남은 조각 차례) */
+  const distLevels: readonly DistSegment['key'][] = live ? LIVE_DIST_LEVELS : COUNTED_LEVELS;
+  const dist: DistSegment[] = distLevels
+    .map((key) => ({ key, label: RISK[key].label, n: c[key], color: RISK[key].solid }))
     .filter((d) => d.n > 0)
     .map((d, index) => ({ ...d, index }));
 

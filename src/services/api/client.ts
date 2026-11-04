@@ -9,6 +9,9 @@
    - reviewAction = 검토 동작 하나(POST /analyses/{id}/review-actions, JSON 본문 — 항목 id 는 어떤 문자든 올 수 있어
      주소가 아니라 본문에 담는다). 시간 제한 · 오류 모양은 다른 요청과 같다(413 은 bad_request).
    - AnalysisOut.review(검토 기록 블록)는 바깥 값이라 unknown 으로 두고 매핑(mapping.ts)이 방어적으로 읽는다.
+   - listAnalyses = GET /analyses(서버 목록 — 최근 100건, 가벼운 항목). 응답 모양은 매핑(mapping.ts readAnalysisList)이 검사한다.
+   - deleteAnalysis = DELETE /analyses/{id} → 204. 204 는 본문을 읽지 않는다(빈 본문을 JSON 으로 읽다 '응답을 읽지 못함'이 되지 않게).
+   - retryAnalysis = POST /analyses/{id}/retry(본문 { actor }) → 200 다시 시작한(또는 시작하다 실패한) 분석.
    ========================================================================== */
 
 import type { Exposure, FpReason, InfoCategory, InfoSubject } from '@/display/rules';
@@ -100,6 +103,8 @@ export interface AnalysisOut {
   result: unknown | null;
   created_at: string;
   updated_at: string;
+  /** 마지막으로 분석을 시작한 시각(시작 선점 · 다시 분석 요청). 시작 전이거나 옛 분석이면 null. 옛 백엔드는 키가 없다 */
+  started_at?: string | null;
   documents: DocumentOut[];
   /** GET 응답에서만 — 이번 조회에서 본 Upstage 상태 */
   upstage_status: string | null;
@@ -110,6 +115,40 @@ export interface AnalysisOut {
    * 옛 백엔드는 키가 없다. 모양을 믿지 않는다(mapping.ts 가 목록 밖 · 타입 틀린 값을 버린다).
    */
   review?: unknown;
+}
+
+/** 목록 항목의 올린 파일(키 셋만) */
+export interface ListDocumentOut {
+  filename: string;
+  size_bytes: number;
+  mime_type: string;
+}
+
+/**
+ * GET /analyses 항목 — 가벼운 분석(결과 JSON · 작업 번호 · 저장 경로 없음).
+ * risk_level = result.summary.risk_level(문자열이 아니면 null), review = 검토 상태(done · needed · none).
+ */
+export interface AnalysisListItemOut {
+  id: string;
+  name: string;
+  status: string;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+  started_at: string | null;
+  documents: ListDocumentOut[];
+  risk_level: string | null;
+  review: string;
+}
+
+/** GET /analyses 응답 — 바깥 값이라 모양을 믿지 않는다(mapping.ts 가 검사) */
+export interface AnalysisListOut {
+  analyses: AnalysisListItemOut[];
+}
+
+/** POST /analyses/{id}/retry 본문 */
+export interface RetryIn {
+  actor: string;
 }
 
 /** 검토 동작 요청 공통 — actor = 처리자 이름(화면 CONFIG.user.name) */
@@ -205,6 +244,12 @@ export interface ApiClient {
   getFile(id: string): Promise<FileOut>;
   /** POST /api/py/analyses/{id}/review-actions → 200 갱신된 분석 + changed */
   reviewAction(id: string, action: ReviewActionIn): Promise<ReviewActionOut>;
+  /** GET /api/py/analyses → 200 { analyses: [...] }(서버 기본 100건 — limit 은 보내지 않는다) */
+  listAnalyses(): Promise<AnalysisListOut>;
+  /** DELETE /api/py/analyses/{id} → 204(본문 없음) */
+  deleteAnalysis(id: string): Promise<void>;
+  /** POST /api/py/analyses/{id}/retry(본문 { actor }) → 200 다시 시작한 분석(시작하다 실패하면 failed 행) */
+  retryAnalysis(id: string, body: RetryIn): Promise<AnalysisOut>;
 }
 
 export const DEFAULT_BASE_URL = '/api/py';
@@ -229,7 +274,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const doFetch: typeof fetch = options.fetch ?? ((input, init) => fetch(input, init));
 
-  async function request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+  async function request<T>(method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown): Promise<T> {
     const headers: Record<string, string> = { Accept: 'application/json' };
     if (body !== undefined) headers['Content-Type'] = 'application/json';
 
@@ -272,6 +317,8 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
         if (timedOut) throw new ApiError(0, 'network', MSG_TIMEOUT); // 본문 읽기가 끊겨 '' 가 된 경우
         throw new ApiError(response.status, code, detail || DEFAULT_MESSAGE[code]);
       }
+      // 204 = 본문 없음(삭제) — 읽지 않는다
+      if (response.status === 204) return undefined as T;
       try {
         return (await timeoutOr(response.json())) as T;
       } catch {
@@ -291,5 +338,8 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     getAnalysis: (id, options) => request<AnalysisOut>('GET', idPath(id) + (options?.includeStages ? '?include=stages' : '')),
     getFile: (id) => request<FileOut>('GET', idPath(id) + '/file'),
     reviewAction: (id, action) => request<ReviewActionOut>('POST', idPath(id) + '/review-actions', action),
+    listAnalyses: () => request<AnalysisListOut>('GET', '/analyses'),
+    deleteAnalysis: (id) => request<void>('DELETE', idPath(id)),
+    retryAnalysis: (id, body) => request<AnalysisOut>('POST', idPath(id) + '/retry', body),
   };
 }

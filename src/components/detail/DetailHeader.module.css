@@ -79,8 +79,9 @@
 .actions .btn.btn {
   height: var(--size-40);
 }
-/* '결과 보고서' — 0 14 0 12 · 간격 7 (Main 339) */
-.actions .report.report {
+/* '결과 보고서' — 0 14 0 12 · 간격 7 (Main 339). '삭제'도 같은 모양 */
+.actions .report.report,
+.actions .del.del {
   gap: var(--space-7);
   padding: 0 var(--space-14) 0 var(--space-12);
 }

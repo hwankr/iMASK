@@ -16,8 +16,8 @@ import styles from './Modal.module.css';
 export interface ModalButton {
   label: string;
   onClick: () => void;
-  /** primary: 채운 초록 · secondary: 회색 채움 · ghost: 글자 버튼. 기본 secondary */
-  variant?: 'primary' | 'secondary' | 'ghost';
+  /** primary: 채운 초록 · secondary: 회색 채움 · ghost: 글자 버튼 · danger: 옅은 빨강(지우기 — Button danger 와 같은 토큰). 기본 secondary */
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
   disabled?: boolean;
   /** 돌림 표시 + 글자, 누를 수 없음(포커스는 남는다) */
   loading?: boolean;

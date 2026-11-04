@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, MSG_NETWORK, MSG_TIMEOUT, createApiClient } from './client';
 import { FILE_MAX_BYTES, MSG_FILE_BAD_URL, MSG_FILE_DOWNLOAD, MSG_FILE_EMPTY, MSG_FILE_NOT_FOUND, MSG_FILE_TIMEOUT, MSG_FILE_TOO_LARGE, isAllowedFileUrl } from './file-download';
 import { createApiService } from './service';
-import { analysisOut, contractResult, documentOut, fakeFetch, json, memoryStorage, type SeenRequest } from './testing';
+import { analysisOut, contractResult, documentOut, fakeFetch, json, type SeenRequest } from './testing';
 
 const ID = 'ab12cd34-0000-4000-8000-000000000000';
 /** 가짜 서명 토큰 — 키 모양이 아닌 뻔한 가짜 값(실행 중에 조립) */
@@ -32,7 +32,6 @@ interface SetupOptions {
 function setup(opts: SetupOptions = {}) {
   const order: string[] = [];
   const downloads: { url: string; init: RequestInit | undefined }[] = [];
-  const storage = memoryStorage();
   let fileCalls = 0;
   const backend = fakeFetch((req) => {
     order.push('backend ' + req.method + ' ' + req.url.replace('/api/py', ''));
@@ -49,7 +48,7 @@ function setup(opts: SetupOptions = {}) {
     return opts.download ? opts.download(url, init) : new Response(PDF, { status: 200, headers: { 'Content-Type': 'application/pdf' } });
   }) as typeof fetch;
   const client = createApiClient({ fetch: backend.fetch, timeoutMs: opts.clientTimeoutMs });
-  const service = createApiService({ client, upload: async () => {}, storage, fileFetch, fileTimeoutMs: opts.fileTimeoutMs });
+  const service = createApiService({ client, upload: async () => {}, fileFetch, fileTimeoutMs: opts.fileTimeoutMs });
   return { service, order, downloads, seen: backend.seen };
 }
 

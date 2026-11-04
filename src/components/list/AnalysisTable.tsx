@@ -7,6 +7,7 @@ import { riskView } from '@/display/rules';
 import { staggerStyle } from '@/lib/hooks/useStagger';
 import { detailHref } from '@/lib/routes';
 import { useRouteBase } from '@/services/react';
+import { DELETE_LABEL } from '@/components/modals/analysisActionModel';
 import { LayersIcon, SearchIcon } from './ListIcons';
 import type { ListModel, ListRow } from './listModel';
 import styles from './AnalysisTable.module.css';
@@ -18,6 +19,8 @@ export interface AnalysisTableProps {
   onOpen: (id: string) => void;
   onShowError: (id: string) => void;
   onRetry: (id: string) => void;
+  /** 행 '삭제' — 확인 창을 연다 */
+  onDelete: (id: string) => void;
   onReset: () => void;
 }
 
@@ -25,8 +28,9 @@ export interface AnalysisTableProps {
  * 분석 목록 표(768px 이상) — Main 173–176.
  * 열 7개, 행 높이 72px(14 + 위험 타일 44 + 14), 숫자는 고정폭 숫자.
  * 행을 누르면 상세 검토로 가고, 키보드는 행 끝의 '상세 보기'(링크 — 지금 기준 경로의 상세)를 쓴다. 실패 건은 '오류 확인'·'재시도'.
+ * 행마다 '상세 보기' 앞에 '삭제'(확인 창을 연다 — 누름이 행 이동으로 번지지 않게 막는다).
  */
-export function AnalysisTable({ model, replay, onOpen, onShowError, onRetry, onReset }: AnalysisTableProps) {
+export function AnalysisTable({ model, replay, onOpen, onShowError, onRetry, onDelete, onReset }: AnalysisTableProps) {
   return (
     <div className={styles.scroll}>
       <table className={styles.table}>
@@ -58,7 +62,7 @@ export function AnalysisTable({ model, replay, onOpen, onShowError, onRetry, onR
         </thead>
         <tbody>
           {model.rows.map((r, i) => (
-            <TableRow key={r.id} row={r} index={i} replay={replay} onOpen={onOpen} onShowError={onShowError} onRetry={onRetry} />
+            <TableRow key={r.id} row={r} index={i} replay={replay} onOpen={onOpen} onShowError={onShowError} onRetry={onRetry} onDelete={onDelete} />
           ))}
           {model.noResults ? (
             <tr>
@@ -89,6 +93,7 @@ function TableRow({
   onOpen,
   onShowError,
   onRetry,
+  onDelete,
 }: {
   row: ListRow;
   index: number;
@@ -96,6 +101,7 @@ function TableRow({
   onOpen: (id: string) => void;
   onShowError: (id: string) => void;
   onRetry: (id: string) => void;
+  onDelete: (id: string) => void;
 }) {
   const risk = riskView(r.risk);
   const base = useRouteBase();
@@ -148,6 +154,9 @@ function TableRow({
               </button>
             </>
           ) : null}
+          <button type="button" className={cx(styles.act, styles.actDelete)} data-row-action="delete" aria-label={r.name + ' ' + DELETE_LABEL} onClick={stop(() => onDelete(r.id))}>
+            {DELETE_LABEL}
+          </button>
           <Link
             href={detailHref(base, r.id)}
             aria-label={r.name + ' 상세 보기'}

@@ -435,8 +435,13 @@ export interface RawAnalysisInfo {
   upstageStatus: string;
   /** 이번 조회에서 Upstage 확인이 실패했을 때의 짧은 문구(분석은 계속된다) */
   pollError: string;
-  /** 만든 시각(ISO 8601 원문) — 경과·걸린 시간을 초 단위로 셀 때 */
+  /** 만든 시각(ISO 8601 원문) — 요청 시각. 시작 시각을 모를 때 경과·걸린 시간의 기준 */
   createdAt: string;
+  /**
+   * 마지막으로 분석을 시작한 시각(ISO 8601 원문 — 새 분석의 시작 · 다시 분석 요청). 없으면 ''.
+   * 경과·걸린 시간은 이 값(읽을 수 없으면 createdAt)부터 잰다.
+   */
+  startedAt: string;
   /** 마지막으로 바뀐 시각(ISO 8601 원문) */
   updatedAt: string;
 }

@@ -1,3 +1,4 @@
+import { getFocusable } from '@/lib/hooks';
 import type { ListFilters } from './listModel';
 
 /* ==========================================================================
@@ -8,6 +9,7 @@ import type { ListFilters } from './listModel';
      1) 같은 행의 '오류 확인' → 같은 행의 '상세 보기'
      2) 그 행 다음 행들의 '상세 보기'(가까운 순) → 이전 행들의 '상세 보기'(가까운 순)
      3) 걸려 있던 필터의 트리거(분석 상태 → 위험등급 → 검토 상태) → 검색칸
+   삭제 확인 창도 같은 기준점을 쓰고, 마지막 행을 지워 그 자리가 모두 없어졌으면 본문의 첫 조작으로 보낸다(findDeleteReturn).
    ========================================================================== */
 
 /** 목록 도구 줄의 검색칸 · 필터 트리거 id — 목록은 한 화면에 하나만 그린다 */
@@ -91,4 +93,46 @@ export function captureListAnchor(id: string, filters: Pick<ListFilters, 'risk' 
 /** 오류 모달이 닫힐 때 — 기준점에서 지금 화면에 남아 있는 첫 자리 */
 export function findListReturn(anchor: ListAnchor, root: Document = document): HTMLElement | null {
   return pickListReturn(anchor, domLookup(root));
+}
+
+/** 본문(#main)의 첫 유효 조작 — 빈 목록이면 머리말의 '새 분석'. 없으면 null */
+export function firstMainControl(root: Document = document): HTMLElement | null {
+  const main = root.getElementById('main');
+  return main ? (getFocusable(main)[0] ?? null) : null;
+}
+
+/* ---------- 삭제 확인 창이 닫힐 때 ----------
+   지운 행(또는 이미 없던 행)은 창이 닫히는 순간 목록에서 빠진다. 기준점(pickListReturn — 이웃 행 → 걸린 필터 → 검색칸)을
+   먼저 찾고, 마지막 행을 지워 표 · 도구 줄이 함께 사라졌으면 본문의 첫 조작(빈 목록의 '새 분석' 등)으로 보낸다.
+   사용자가 그사이 다른 조작에 포커스를 두었으면 공통 Modal(useFocusReturn)이 그대로 둔다. */
+
+/** 기준점의 자리, 없으면 본문의 첫 조작(firstControl) */
+export function pickDeleteReturn<T>(anchor: ListAnchor, lookup: ListLookup<T> & { firstControl(): T | null }): T | null {
+  return pickListReturn(anchor, lookup) ?? lookup.firstControl();
+}
+
+/** 삭제 확인 창이 닫힐 때 — 화면에서 찾는다 */
+export function findDeleteReturn(anchor: ListAnchor, root: Document = document): HTMLElement | null {
+  return pickDeleteReturn(anchor, { ...domLookup(root), firstControl: () => firstMainControl(root) });
+}
+
+/* ---------- 상세에서 지운 뒤 목록에 왔을 때 ----------
+   화면 이동(Next)은 포커스를 옮기지 않는다 — 지운 상세의 버튼이 사라져 포커스가 문서 맨 앞(body)으로 빠진다.
+   상세가 지운 뒤 목록으로 가기 직전에 requestListFocusOnArrive() 를 부르면, 목록이 데이터를 그린 뒤 한 번
+   검색칸(없으면 본문의 첫 조작)으로 포커스를 옮긴다(그사이 사용자가 다른 곳에 포커스를 두었으면 그대로). */
+
+let focusOnArrive = false;
+
+/** 다음에 그려지는 목록이 한 번 포커스를 받게 한다 */
+export function requestListFocusOnArrive(): void {
+  focusOnArrive = true;
+}
+
+/** 목록이 데이터를 그린 뒤 — 요청이 있었으면(한 번만) 그 자리를 돌려준다 */
+export function takeListFocusOnArrive(root: Document = document): HTMLElement | null {
+  if (!focusOnArrive) return null;
+  focusOnArrive = false;
+  const now = root.activeElement;
+  if (now && now !== root.body && (now as HTMLElement).isConnected) return null; // 이미 다른 곳에 포커스
+  return root.getElementById(LIST_CONTROL_IDS.search) ?? firstMainControl(root);
 }

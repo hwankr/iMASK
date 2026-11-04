@@ -5,6 +5,9 @@
      바깥에서 결과를 고쳐도 서비스 안의 데이터는 바뀌지 않는다.
    - 변경 메서드는 코어를 실행한 뒤 곧바로 끝난다(프로토타입처럼 지연 없음).
      requestAnalysis · retry 만 원래 지연(CONFIG.sim.requestMs · retryMs)을 지킨다.
+   - deleteAnalysis(원본에 없음)는 메모리에서 지우고 알린다(남은 타이머 취소). 없는 분석은 실제 분석과 같은 오류
+     (ApiError not_found '분석 건을 찾을 수 없습니다.')로 거절한다 — 화면이 같은 문구를 보인다.
+     '샘플 다시 불러오기'(reset)로 되살아난다.
    - 변경할 때마다 구독자에게 알린다(프로토타입이 동작마다 화면을 다시 그리던 것과 같다).
      코어 타이머가 상태를 바꾸면 listener(), 분석이 끝나면 listener(event) 를 부른다.
    - 처음 만들면 reset() 상태(샘플 6건 + 미리 해 둔 검토 동작)로 시작한다.
@@ -15,6 +18,7 @@
    ========================================================================== */
 
 import type { AnalysisService, DemoControls, ServiceEvent } from '../analysis-service';
+import { ApiError, MSG_NOT_FOUND } from '../api/client';
 import { createDemoCore } from './core';
 import { applyScenario } from './scenarios';
 
@@ -84,6 +88,11 @@ export function createDemoService(): DemoService {
       const resultLater = core.retry(id, docId);
       emit();
       return resultLater;
+    },
+    /* 지우기 — 남은 타이머도 취소한다(코어 remove). 없는 분석은 실제 분석과 같은 '찾을 수 없음'(ApiError not_found)으로 거절 */
+    deleteAnalysis: async (id) => {
+      if (!core.remove(id)) throw new ApiError(404, 'not_found', MSG_NOT_FOUND);
+      emit();
     },
     setStatus: (id, fid, status, reason) => write(() => core.setStatus(id, fid, status, reason)),
     confirmMany: (id, fids) => write(() => core.confirmMany(id, [...fids])),

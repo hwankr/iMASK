@@ -15,12 +15,14 @@ import styles from './LiveDetailScreen.module.css';
 export interface LiveResultProps {
   result: unknown;
   createdAt: string;
+  /** 마지막으로 분석을 시작한 시각(없으면 '') — 걸린 시간은 이 값(없으면 createdAt)부터 */
+  startedAt?: string;
   updatedAt: string;
   jobId: string;
 }
 
-export function LiveResult({ result, createdAt, updatedAt, jobId }: LiveResultProps) {
-  const rows = summaryRows(result, { createdAt, updatedAt, jobId });
+export function LiveResult({ result, createdAt, startedAt = '', updatedAt, jobId }: LiveResultProps) {
+  const rows = summaryRows(result, { createdAt, startedAt, updatedAt, jobId });
   const stages = stageRows(result);
   return (
     <>

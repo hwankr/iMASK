@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LIST_CONTROL_IDS, makeListAnchor, pickListReturn, type ListLookup, type RowAction } from './listFocus';
+import { LIST_CONTROL_IDS, makeListAnchor, pickDeleteReturn, pickListReturn, type ListLookup, type RowAction, requestListFocusOnArrive, takeListFocusOnArrive } from './listFocus';
 
 const NONE = { risk: 'all', status: 'all', review: 'all' } as const;
 const ORDER = ['A1', 'A2', 'A6', 'A4', 'A5'];
@@ -60,5 +60,58 @@ describe('목록 조작 기준점 — 오류 모달을 닫을 때 돌아갈 자�
     const plain = makeListAnchor('A6', ORDER, NONE);
     expect(pickListReturn(plain, screen(['A5:open'], ALL_CONTROLS))).toBe('A5:open');
     expect(pickListReturn(plain, screen([], ALL_CONTROLS))).toBe(LIST_CONTROL_IDS.search);
+  });
+});
+
+describe('상세에서 지운 뒤 목록에 왔을 때 — 한 번 검색칸으로', () => {
+  const body = { isConnected: true };
+  const search = { id: 'dg-list-search', isConnected: true };
+  const fakeDoc = (active: unknown) =>
+    ({ activeElement: active, body, getElementById: (id: string) => (id === 'dg-list-search' ? search : null) }) as unknown as Document;
+
+  it('요청이 없으면 null', () => {
+    expect(takeListFocusOnArrive(fakeDoc(body))).toBeNull();
+  });
+
+  it('요청이 있으면 포커스가 빠져 있을 때(body) 검색칸 — 한 번만', () => {
+    requestListFocusOnArrive();
+    expect(takeListFocusOnArrive(fakeDoc(body))).toBe(search);
+    expect(takeListFocusOnArrive(fakeDoc(body))).toBeNull();
+  });
+
+  it('그사이 다른 곳에 포커스가 있으면 그대로(null) — 요청은 써 버린다', () => {
+    requestListFocusOnArrive();
+    expect(takeListFocusOnArrive(fakeDoc({ isConnected: true }))).toBeNull();
+    expect(takeListFocusOnArrive(fakeDoc(body))).toBeNull();
+  });
+});
+
+describe('삭제 확인 창이 닫힐 때 돌아갈 자리 — 기준점, 없으면 본문의 첫 조작(마지막 행 삭제)', () => {
+  const NEW = '#main 새 분석';
+  const withFirst = (s: ListLookup<string>, first: string | null = NEW) => ({ ...s, firstControl: () => first });
+
+  it('이웃 행이 남아 있으면 그 행의 상세 보기(기준점 그대로)', () => {
+    const a = makeListAnchor('A6', ORDER, NONE);
+    expect(pickDeleteReturn(a, withFirst(screen(['A4:open', 'A5:open'], ALL_CONTROLS)))).toBe('A4:open');
+  });
+
+  it('행은 없고 도구 줄이 남아 있으면 검색칸(필터로 비었을 때)', () => {
+    const a = makeListAnchor('A6', ORDER, NONE);
+    expect(pickDeleteReturn(a, withFirst(screen([], ALL_CONTROLS)))).toBe(LIST_CONTROL_IDS.search);
+  });
+
+  it('마지막 행을 지워 행 · 도구 줄이 모두 사라졌으면 본문의 첫 조작(빈 목록의 새 분석)', () => {
+    const only = makeListAnchor('A1', ['A1'], NONE);
+    expect(pickDeleteReturn(only, withFirst(screen([], [])))).toBe(NEW);
+    const filtered = makeListAnchor('A1', ['A1'], { ...NONE, status: 'failed', risk: 'high' });
+    expect(pickDeleteReturn(filtered, withFirst(screen([], [])))).toBe(NEW);
+  });
+
+  it('본문에도 조작이 없으면 null(공통 Modal 이 아무것도 하지 않는다)', () => {
+    expect(pickDeleteReturn(makeListAnchor('A1', ['A1'], NONE), withFirst(screen([], []), null))).toBeNull();
+  });
+
+  it('오류 모달의 돌아갈 자리(pickListReturn)는 그대로 — 본문 첫 조작으로 넓히지 않는다', () => {
+    expect(pickListReturn(makeListAnchor('A1', ['A1'], NONE), screen([], []))).toBeNull();
   });
 });

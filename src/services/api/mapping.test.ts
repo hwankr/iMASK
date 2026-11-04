@@ -82,7 +82,15 @@ describe('toAnalysis', () => {
       pollError: '',
       createdAt: '2026-11-02T05:10:00.123456+00:00',
       updatedAt: '2026-11-02T05:10:34.900000+00:00',
+      startedAt: '',
     });
+  });
+
+  it('시작 시각 — started_at 원문(문자열이 아니거나 없으면 빈 문자열)', () => {
+    expect(toAnalysis(analysisOut({ status: 'running', started_at: '2026-11-04T01:02:03.456789+00:00' })).raw?.startedAt).toBe('2026-11-04T01:02:03.456789+00:00');
+    expect(toAnalysis(analysisOut({ started_at: null })).raw?.startedAt).toBe('');
+    expect(toAnalysis(analysisOut()).raw?.startedAt).toBe(''); // 옛 백엔드 — 키 없음
+    expect(toAnalysis(analysisOut({ started_at: 5 as unknown as string })).raw?.startedAt).toBe('');
   });
 
   it('문서 — 파일 이름 · 형식 · 크기 · 상태(분석 상태와 같음), 쪽은 없음', () => {

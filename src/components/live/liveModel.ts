@@ -1,6 +1,7 @@
 /* ==========================================================================
    실제 분석 화면 모델 — 순수 함수만(React·서비스 없음). 테스트 대상.
-   - 파일 검사(개수 1 · PDF·PNG·JPEG · 20MB 이하), 분석명, 진행 단계, 폴링 여부, 경과·걸린 시간 문구
+   - 파일 검사(개수 1 · PDF·PNG·JPEG · 20MB 이하), 분석명, 진행 단계, 폴링 여부,
+     경과·걸린 시간 문구(시작 시각 = startedAt, 없으면 createdAt — timingStart)
    - 결과 요약 줄(result.summary), 단계별 결과 목록(result.stages), 서류 종류·위험도·단계 라벨
    결과 모양은 T2 '결과 저장 형식'(imask-upstage-v1)의 summary·stages 다. 모양이 달라도 예외 없이 빈 값으로.
    ========================================================================== */
@@ -111,6 +112,15 @@ export function isoMs(value: string | null | undefined): number {
   return Date.parse(value.trim().replace(' ', 'T').replace(/(\.\d{3})\d+/, '$1'));
 }
 
+/**
+ * 경과 · 걸린 시간을 잴 시작 시각 — 마지막으로 분석을 시작한 시각(startedAt — 새 분석의 시작 · 다시 분석 요청),
+ * 없거나 읽을 수 없으면 만든 시각(createdAt — 옛 분석 · 시작 전).
+ */
+export function timingStart(info: { startedAt?: string | null; createdAt: string }): string {
+  const started = info.startedAt ?? '';
+  return Number.isNaN(isoMs(started)) ? info.createdAt : started;
+}
+
 /** 경과 시간 'm:ss'(분:초). 시작 시각을 모르면 '' */
 export function elapsedText(fromIso: string | null | undefined, nowMs: number): string {
   const from = isoMs(fromIso);
@@ -213,10 +223,13 @@ export interface SummaryRow {
 
 const countText = (n: number | null): string => (n === null ? '읽지 못함' : `${n}개`);
 
-/** 요약 줄 — 서류(수·종류), 추출한 서류, 위험도, 마지막 단계, 기타 서류, 걸린 시간, Upstage 작업 번호 */
+/**
+ * 요약 줄 — 서류(수·종류), 추출한 서류, 위험도, 마지막 단계, 기타 서류, 걸린 시간, Upstage 작업 번호.
+ * 걸린 시간 = 시작 시각(timingStart — startedAt, 없으면 createdAt)부터 마지막으로 바뀐 시각(updatedAt)까지.
+ */
 export function summaryRows(
   result: unknown,
-  info: { createdAt: string; updatedAt: string; jobId: string },
+  info: { createdAt: string; startedAt?: string | null; updatedAt: string; jobId: string },
 ): SummaryRow[] {
   const s = readSummary(result);
   const types = s ? s.documentTypes.map(docTypeName) : [];
@@ -227,7 +240,7 @@ export function summaryRows(
     { key: 'risk', label: '위험도', value: riskText(s?.riskLevel) },
     { key: 'final', label: '마지막 단계', value: s?.finalStage || '없음' },
     { key: 'other', label: '기타 서류', value: s ? (s.otherCount === null ? '없음' : `${s.otherCount}개`) : '읽지 못함' },
-    { key: 'took', label: '걸린 시간', value: durationText(info.createdAt, info.updatedAt) || '-' },
+    { key: 'took', label: '걸린 시간', value: durationText(timingStart(info), info.updatedAt) || '-' },
     { key: 'job', label: 'Upstage 작업 번호', value: info.jobId || '-' },
   ];
 }

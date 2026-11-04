@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CONFIG } from '@/config/app';
 import { FP_REASONS } from '@/display/rules';
 import type { ServiceEvent, StateId } from '../analysis-service';
+import { ApiError } from '../api/client';
 import { getDemoControls } from '../index';
 import type { Analysis, Highlight, PageBlock, UploadFile } from '../types';
 import { createDemoService, isDemoService, type DemoService } from './index';
@@ -558,5 +559,98 @@ describe('services/index · 데모 판별', () => {
     const fake = { ...svc };
     expect(getDemoControls(fake)).toBeNull();
     expect(getDemoControls(null)).toBeNull();
+  });
+});
+
+describe('10. deleteAnalysis — 데모 지우기', () => {
+  it('목록 · get 에서 빠지고 알린다(이벤트 없는 알림), 남은 분석은 순서 그대로', async () => {
+    const notices: (ServiceEvent | undefined)[] = [];
+    svc.subscribe((e) => notices.push(e));
+    await expect(svc.deleteAnalysis('A2')).resolves.toBeUndefined();
+    expect((await svc.list()).map((a) => a.id)).toEqual(['A1', 'A3', 'A4', 'A5', 'A6']);
+    expect(await svc.get('A2')).toBeNull();
+    expect(notices).toEqual([undefined]);
+  });
+
+  it('없는 id(이미 지운 분석 포함) → 실제 분석과 같은 찾을 수 없음(ApiError not_found)으로 거절, 알림 없음', async () => {
+    await svc.deleteAnalysis('A5');
+    const notices: unknown[] = [];
+    svc.subscribe((e) => notices.push(e));
+    for (const id of ['A5', 'A999']) {
+      const err = await svc.deleteAnalysis(id).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ApiError);
+      expect(err).toMatchObject({ status: 404, code: 'not_found', message: '분석 건을 찾을 수 없습니다.' });
+    }
+    expect(notices).toEqual([]);
+  });
+
+  it('진행 중인 샘플 분석을 지우면 남은 타이머가 상태를 바꾸거나 done 이벤트를 내지 않는다', async () => {
+    const files = await svc.sampleFiles();
+    let id: string | undefined;
+    void svc.requestAnalysis({ name: '지울 샘플', files }).then((v) => (id = v));
+    await vi.advanceTimersByTimeAsync(CONFIG.sim.requestMs + CONFIG.sim.startMs);
+    expect(id).toBeDefined();
+    expect((await must(id!)).status).toBe('running');
+    const events: (ServiceEvent | undefined)[] = [];
+    svc.subscribe((e) => events.push(e));
+    await svc.deleteAnalysis(id!);
+    expect(events).toEqual([undefined]);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(events).toEqual([undefined]); // 남은 단계 타이머의 변경 알림 · done 이벤트 없음
+    expect(await svc.get(id!)).toBeNull();
+    expect((await svc.list()).some((a) => a.id === id)).toBe(false);
+  });
+
+  it('분석 요청 응답 전에 지우면 요청은 그 id 로 끝나고 샘플 진행은 시작하지 않는다', async () => {
+    const files = await svc.sampleFiles();
+    const p = svc.requestAnalysis({ name: '곧 지울 샘플', files });
+    await vi.advanceTimersByTimeAsync(0);
+    const queued = (await svc.list())[0];
+    const events: (ServiceEvent | undefined)[] = [];
+    svc.subscribe((e) => events.push(e));
+    await svc.deleteAnalysis(queued.id);
+    await expect(p).resolves.toBe(queued.id);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(events).toEqual([undefined]);
+    expect(await svc.get(queued.id)).toBeNull();
+  });
+
+  it('다시 분석 중에 지우면 그 결과는 이유 없이 끝나고(토스트 없음) 상태 · 이력이 되살아나지 않는다', async () => {
+    const p = svc.retry('A6');
+    await vi.advanceTimersByTimeAsync(0);
+    expect((await must('A6')).retrying).toBe(true);
+    const events: (ServiceEvent | undefined)[] = [];
+    svc.subscribe((e) => events.push(e));
+    await svc.deleteAnalysis('A6');
+    await expect(p).resolves.toEqual({ ok: false, message: '' });
+    await vi.advanceTimersByTimeAsync(CONFIG.sim.retryMs * 2);
+    expect(events).toEqual([undefined]);
+    expect(await svc.get('A6')).toBeNull();
+  });
+
+  it('다른 분석의 타이머는 그대로 — 지우지 않은 분석은 끝까지 간다', async () => {
+    const p = svc.retry('A4', 't2');
+    await vi.advanceTimersByTimeAsync(0);
+    await svc.deleteAnalysis('A6');
+    await vi.advanceTimersByTimeAsync(CONFIG.sim.retryMs);
+    expect((await p).message).toContain('이미지 해상도가 낮아');
+    expect((await must('A4')).retrying).toBe(false);
+  });
+
+  it("'샘플 다시 불러오기'(reset)로 지운 샘플이 되살아난다", async () => {
+    await svc.deleteAnalysis('A1');
+    await svc.deleteAnalysis('A6');
+    expect((await svc.list()).map((a) => a.id)).toEqual(['A2', 'A3', 'A4', 'A5']);
+    await svc.reset();
+    expect((await svc.list()).map((a) => a.id)).toEqual(['A1', 'A2', 'A3', 'A4', 'A5', 'A6']);
+    expect((await must('A1')).findings).toHaveLength(23);
+  });
+
+  it('다시 분석 결과 문구는 그대로(같은 이유로 실패 — started 없음)', async () => {
+    const p = svc.retry('A6');
+    await vi.advanceTimersByTimeAsync(CONFIG.sim.retryMs);
+    const r = await p;
+    expect(r).toEqual({ ok: false, message: '파일 구조가 손상되어 열 수 없습니다. (PDF 끝 표시가 없습니다)' });
+    expect('started' in r).toBe(false);
   });
 });

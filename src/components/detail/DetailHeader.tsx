@@ -3,6 +3,7 @@
 import type { CSSProperties } from 'react';
 import { listReturnHref, useRememberedListQuery } from '@/components/list/listReturn';
 import { AnalysisStatusLabel, Button, IconButton, ReviewStatusPill, RiskBadge, cx } from '@/components/ui';
+import { DELETE_LABEL } from '@/components/modals/analysisActionModel';
 import { reportHref as reportHrefFor } from '@/lib/routes';
 import { useRouteBase } from '@/services/react';
 import type { DetailActions } from './detailActions';
@@ -14,6 +15,8 @@ export interface DetailHeaderProps {
   analysisId: string;
   mobile: boolean;
   actions: Pick<DetailActions, 'completeReview' | 'reopenReview'>;
+  /** '삭제' — 확인 창을 연다. 없으면 버튼을 그리지 않는다 */
+  onDelete?: () => void;
 }
 
 /**
@@ -21,8 +24,9 @@ export interface DetailHeaderProps {
  * '결과 보고서'(→ /analyses/[id]/report), '검토 완료' · '검토 다시 열기'(T7 모달), 상태 3종, 탐지 확인 진행.
  * 이동 주소는 지금 기준 경로(useRouteBase — `/demo` 아래면 `/demo/…`)로 만든다.
  * 휴대폰에서는 보고서 버튼이 아이콘 버튼이 되고 라벨이 짧아진다.
+ * 동작 줄 맨 앞에 '삭제'(위험 모양 — 휴대폰은 휴지통 아이콘 버튼, 이름 '삭제') — 누르면 확인 창(onDelete).
  */
-export function DetailHeader({ model: m, analysisId, mobile, actions }: DetailHeaderProps) {
+export function DetailHeader({ model: m, analysisId, mobile, actions, onDelete }: DetailHeaderProps) {
   const base = useRouteBase();
   const reportHref = reportHrefFor(base, analysisId);
   // 목록으로 = 프로토타입 goList: 그 기준 경로에서 마지막으로 본 목록의 검색·필터·정렬을 그대로 둔다
@@ -45,6 +49,15 @@ export function DetailHeader({ model: m, analysisId, mobile, actions }: DetailHe
           </div>
         </div>
         <div className={styles.actions}>
+          {onDelete ? (
+            mobile ? (
+              <IconButton label={DELETE_LABEL} icon="dg-i-trash" size={40} variant="danger" iconSize={18} strokeWidth={2} onClick={onDelete} />
+            ) : (
+              <Button variant="danger" icon="dg-i-trash" iconStrokeWidth={2} onClick={onDelete} className={cx(styles.btn, styles.del)}>
+                {DELETE_LABEL}
+              </Button>
+            )
+          ) : null}
           {mobile ? (
             m.noReport ? (
               <IconButton label="결과 보고서" icon="dg-i-report" size={40} variant="secondary" iconSize={18} strokeWidth={2} disabled title={m.reportTitle} />

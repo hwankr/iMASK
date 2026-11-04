@@ -20,6 +20,14 @@
   max-width: var(--text-max);
 }
 
+/* 맨 위 줄 — 왼쪽 '문서 분석'(목록으로), 오른쪽 '삭제' */
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+}
+
 .back {
   position: relative;
   display: inline-flex;

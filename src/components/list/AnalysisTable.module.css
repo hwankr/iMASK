@@ -217,6 +217,23 @@
   cursor: progress;
 }
 
+/* 삭제 — 위험 동작(공통 Button danger 와 같은 토큰: err · err-bg). 행마다 있어 바탕 없이 err 글자, 올리면 err-bg, 누름 scale(.96) */
+.actDelete {
+  background: transparent;
+  color: var(--err);
+  transition:
+    background-color var(--dur-color),
+    transform var(--dur-press);
+}
+@media (hover: hover) {
+  .actDelete:hover {
+    background: var(--err-bg);
+  }
+}
+.actDelete:active {
+  transform: scale(.96);
+}
+
 /* 상세 보기 — padding:0 8px 0 12px; gap 2; 바탕 없음 · ink-2, 올림 fill · ink */
 .actOpen {
   gap: var(--space-2);

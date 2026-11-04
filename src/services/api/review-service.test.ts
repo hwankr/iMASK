@@ -5,7 +5,7 @@ import type { AnalysisService } from '../analysis-service';
 import type { Analysis } from '../types';
 import { ApiError, createApiClient } from './client';
 import { MSG_NO_ANALYSIS, MSG_NO_FINDING, MSG_UNSUPPORTED, createApiService } from './service';
-import { analysisOut, contractResult, fakeFetch, json, memoryStorage, type SeenRequest } from './testing';
+import { analysisOut, contractResult, fakeFetch, json, type SeenRequest } from './testing';
 
 const ID = 'ab12cd34-0000-4000-8000-000000000000';
 const ACTION_URL = `/api/py/analyses/${ID}/review-actions`;
@@ -36,7 +36,7 @@ function setup(opts: SetupOptions = {}) {
     if (req.method === 'GET' && req.url === GET_URL) return opts.get ? opts.get() : json(200, doneOut());
     return json(404, { detail: '분석 건을 찾을 수 없습니다.' });
   });
-  const service: AnalysisService = createApiService({ client: createApiClient({ fetch }), upload: async () => {}, storage: memoryStorage() });
+  const service: AnalysisService = createApiService({ client: createApiClient({ fetch }), upload: async () => {} });
   const notified = vi.fn();
   service.subscribe(notified);
   const posts = () => seen.filter((r) => r.method === 'POST');
@@ -175,7 +175,7 @@ describe('id 변환 — 화면 번호 → 지금 분석의 계약 id', () => {
     expect(notified).not.toHaveBeenCalled();
   });
 
-  it('없는 분석(GET 404) → 요청 없이 거절 · 알림 없음(모든 동작)', async () => {
+  it('없는 분석(GET 404) → 요청 없이 ApiError(not_found) 로 거절 · 동작마다 알림 한 번(화면이 다시 불러와 찾을 수 없음이 된다)', async () => {
     const { service, notified, posts } = setup({ get: () => json(404, { detail: '분석 건을 찾을 수 없습니다.' }) });
     const calls = [
       service.setStatus(ID, 'D1-01', 'confirmed'),
@@ -192,10 +192,13 @@ describe('id 변환 — 화면 번호 → 지금 분석의 계약 id', () => {
     expect(results).toHaveLength(9);
     for (const r of results) {
       expect(r.status).toBe('rejected');
-      expect((r as PromiseRejectedResult).reason.message).toBe(MSG_NO_ANALYSIS);
+      const reason = (r as PromiseRejectedResult).reason;
+      expect(reason).toBeInstanceOf(ApiError);
+      expect(reason).toMatchObject({ status: 404, code: 'not_found', message: MSG_NO_ANALYSIS });
     }
     expect(posts()).toHaveLength(0);
-    expect(notified).not.toHaveBeenCalled();
+    expect(notified).toHaveBeenCalledTimes(9);
+    expect(notified.mock.calls.every((c) => c.length === 0)).toBe(true);
   });
 
   it('분석 조회가 502 · 네트워크면 그 오류(ApiError)로 거절 · 요청 없음', async () => {
@@ -249,12 +252,14 @@ describe('응답 · 오류', () => {
     [502, 'server', '서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.'],
   ];
   for (const [status, code, detail] of failures) {
-    it(`요청 ${status} → 알림 없이 ApiError(${code}) 그대로`, async () => {
+    // 409(겹침 · 상태) · 404(지워짐) 는 화면이 최신 상태를 다시 불러오게 한 번 알린다 — 그 밖은 알리지 않는다
+    const notifies = code === 'conflict' || code === 'not_found';
+    it(`요청 ${status} → ${notifies ? '알림 한 번 뒤' : '알림 없이'} ApiError(${code}) 그대로 — ${detail}`, async () => {
       const { service, notified } = setup({ post: () => json(status, { detail }) });
       const err = await service.setStatus(ID, 'D1-01', 'confirmed').catch((e: unknown) => e);
       expect(err).toBeInstanceOf(ApiError);
       expect(err).toMatchObject({ status, code, message: detail });
-      expect(notified).not.toHaveBeenCalled();
+      expect(notified).toHaveBeenCalledTimes(notifies ? 1 : 0);
     });
   }
 
@@ -308,7 +313,7 @@ describe('pending — 조회한 분석의 미확인 항목', () => {
 });
 
 describe('남은 미지원 기능은 그대로', () => {
-  it('검토사항 · 연결 판단 · 내보내기는 요청 없이 거절, 다시 분석은 실패 결과', async () => {
+  it('검토사항 · 연결 판단 · 내보내기는 요청 없이 거절', async () => {
     const { service, seen, notified } = setup();
     const results = await Promise.allSettled([
       service.resolveItem(ID, 'R-01', '처리'),
@@ -321,7 +326,6 @@ describe('남은 미지원 기능은 그대로', () => {
       expect(r.status).toBe('rejected');
       expect((r as PromiseRejectedResult).reason.message).toBe(MSG_UNSUPPORTED);
     }
-    await expect(service.retry(ID)).resolves.toEqual({ ok: false, message: MSG_UNSUPPORTED });
     expect(seen).toHaveLength(0);
     expect(notified).not.toHaveBeenCalled();
   });
@@ -371,7 +375,7 @@ function liveServer() {
     if (gate) await gate;
     return json(200, value);
   });
-  const service = createApiService({ client: createApiClient({ fetch }), upload: async () => {}, storage: memoryStorage() });
+  const service = createApiService({ client: createApiClient({ fetch }), upload: async () => {} });
   return {
     service,
     counts: () => ({ gets, posts }),
@@ -488,10 +492,10 @@ describe('저장 성공 알림 — 저장 전에 시작한 조회를 나눠 쓰�
     expect((await late)?.memo).toBe('새 메모');
   });
 
-  it('실패하면 떼지도 알리지도 않는다 — 진행 중 조회는 계속 나눠 쓴다', async () => {
+  it('409 · 404 말고 실패하면(502) 떼지도 알리지도 않는다 — 진행 중 조회는 계속 나눠 쓴다', async () => {
     const srv = liveServer();
     const view = hookLike(srv.service, (a) => a.memo);
-    srv.failPosts(409, '다른 요청과 겹쳐 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+    srv.failPosts(502, '데이터 저장소에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.');
     const releasePost = srv.holdPost('save_memo');
     const oldGet = srv.holdGet(2);
     const saving = srv.service.saveMemo(ID, '실패할 메모').catch((e: unknown) => e);
@@ -505,8 +509,34 @@ describe('저장 성공 알림 — 저장 전에 시작한 조회를 나눠 쓰�
     await Promise.all([background, after]);
 
     expect(err).toBeInstanceOf(ApiError);
-    expect(err).toMatchObject({ code: 'conflict' });
+    expect(err).toMatchObject({ code: 'server' });
     expect(view.notices()).toBe(0);
     expect(srv.counts()).toEqual({ gets: 2, posts: 1 });
   });
+
+  for (const [status, code, detail] of [
+    [409, 'conflict', '다른 요청과 겹쳐 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.'],
+    [404, 'not_found', '분석 건을 찾을 수 없습니다.'],
+  ] as const) {
+    it(`${status} 면 진행 중 조회를 떼고 한 번 알린 뒤 같은 오류로 거절 — 알림 뒤 조회는 새 요청(최신 상태)`, async () => {
+      const srv = liveServer();
+      const view = hookLike(srv.service, (a) => a.memo);
+      srv.failPosts(status, detail);
+      const releasePost = srv.holdPost('save_memo');
+      const oldGet = srv.holdGet(2);
+      const saving = srv.service.saveMemo(ID, '실패할 메모').catch((e: unknown) => e);
+      await vi.waitFor(() => expect(srv.counts().posts).toBe(1));
+      const background = srv.service.get(ID); // 실패 전에 시작한 조회(2)
+      await oldGet.started;
+      releasePost();
+      const err = await saving;
+      oldGet.release();
+      await Promise.all([background, view.settle()]);
+
+      expect(err).toBeInstanceOf(ApiError);
+      expect(err).toMatchObject({ status, code, message: detail });
+      expect(view.notices()).toBe(1);
+      expect(srv.counts()).toEqual({ gets: 3, posts: 1 }); // 알림 뒤 조회(3)는 옛 조회(2)를 나눠 쓰지 않았다
+    });
+  }
 });

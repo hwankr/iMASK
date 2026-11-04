@@ -9,6 +9,7 @@
      화면은 분석 상태 · 결과 · 검토 기록만 주고받는다.
    - 메서드마다 '실제:' 주석은 실제 분석 서비스(src/services/api/service.ts)가 부르는 경로다.
      아직 백엔드가 없는 것은 '실제 분석에서는 아직 지원하지 않음'(거절)이라고 적었다.
+   - 로그인이 없다 — 실제 분석은 주소를 아는 누구나 같은 목록을 보고 · 검토하고 · 지울 수 있다(대회용).
    ========================================================================== */
 
 import type { ExportFormat, Exposure, FpReason, InfoCategory, InfoSubject } from '@/display/rules';
@@ -57,6 +58,13 @@ export interface RetryResult {
   ok: boolean;
   /** 실패 이유(성공이면 빈 문자열) */
   message: string;
+  /**
+   * 다시 분석을 시작했는지 — 실제 분석만 채운다(데모는 넣지 않는다: 끝난 뒤 { ok: false, message: 이유 }).
+   * true 면 분석이 대기·분석 중으로 돌아갔다. false 면 시작하지 못했다(message = 이유).
+   */
+  started?: boolean;
+  /** 실제 분석만 — 시작하지 못한 이유가 '분석이 없음'(404, 이미 지워짐)일 때 true */
+  gone?: boolean;
 }
 
 /** 분류 수정 — 바꿀 값만 넣는다 */
@@ -111,7 +119,10 @@ export type StateId =
   | 'report-failed';
 
 export interface AnalysisService {
-  /** 분석 목록을 가져온다(최근 요청 순). 실제: 이 탭에서 만든 분석 id(sessionStorage)마다 GET /api/py/analyses/{id} — 서버 목록 경로는 없음 */
+  /**
+   * 분석 목록을 가져온다(최근 요청 순). 실제: GET /api/py/analyses 하나(서버가 최근 100건 — 누구나 같은 목록).
+   * 목록 항목은 가벼운 값이다(탐지 항목 · 이력 없음 — 상세는 get).
+   */
   list(): Promise<Analysis[]>;
   /** 분석 건 하나를 가져온다. 없으면 null. 실제: GET /api/py/analyses/{id}(404 → null, review 블록을 덧씌움) */
   get(id: string): Promise<Analysis | null>;
@@ -121,8 +132,17 @@ export interface AnalysisService {
   sampleFiles(): Promise<UploadFile[]>;
   /** 분석을 요청하고 분석 ID를 돌려준다. 실제: POST /api/py/analyses → Supabase 서명 업로드 → POST /api/py/analyses/{id}/start → ID 반환, 이후 GET 조회로 진행 확인 */
   requestAnalysis(input: RequestAnalysisInput): Promise<string>;
-  /** 실패한 문서(docId 없으면 전부)를 다시 분석한다. 데모에서는 같은 이유로 다시 실패한다. 실제 분석에서는 아직 지원하지 않음({ ok: false, message }) */
+  /**
+   * 실패한 문서(docId 없으면 전부)를 다시 분석한다. 데모에서는 같은 이유로 다시 실패한다.
+   * 실제: POST /api/py/analyses/{id}/retry(본문 { actor } — 같은 원본으로 Upstage 작업을 새로 만든다, docId 는 무시).
+   * 거절하지 않는다 — 시작했으면 { ok: true, started: true }, 못 했으면 { ok: false, started: false, message: 이유 }.
+   */
   retry(id: string, docId?: string): Promise<RetryResult>;
+  /**
+   * 분석을 지운다(원본 파일 · 검토 기록 포함, 되돌릴 수 없음). 없는 분석이면 ApiError(not_found)로 거절한다(두 모드 같음).
+   * 실제: DELETE /api/py/analyses/{id}(204). 데모: 메모리에서 지운다('샘플 다시 불러오기'로 되살아난다).
+   */
+  deleteAnalysis(id: string): Promise<void>;
   /** 탐지 항목 하나를 확인함·미확인으로 바꾼다(이력 기록). 실제: POST /api/py/analyses/{id}/review-actions(type set_status) */
   setStatus(id: string, fid: string, status: 'open' | 'confirmed', reason?: string): Promise<void>;
   /** 미확인 탐지 항목 여러 개를 한 번에 확인함으로 바꾼다. 실제: POST /api/py/analyses/{id}/review-actions(type confirm_many) */
@@ -151,7 +171,11 @@ export interface AnalysisService {
   buildExport(id: string, format: ExportFormat, brand?: string): Promise<ExportFile>;
   /** 내보내기 결과를 검토 이력에 남긴다. 실제 분석에서는 아직 지원하지 않음 */
   logExport(id: string, file: ExportFile, state: ExportLogState): Promise<void>;
-  /** 유일한 예외: 변경 알림 구독. 구독 해제 함수를 돌려준다. 실제: requestAnalysis·검토 동작이 성공하면 알림(진행은 상세 화면이 3초마다 조회) */
+  /**
+   * 유일한 예외: 변경 알림 구독. 구독 해제 함수를 돌려준다.
+   * 실제: 분석 요청 · 다시 분석(응답을 받으면) · 삭제(성공 · 404) · 검토 동작(성공 · 409 · 404) 뒤, 그리고 조회(list · get)에서
+   * 진행 중으로 본 분석이 끝난 것을 처음 볼 때 한 번(이벤트 없는 알림). 진행은 상세 화면 · 목록 화면이 3초마다 조회한다.
+   */
   subscribe(listener: (event?: ServiceEvent) => void): () => void;
 }
 

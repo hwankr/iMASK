@@ -13,8 +13,9 @@ export type IconButtonSize = 32 | 34 | 36 | 40 | 44;
  * - ghost: 바탕 없음 · 진한 보조 글자(--ink-2), 올리면 회색(닫기·뒤로)
  * - muted: 바탕 없음 · 보조 글자(--ink-3), 올리면 회색 + 남색(목록에서 제거·접기)
  * - secondary: 회색 채움(보고서·다음 페이지)
+ * - danger: 옅은 빨강 채움(지우기 — 공통 Button danger 와 같은 토큰)
  */
-export type IconButtonVariant = 'ghost' | 'muted' | 'secondary';
+export type IconButtonVariant = 'ghost' | 'muted' | 'secondary' | 'danger';
 
 interface CommonProps {
   /** 필수 — aria-label 과 툴팁 글자 */

@@ -31,7 +31,7 @@ export function LiveSummaryTab({ analysis: a, stages, onLoadStages }: LiveSummar
   const overall = raw?.overall ?? null;
   const judge = guideText(overall?.text);
   const next = guideText(overall?.nextText);
-  const rows = summaryRows(raw?.result ?? null, { createdAt: raw?.createdAt ?? '', updatedAt: raw?.updatedAt ?? '', jobId: raw?.jobId ?? '' });
+  const rows = summaryRows(raw?.result ?? null, { createdAt: raw?.createdAt ?? '', startedAt: raw?.startedAt ?? '', updatedAt: raw?.updatedAt ?? '', jobId: raw?.jobId ?? '' });
   const [open, setOpen] = useState(false);
 
   return (

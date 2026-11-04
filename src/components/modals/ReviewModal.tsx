@@ -5,6 +5,8 @@
    상세 화면 상태의 모달 자리(ui.state.modal)를 그린다. 모양은 공통 Modal(T2), 값은 reviewModalModel.
    - 저장: 입력 검사(오류 문구는 붉은 글자, 입력칸은 붉은 바탕) → 서비스 호출(그동안 저장 버튼 돌림 표시)
      → 모달 닫기 → 토스트. 화면은 서비스 변경 알림으로 새 데이터를 받아 다시 그려진다.
+     저장 실패는 모달 안 SAVE_FAILED(409 겹침이면 서비스 알림으로 최신 상태가 다시 불러와진다). 분석이 이미 지워졌으면(404)
+     모달을 닫고 오류 토스트 '이미 지워진 분석입니다.'(다시 불러와 '찾을 수 없음' 화면이 된다).
      검토 완료 토스트의 '보고서 보기'는 지금 기준 경로(useRouteBase — `/demo` 아래면 /demo/…)의 보고서로 간다.
      실제 분석은 보고서가 아직 없어 붙이지 않는다(reviewModalModel 의 hasReport → openReport false).
    - 검토 완료 모달은 남은 항목을 받은 뒤 연다. 그 조회가 처음부터 실패하면 열지 않고 SAVE_FAILED 를 오류 토스트로
@@ -23,6 +25,7 @@ import type { Analysis } from '@/services/types';
 import { planPickFinding, type DetailModal } from '@/components/detail/detailState';
 import type { DetailUi } from '@/components/detail/useDetailUi';
 import { rememberFocus, rescueFocus, type FocusSpot } from '@/components/detail/focusRescue';
+import { GONE_TEXT, isGoneError } from './analysisActionModel';
 import {
   NOTE_MAX,
   SAVE_FAILED,
@@ -121,8 +124,14 @@ function ReviewModalView({ analysis: a, ui, modal: m, pending }: ViewProps) {
       const reportHref = reportHrefFor(base, cur.a.id);
       toast(done.text, done.openReport ? { action: { label: '보고서 보기', onClick: () => router.push(reportHref) } } : {});
       rescueFocus(opener);
-    } catch {
-      ui.patchModal({ error: SAVE_FAILED });
+    } catch (err) {
+      if (isGoneError(err)) {
+        // 분석이 지워졌다(404) — 창을 닫고 알린다(서비스 알림으로 다시 불러와 '찾을 수 없음'이 된다)
+        ui.closeModal();
+        toast(GONE_TEXT, { kind: 'error' });
+      } else {
+        ui.patchModal({ error: SAVE_FAILED });
+      }
     } finally {
       busyRef.current = false;
       setBusy(false);

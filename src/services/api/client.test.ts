@@ -1,11 +1,12 @@
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ApiError,
   MSG_BAD_REQUEST,
   MSG_BAD_RESPONSE,
   MSG_NETWORK,
+  MSG_NOT_FOUND,
   MSG_SERVER,
   MSG_TIMEOUT,
   apiErrorAnalysisId,
@@ -13,7 +14,7 @@ import {
   codeForStatus,
   createApiClient,
 } from './client';
-import { analysisOut, fakeFetch, json } from './testing';
+import { analysisOut, fakeFetch, json, listItemOut } from './testing';
 
 const ID = 'ab12cd34-0000-4000-8000-000000000000';
 
@@ -264,5 +265,84 @@ describe('reviewAction — POST /analyses/{id}/review-actions', () => {
       code: 'network',
       message: MSG_NETWORK,
     });
+  });
+});
+
+describe('listAnalyses — GET /analyses', () => {
+  it('GET /api/py/analyses(limit 없이) · 본문 없음 · Accept JSON · 응답 그대로', async () => {
+    const body = { analyses: [listItemOut()] };
+    const { fetch, seen } = fakeFetch(() => json(200, body));
+    const out = await createApiClient({ fetch }).listAnalyses();
+    expect(out).toEqual(body);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ method: 'GET', url: '/api/py/analyses', body: undefined });
+    expect(seen[0].headers.accept).toBe('application/json');
+    expect(seen[0].headers).not.toHaveProperty('content-type');
+  });
+
+  it('400 · 502 → ApiError(백엔드 detail)', async () => {
+    const bad = fakeFetch(() => json(400, { detail: '요청 형식이 올바르지 않습니다.' }));
+    await expect(createApiClient({ fetch: bad.fetch }).listAnalyses()).rejects.toMatchObject({ status: 400, code: 'bad_request', message: '요청 형식이 올바르지 않습니다.' });
+    const down = fakeFetch(() => json(502, { detail: '데이터 저장소에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.' }));
+    await expect(createApiClient({ fetch: down.fetch }).listAnalyses()).rejects.toMatchObject({ status: 502, code: 'server' });
+  });
+});
+
+describe('deleteAnalysis — DELETE /analyses/{id}', () => {
+  it('204 — 본문을 읽지 않고 undefined, DELETE · 주소 조각 · 본문 없음', async () => {
+    const json204 = vi.fn(async () => {
+      throw new SyntaxError('Unexpected end of JSON input');
+    });
+    const text204 = vi.fn(async () => '');
+    const { fetch, seen } = fakeFetch(() => ({ ok: true, status: 204, json: json204, text: text204 }) as unknown as Response);
+    await expect(createApiClient({ fetch }).deleteAnalysis('a/b')).resolves.toBeUndefined();
+    expect(json204).not.toHaveBeenCalled();
+    expect(text204).not.toHaveBeenCalled();
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ method: 'DELETE', url: '/api/py/analyses/a%2Fb', body: undefined });
+    expect(seen[0].headers).not.toHaveProperty('content-type');
+  });
+
+  it('실제 204 Response(본문 null)도 끝', async () => {
+    const { fetch } = fakeFetch(() => new Response(null, { status: 204 }));
+    await expect(createApiClient({ fetch }).deleteAnalysis(ID)).resolves.toBeUndefined();
+  });
+
+  it('404 · 502 · 네트워크 → 다른 요청과 같은 오류 모양', async () => {
+    const gone = fakeFetch(() => json(404, { detail: '분석 건을 찾을 수 없습니다.' }));
+    const e404 = await createApiClient({ fetch: gone.fetch }).deleteAnalysis(ID).catch((e: unknown) => e);
+    expect(e404).toBeInstanceOf(ApiError);
+    expect(e404).toMatchObject({ status: 404, code: 'not_found', message: '분석 건을 찾을 수 없습니다.' });
+    const bare = fakeFetch(() => new Response('', { status: 404 }));
+    await expect(createApiClient({ fetch: bare.fetch }).deleteAnalysis(ID)).rejects.toMatchObject({ status: 404, code: 'not_found', message: MSG_NOT_FOUND });
+    const failed = fakeFetch(() => json(502, { detail: '원본 파일을 지우지 못했습니다. 잠시 후 다시 시도해 주세요.' }));
+    await expect(createApiClient({ fetch: failed.fetch }).deleteAnalysis(ID)).rejects.toMatchObject({
+      status: 502,
+      code: 'server',
+      message: '원본 파일을 지우지 못했습니다. 잠시 후 다시 시도해 주세요.',
+    });
+    const net = fakeFetch(() => {
+      throw new TypeError('Failed to fetch');
+    });
+    await expect(createApiClient({ fetch: net.fetch }).deleteAnalysis(ID)).rejects.toMatchObject({ status: 0, code: 'network', message: MSG_NETWORK });
+  });
+});
+
+describe('retryAnalysis — POST /analyses/{id}/retry', () => {
+  it('본문 { actor } · POST · Content-Type JSON · 200 응답 그대로', async () => {
+    const row = analysisOut({ status: 'running', started_at: '2026-11-04T01:00:00Z' });
+    const { fetch, seen } = fakeFetch(() => json(200, row));
+    const out = await createApiClient({ fetch }).retryAnalysis(ID, { actor: '이지은' });
+    expect(out).toEqual(row);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ method: 'POST', url: `/api/py/analyses/${ID}/retry`, body: { actor: '이지은' } });
+    expect(seen[0].headers['content-type']).toBe('application/json');
+  });
+
+  it('409 · 404 → ApiError(conflict · not_found, 백엔드 detail)', async () => {
+    const busy = fakeFetch(() => json(409, { detail: '이미 분석하고 있습니다.' }));
+    await expect(createApiClient({ fetch: busy.fetch }).retryAnalysis(ID, { actor: 'a' })).rejects.toMatchObject({ status: 409, code: 'conflict', message: '이미 분석하고 있습니다.' });
+    const gone = fakeFetch(() => json(404, { detail: '분석 건을 찾을 수 없습니다.' }));
+    await expect(createApiClient({ fetch: gone.fetch }).retryAnalysis(ID, { actor: 'a' })).rejects.toMatchObject({ status: 404, code: 'not_found' });
   });
 });

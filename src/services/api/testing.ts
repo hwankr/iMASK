@@ -1,28 +1,12 @@
 /* ==========================================================================
-   테스트 도우미(실제 분석 서비스) — 메모리 저장소 · 가짜 fetch · AnalysisOut 만들기 · 계약 모양 결과(고정 자료).
+   테스트 도우미(실제 분석 서비스) — 가짜 fetch · AnalysisOut · 목록 항목 만들기 · 계약 모양 결과(고정 자료).
    앱 코드는 import 하지 않는다(테스트 전용).
    고정 자료 fixtures/done-result.json = 합성 묶음(testdocs/iMASK_smoke_bundle.pdf, 6쪽 = 서류 6개)의 공통 계약
    result(stages 없음). 다음 작업의 가짜 백엔드도 같은 파일을 읽는다.
    ========================================================================== */
 
-import type { KeyValueStorage } from './browser-storage';
-import type { AnalysisOut, DocumentOut } from './client';
+import type { AnalysisListItemOut, AnalysisOut, DocumentOut } from './client';
 import doneResultFixture from './fixtures/done-result.json';
-
-/** sessionStorage 대신 쓰는 메모리 저장소 */
-export function memoryStorage(init: Record<string, string> = {}): KeyValueStorage & { data: Map<string, string> } {
-  const data = new Map(Object.entries(init));
-  return {
-    data,
-    getItem: (k) => (data.has(k) ? (data.get(k) as string) : null),
-    setItem: (k, v) => {
-      data.set(k, String(v));
-    },
-    removeItem: (k) => {
-      data.delete(k);
-    },
-  };
-}
 
 /** 가짜 fetch 가 받은 요청 */
 export interface SeenRequest {
@@ -116,6 +100,23 @@ export function analysisOut(patch: Partial<AnalysisOut> = {}): AnalysisOut {
     documents: [documentOut()],
     upstage_status: null,
     poll_error: null,
+    ...patch,
+  };
+}
+
+/** GET /analyses 항목 */
+export function listItemOut(patch: Partial<AnalysisListItemOut> = {}): AnalysisListItemOut {
+  return {
+    id: 'ab12cd34-0000-4000-8000-000000000000',
+    name: '합성 묶음',
+    status: 'queued',
+    error: null,
+    created_at: '2026-11-02T05:10:00.123456+00:00',
+    updated_at: '2026-11-02T05:10:34.900000+00:00',
+    started_at: null,
+    documents: [{ filename: 'iMASK_smoke_bundle.pdf', size_bytes: 322053, mime_type: 'application/pdf' }],
+    risk_level: null,
+    review: 'none',
     ...patch,
   };
 }

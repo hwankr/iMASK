@@ -135,6 +135,12 @@
   background: transparent;
   color: var(--ink-2);
 }
+/* 지우기 — 공통 Button danger 와 같은 토큰(err-bg · err) */
+.danger {
+  background: var(--err-bg);
+  color: var(--err);
+  font-weight: var(--fw-heavy);
+}
 @media (hover: hover) {
   .btn:enabled:not(.loading):hover {
     filter: brightness(.95);

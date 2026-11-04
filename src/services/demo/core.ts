@@ -4,6 +4,9 @@
      runSample/finishSample, makeAnalysis, 모든 메서드.
    - 화면은 이 코어를 직접 쓰지 않는다. 바깥에는 비동기 겉면(service.ts)만 내보낸다.
    - 지연 시간은 ① CONFIG.sim, 담당자 이름은 CONFIG.user, 브랜드 기본값은 CONFIG.brandName.
+   - 원본에 없는 것: remove(aid) — 분석 하나를 지운다(실제 분석의 삭제와 같은 자리). 분석에 딸린 남은 타이머(요청 응답 ·
+     샘플 진행 · 다시 분석)를 취소해 지운 뒤에 상태를 바꾸거나 '분석 완료' 이벤트를 내지 않게 한다. 기다리던 Promise 는
+     지울 때 끝낸다(분석 요청 = 그 id, 다시 분석 = { ok: false, message: '' } — 화면은 빈 이유면 토스트를 띄우지 않는다).
    ========================================================================== */
 
 import { CONFIG } from '@/config/app';
@@ -61,6 +64,8 @@ export interface DemoCore {
   at(time: string, fn: () => void): void;
   reset(): void;
   clearAll(): void;
+  /** 분석 하나를 지운다(남은 타이머 취소). 없으면 false */
+  remove(aid: string): boolean;
   /** 내부 배열 그대로 — 복사는 겉면이 한다 */
   list(): Analysis[];
   get(id: string): Analysis | null;
@@ -89,11 +94,16 @@ export function createDemoCore(onChange: () => void, onEvent?: (event: ServiceEv
   const db: { analyses: Analysis[] } = { analyses: [] };
   let seq = 100;
   let fixedNow: string | null = null;
-  const timers = new Set<ReturnType<typeof setTimeout>>();
+  type Timer = ReturnType<typeof setTimeout>;
+  const timers = new Set<Timer>();
+  /** 분석별 남은 타이머 — 값은 지울 때 대신 부를 끝내기(기다리던 Promise 를 끝낸다, 없으면 undefined) */
+  const owned = new Map<string, Map<Timer, (() => void) | undefined>>();
   const now = () => fixedNow || nowStr();
-  const later = (ms: number, fn: () => void) => {
+  /** ms 뒤에 fn. owner 를 주면 그 분석을 지울 때 취소하고 onCancel 을 부른다 */
+  const later = (ms: number, fn: () => void, owner?: string, onCancel?: () => void) => {
     const t = setTimeout(() => {
       timers.delete(t);
+      if (owner) owned.get(owner)?.delete(t);
       try {
         fn();
       } finally {
@@ -101,6 +111,28 @@ export function createDemoCore(onChange: () => void, onEvent?: (event: ServiceEv
       }
     }, ms);
     timers.add(t);
+    if (owner) {
+      let mine = owned.get(owner);
+      if (!mine) owned.set(owner, (mine = new Map()));
+      mine.set(t, onCancel);
+    }
+  };
+  /** 모든 타이머 취소(reset · dispose — 원본과 같이 기다리던 Promise 는 끝내지 않는다) */
+  const clearTimers = () => {
+    timers.forEach(clearTimeout);
+    timers.clear();
+    owned.clear();
+  };
+  /** 그 분석의 남은 타이머를 취소하고 기다리던 Promise 를 끝낸다 */
+  const cancelOwned = (aid: string) => {
+    const mine = owned.get(aid);
+    if (!mine) return;
+    owned.delete(aid);
+    mine.forEach((onCancel, t) => {
+      clearTimeout(t);
+      timers.delete(t);
+      onCancel?.();
+    });
   };
   const getA = (id: string): Analysis | null => db.analyses.find((a) => a.id === id) || null;
   const getF = (a: Analysis | null, id: string): Finding | null => (a ? a.findings.find((f) => f.id === id) : null) || null;
@@ -113,17 +145,25 @@ export function createDemoCore(onChange: () => void, onEvent?: (event: ServiceEv
 
   function runSample(a: Analysis) {
     const s = CONFIG.sim;
-    later(s.startMs, () => {
-      a.status = 'running';
-      if (a.docs[0]) a.docs[0].status = 'running';
-    });
+    later(
+      s.startMs,
+      () => {
+        a.status = 'running';
+        if (a.docs[0]) a.docs[0].status = 'running';
+      },
+      a.id,
+    );
     a.docs.forEach((d, i) =>
-      later(s.startMs + s.docMs * (i + 1), () => {
-        d.status = 'done';
-        const nx = a.docs[i + 1];
-        if (nx) nx.status = 'running';
-        if (i === a.docs.length - 1) finishSample(a);
-      }),
+      later(
+        s.startMs + s.docMs * (i + 1),
+        () => {
+          d.status = 'done';
+          const nx = a.docs[i + 1];
+          if (nx) nx.status = 'running';
+          if (i === a.docs.length - 1) finishSample(a);
+        },
+        a.id,
+      ),
     );
   }
   function finishSample(a: Analysis) {
@@ -146,8 +186,7 @@ export function createDemoCore(onChange: () => void, onEvent?: (event: ServiceEv
 
   const svc: DemoCore = {
     dispose() {
-      timers.forEach(clearTimeout);
-      timers.clear();
+      clearTimers();
     },
     at(time, fn) {
       fixedNow = time;
@@ -158,13 +197,19 @@ export function createDemoCore(onChange: () => void, onEvent?: (event: ServiceEv
       }
     },
     reset() {
-      timers.forEach(clearTimeout);
-      timers.clear();
+      clearTimers();
       db.analyses = rawSamples();
       seedReviewActions(svc);
     },
     clearAll() {
       db.analyses = [];
+    },
+    remove(aid) {
+      const i = db.analyses.findIndex((a) => a.id === aid);
+      if (i < 0) return false;
+      db.analyses.splice(i, 1);
+      cancelOwned(aid);
+      return true;
     },
     list() {
       return db.analyses;
@@ -179,10 +224,15 @@ export function createDemoCore(onChange: () => void, onEvent?: (event: ServiceEv
       const isSample = files.length > 0 && files.every((f) => f.kind === 'sample');
       const a = makeAnalysis(input.name, files, isSample);
       return new Promise((resolve) =>
-        later(CONFIG.sim.requestMs, () => {
-          resolve(a.id);
-          if (isSample) runSample(a);
-        }),
+        later(
+          CONFIG.sim.requestMs,
+          () => {
+            resolve(a.id);
+            if (isSample) runSample(a);
+          },
+          a.id,
+          () => resolve(a.id),
+        ),
       );
     },
     createQueued(name, files) {
@@ -203,15 +253,20 @@ export function createDemoCore(onChange: () => void, onEvent?: (event: ServiceEv
       });
       log(a, { kind: 'retry', target: names, change: '같은 파일로 다시 분석 요청' });
       return new Promise((resolve) =>
-        later(CONFIG.sim.retryMs, () => {
-          targets.forEach((d) => {
-            d.status = 'failed';
-          });
-          a.status = prev;
-          a.retrying = false;
-          log(a, { actor: '시스템', kind: 'retry', target: names, change: '다시 분석했지만 같은 이유로 실패', reason: targets[0].error });
-          resolve({ ok: false, message: targets[0].error });
-        }),
+        later(
+          CONFIG.sim.retryMs,
+          () => {
+            targets.forEach((d) => {
+              d.status = 'failed';
+            });
+            a.status = prev;
+            a.retrying = false;
+            log(a, { actor: '시스템', kind: 'retry', target: names, change: '다시 분석했지만 같은 이유로 실패', reason: targets[0].error });
+            resolve({ ok: false, message: targets[0].error });
+          },
+          a.id,
+          () => resolve({ ok: false, message: '' }),
+        ),
       );
     },
     setStatus(aid, fid, status, reason) {

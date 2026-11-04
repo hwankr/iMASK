@@ -37,6 +37,11 @@
   background: var(--fill);
   color: var(--ink);
 }
+/* 지우기 — 공통 Button danger 와 같은 토큰(err-bg · err), 올림 brightness(.97) */
+.danger {
+  background: var(--err-bg);
+  color: var(--err);
+}
 
 @media (hover: hover) {
   .ghost:hover:not(:disabled),
@@ -46,6 +51,9 @@
   }
   .secondary:hover:not(:disabled) {
     background: var(--fill-2);
+  }
+  .danger:hover:not(:disabled) {
+    filter: brightness(.97);
   }
 }
 

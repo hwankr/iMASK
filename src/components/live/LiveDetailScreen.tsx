@@ -4,10 +4,15 @@
    상세 — 실제 분석 모드(/analyses/[id], 실제 모드 빌드 · 주소 기준 모드 'api')
    - useAnalysis(id) 로만 데이터를 받는다. 대기·분석 중인 동안 3초마다 refresh()(앞 요청이 끝난 뒤 다음,
      탭이 숨겨지면 쉬고 다시 보이면 바로 한 번). 조회할 때마다 백엔드가 Upstage 상태를 한 번 확인한다.
-   - 대기·분석 중: 흐르는 막대 + 안내 + Upstage 상태(+ 확인 실패 문구). 실패: 오류 문구 그대로 + '새 분석'.
+   - 대기·분석 중: 흐르는 막대 + 안내 + Upstage 상태(+ 확인 실패 문구). 경과는 마지막으로 시작한 시각(started_at — 다시 분석이면
+     그 요청 때, 없으면 요청 시각)부터. 실패: 오류 문구 그대로 + '다시 분석'(같은 원본으로 다시 — 요청 중 버튼 막힘, 시작하면
+     서비스 알림으로 다시 불러와 진행 화면 · 주기 조회로 바뀐다) · '새 분석'.
      완료 + 공통 계약 결과(raw.detailReady): 데모와 같은 상세 검토 화면(DetailView — 문서 목록 · 원본 파일 원문과 위치 상자 ·
      결과 패널 · 분석 요약, 검토 동작은 서버에 저장 — 검토 기록을 불러오지 못하면 검토 버튼만 막힘). 진행 중에서 완료로 바뀌면 새로 고침 없이 바로 바뀐다.
      완료지만 옛 형식(서류 0개 등): 요약 + 단계별 결과(JSON 나무).
+   - 진행 · 실패 화면의 맨 위 줄 오른쪽, 완료 상세의 머리글에 '삭제' → 확인 창(useDeleteAnalysis). 지우면 토스트와 함께
+     마지막 목록(listReturnHref)으로 간다 — 지우는 동안 · 떠나는 동안 '없음'이 되어도 '찾을 수 없음'을 그리지 않는다.
+     이미 지워졌으면(404) 오류 토스트 뒤 다시 불러와 '찾을 수 없음'이 된다.
    - 404 → 안내 + '새 분석'(데모처럼 목록으로 보내지 않는다).
    - 상태가 바뀌면 화면 낭독기에 알린다.
    - 이동 주소(목록 · 새 분석)는 기준 경로 함수(src/lib/routes.ts · useRouteBase)로 만든다 — 이 화면은 `/demo` 밖에서만
@@ -16,33 +21,59 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useRef, useState, type ReactNode } from 'react';
 import { AnalysisStatusLabel, Banner, Button, Icon, IndeterminateBar, Skeleton, VisuallyHidden, cx } from '@/components/ui';
 import { fmtDT, fmtSize } from '@/lib/format';
 import { listHref, newAnalysisHref } from '@/lib/routes';
+import { requestListFocusOnArrive } from '@/components/list/listFocus';
+import { listReturnHref, useRememberedListQuery } from '@/components/list/listReturn';
+import { DELETE_LABEL, RETRY_LABEL } from '@/components/modals/analysisActionModel';
+import { useDeleteAnalysis } from '@/components/modals/DeleteAnalysis';
+import { useRetryAnalysis } from '@/components/modals/useRetryAnalysis';
 import { useAnalysis, useLiveExtras, useRouteBase } from '@/services/react';
 import type { Analysis } from '@/services/types';
 import { DetailView } from '@/components/detail/DetailScreen';
 import { LiveResult } from './LiveResult';
 import { useClock, usePolling, useStatusAnnounce } from './liveHooks';
-import { elapsedText, isPolling, upstageStatusText } from './liveModel';
+import { elapsedText, isPolling, timingStart, upstageStatusText } from './liveModel';
 import styles from './LiveDetailScreen.module.css';
 
 export function LiveDetailScreen({ id }: { id: string }) {
+  const router = useRouter();
+  const base = useRouteBase();
   const { data, error, refresh } = useAnalysis(id);
   const extras = useLiveExtras();
   usePolling(!!data && isPolling(data.status), refresh);
   useStatusAnnounce(data?.status);
+  // 지운 뒤 — 그 기준 경로의 마지막 목록(검색 · 필터 그대로)으로
+  const listQuery = useRememberedListQuery(base);
+  const del = useDeleteAnalysis({
+    onRemoved: (_id, outcome) => {
+      if (outcome !== 'deleted') return;
+      requestListFocusOnArrive(); // 화면 이동은 포커스를 옮기지 않는다 — 목록이 그려지면 검색칸으로
+      router.push(listReturnHref(base, listQuery));
+    },
+  });
+  const askDelete = () => del.ask({ id });
 
+  let body: ReactNode;
   if (data === undefined) {
-    if (error) return <LoadFailed message={messageOf(error)} onRetry={refresh} />;
-    return <LiveSkeleton />;
-  }
-  if (data === null) return <NotFound />;
-  if (data.status === 'done' && data.raw?.detailReady) {
+    body = error ? <LoadFailed message={messageOf(error)} onRetry={refresh} /> : <LiveSkeleton />;
+  } else if (data === null) {
+    // 지우는 중 · 지운 뒤 떠나는 중에는 '찾을 수 없음'을 그리지 않는다(번쩍임 없이 목록으로)
+    body = del.leaving === id ? <LiveSkeleton /> : <NotFound />;
+  } else if (data.status === 'done' && data.raw?.detailReady) {
     const notice = error ? messageOf(error) : '';
-    return <DetailView analysis={data} live={{ extras, notice }} />;
+    body = <DetailView analysis={data} live={{ extras, notice }} onDelete={askDelete} />;
+  } else {
+    body = <LiveView a={data} refreshError={error ? messageOf(error) : ''} onDelete={askDelete} />;
   }
-  return <LiveView a={data} refreshError={error ? messageOf(error) : ''} />;
+  return (
+    <>
+      {body}
+      {del.modal}
+    </>
+  );
 }
 
 function messageOf(error: unknown): string {
@@ -51,13 +82,28 @@ function messageOf(error: unknown): string {
 
 /* ---------- 분석 건 ---------- */
 
-function LiveView({ a, refreshError }: { a: Analysis; refreshError: string }) {
+function LiveView({ a, refreshError, onDelete }: { a: Analysis; refreshError: string; onDelete: () => void }) {
   const router = useRouter();
   const base = useRouteBase();
   const raw = a.raw;
   const polling = isPolling(a.status);
   const now = useClock(polling);
-  const elapsed = polling && raw && now ? elapsedText(raw.createdAt, now) : '';
+  // 경과 = 마지막으로 시작한 시각(다시 분석이면 그 요청 때)부터, 모르면 만든 시각부터
+  const elapsed = polling && raw && now ? elapsedText(timingStart(raw), now) : '';
+  const runRetry = useRetryAnalysis();
+  const [retrying, setRetrying] = useState(false);
+  const retryLock = useRef(false);
+  /* 다시 분석 — 요청 중에는 띠의 버튼을 막는다(두 번 눌러도 요청은 한 번). 시작하면 서비스 알림으로 다시 불러와
+     진행 화면으로 바뀌고 주기 조회가 다시 돈다 */
+  const retry = () => {
+    if (retryLock.current) return;
+    retryLock.current = true;
+    setRetrying(true);
+    void runRetry(a.id).then(() => {
+      retryLock.current = false;
+      setRetrying(false);
+    });
+  };
   // 올린 파일은 raw.file 에서 — 완료 뒤 docs 가 분류된 서류로 바뀌어도 머리는 올린 파일 하나를 보인다
   const file = raw?.file ?? null;
   const failed = a.status === 'failed' || a.status === 'partial';
@@ -65,11 +111,14 @@ function LiveView({ a, refreshError }: { a: Analysis; refreshError: string }) {
   return (
     <div className={styles.screen}>
       <div className={styles.page}>
-        <div>
+        <div className={styles.topBar}>
           <Link href={listHref(base)} className={styles.back}>
             <Icon name="dg-i-arrow-left" size={17} strokeWidth={2.2} />
             문서 분석
           </Link>
+          <Button variant="danger" size="sm" icon="dg-i-trash" iconStrokeWidth={2} onClick={onDelete}>
+            {DELETE_LABEL}
+          </Button>
         </div>
 
         <header className={styles.head} data-live-status={a.status}>
@@ -121,12 +170,15 @@ function LiveView({ a, refreshError }: { a: Analysis; refreshError: string }) {
             variant="failed"
             title="분석에 실패했습니다"
             description={raw?.error || '실패 이유를 받지 못했습니다.'}
-            actions={[{ label: '새 분석', onClick: () => router.push(newAnalysisHref(base)) }]}
+            actions={[
+              ...(a.status === 'failed' ? [{ label: RETRY_LABEL, onClick: retry, disabled: retrying }] : []),
+              { label: '새 분석', onClick: () => router.push(newAnalysisHref(base)) },
+            ]}
           />
         ) : null}
 
         {a.status === 'done' || (failed && raw?.result) ? (
-          <LiveResult result={raw?.result ?? null} createdAt={raw?.createdAt ?? ''} updatedAt={raw?.updatedAt ?? ''} jobId={raw?.jobId ?? ''} />
+          <LiveResult result={raw?.result ?? null} createdAt={raw?.createdAt ?? ''} startedAt={raw?.startedAt ?? ''} updatedAt={raw?.updatedAt ?? ''} jobId={raw?.jobId ?? ''} />
         ) : null}
 
         {a.status === 'done' && refreshError ? <p className={styles.soft}>{refreshError}</p> : null}

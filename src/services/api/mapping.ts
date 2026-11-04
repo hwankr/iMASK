@@ -14,7 +14,13 @@
      detailReady 인데 review 가 객체가 아니면(검토 기록을 읽지 못함) 검토 상태 'none' · 빈 값이고 raw.reviewable false.
      그 밖(대기·분석 중·실패·옛 형식)은 review 가 있어도 'none' · 빈 이력.
    - 검토사항·연결은 아직 없다(빈 목록).
-   - 백엔드가 준 원래 값은 raw 에 둔다(결과 JSON · 올린 파일 · detailReady · reviewable · overall · 오류 · 작업 번호 · 조회 상태 · 원래 시각).
+   - 백엔드가 준 원래 값은 raw 에 둔다(결과 JSON · 올린 파일 · detailReady · reviewable · overall · 오류 · 작업 번호 · 조회 상태 ·
+     원래 시각 — 만든 · 바뀐 · 시작한 시각).
+   - 목록(GET /analyses)은 상세 매핑과 따로 읽는다(readAnalysisList · toListAnalysis — 가벼운 항목):
+     docs = 올린 파일 행(toDoc 과 같은 모양, 문서 id 가 없어 분석 안에서 겹치지 않는 'f1'·'f2'… 를 만든다),
+     위험등급 = risk_level(상·중·하 → high·medium·low, 그 밖 · null → unrated), 검토 상태 = review(done · needed, 그 밖 none),
+     탐지 항목 · 검토사항 · 연결 · 이력 = 빈 값, raw 는 result null · detailReady false · reviewable false.
+     응답이 객체가 아니거나 analyses 가 배열이 아니면 null(목록 불러오기 실패). 객체가 아니거나 id 가 빈 항목만 뺀다. 순서는 서버 순서.
    ========================================================================== */
 
 import { ASTATUS, HKIND, type AnalysisStatus, type HistoryKind, type ReviewStatus, type RiskLevel } from '@/display/rules';
@@ -207,6 +213,7 @@ export function toAnalysis(out: AnalysisOut): Analysis {
     pollError: str(out.poll_error),
     createdAt: str(out.created_at),
     updatedAt: str(out.updated_at),
+    startedAt: str(out.started_at),
   };
   return {
     id: str(out.id),
@@ -234,4 +241,74 @@ export function toAnalysis(out: AnalysisOut): Analysis {
     retrying: false,
     raw,
   };
+}
+
+/* ---------- 목록(GET /analyses) ---------- */
+
+/** 목록 항목의 검토 상태 — done · needed 만, 그 밖(none · 모르는 값 · 빠짐)은 none */
+function listReview(value: unknown): ReviewStatus {
+  return value === 'done' || value === 'needed' ? value : 'none';
+}
+
+/** 목록 항목 하나 → Analysis(가벼운 값). 객체가 아니거나 id 가 비면 null(그 항목만 뺀다) */
+export function toListAnalysis(item: unknown): Analysis | null {
+  if (!isObj(item)) return null;
+  const id = str(item.id);
+  if (!id) return null;
+  const status = toStatus(item.status);
+  const error = str(item.error);
+  const terminal = status === 'done' || status === 'failed' || status === 'partial';
+  const documents = Array.isArray(item.documents) ? item.documents.filter(isObj) : [];
+  const raw: RawAnalysisInfo = {
+    result: null,
+    file: readFile(documents),
+    detailReady: false,
+    reviewable: false,
+    overall: null,
+    error,
+    jobId: '',
+    upstageStatus: '',
+    pollError: '',
+    createdAt: str(item.created_at),
+    updatedAt: str(item.updated_at),
+    startedAt: str(item.started_at),
+  };
+  return {
+    id,
+    code: analysisCode(id, item.created_at),
+    name: str(item.name),
+    submittedAt: seoulDateTime(item.created_at),
+    analyzedAt: terminal ? seoulDateTime(item.updated_at) : '',
+    status,
+    risk: riskFromLevel(item.risk_level),
+    review: listReview(item.review),
+    // 목록 항목의 파일 행에는 id 가 없다 — 분석 안에서 겹치지 않는 id
+    docs: documents.map((d, i) => ({ ...toDoc(d as unknown as DocumentOut, status, error), id: 'f' + (i + 1) })),
+    findings: [],
+    items: [],
+    links: [],
+    history: [],
+    memo: '',
+    memoAt: '',
+    riskReasons: [],
+    recs: [],
+    limits: '',
+    reviewer: '',
+    reviewedAt: '',
+    completionNote: '',
+    demoQueued: false,
+    retrying: false,
+    raw,
+  };
+}
+
+/** GET /analyses 응답 → 목록(서버 순서). 응답이 객체가 아니거나 analyses 가 배열이 아니면 null */
+export function readAnalysisList(body: unknown): Analysis[] | null {
+  if (!isObj(body) || !Array.isArray(body.analyses)) return null;
+  const out: Analysis[] = [];
+  for (const item of body.analyses) {
+    const a = toListAnalysis(item);
+    if (a) out.push(a);
+  }
+  return out;
 }

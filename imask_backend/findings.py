@@ -31,10 +31,21 @@
 #  - 항목별 위험등급의 branch_key·field 는 비어 있는지(공백만 포함)만 보고 비교·색인에는 원래 문자열 그대로 쓴다
 #    (strip 하지 않음 — 공백만 다른 다른 키에 등급이 옮겨 가지 않게). grade 는 앞뒤 공백을 지우고, reason 은 빈 문자열이면 null.
 #  - overall: summarize 의 risk_level(상·중·하·검토 필요)·final_stage 와 그 단계 본문(Markdown 그대로).
-#  - items: 검토사항(imask_backend.items.build_items — documents·findings·서류별 checks 로 계산). 그 계산만 실패하면
+#  - items: 검토사항(imask_backend.items.build_items — documents·findings·서류별 checks·묶음 재료로 계산). 그 계산만 실패하면
 #    값 없는 경고 후 items [] 이고 documents·findings·overall 은 그대로다.
+#  - 최종 흐름(final_imask_workflow) 재료 — final_flow.read_links·read_bundle_checks·read_decision 을 **한 번씩** 읽는다
+#    (옛 워크플로우는 단계가 없어 None → 아래 빈 값):
+#    - links: 서류_대조 쌍마다 하나(items.link_pairs·build_links — 기준·대상 서류가 둘 다 보이는 쌍만, 쌍 순서). 없으면 [].
+#    - decision: 위험도_판정 본문의 키 5개(read_decision 그대로), 없으면 null.
+#    - bundle_check: 묶음_검증 {verdict, checks[{id, name, severity, status, field, label, group}]}(label = field 의
+#      대응표 label, 모르면 null — 규칙의 서류별 결과 documents 는 넣지 않는다), 없으면 null. checks 를 못 읽었으면 [].
+#    - 같은 읽기 결과를 items.bundle_parts 로 서류별 묶음 재료(묶음_검증 missing·서류_대조 mismatch·weaklink)로 나눠
+#      build_items(bundle=…)에 넘긴다.
+#    세 키 중 하나(또는 묶음 재료 나누기)를 만들다 실패하면 그 값만 빈 값([]·null)이고 나머지는 그대로(값 없는 경고 — 이름·예외 종류만).
 #  바깥 모양이 달라도 예외를 던지지 않는다. 그래도 예상 못 한 예외가 나면 값 없는 경고 로그를 남기고
-#  빈 결과(documents []·findings []·overall 빈 값·items [])를 돌려준다 — 조회가 500 이 되지 않게.
+#  빈 결과(documents []·findings []·overall 빈 값·items []·links []·decision null·bundle_check null)를 돌려준다 —
+#  조회가 500 이 되지 않게.
+#  final_flow 는 이 모듈의 짝짓기 함수를 쓰므로(순환 import) 함수 안에서 늦게 import 한다.
 # ==========================================================================
 
 from __future__ import annotations
@@ -43,12 +54,12 @@ import json
 import logging
 import math
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypeVar
 
 from .fields import field_info
-from .items import build_items
+from .items import build_items, build_links, bundle_parts, link_pairs, mapped_label
 from .masking import EXPOSED, STAR, exposure, masked
 from .results import (
     FINAL_STAGES,
@@ -80,8 +91,8 @@ MAX_PAGE = 100_000
 UNREADABLE_VALUE = "(값을 읽지 못했습니다)"
 # 표에 없는 키의 이름이 비었거나 공백만일 때의 label
 UNNAMED_LABEL = "(이름 없는 항목)"
-# 계약 키(BRIEF §5)는 _Doc.out·_findings·_overall·items.build_items 가 만드는 dict 그대로다 — 그 밖의 키는 넣지 않는다
-# (tests/view_contract.py 가 정확히 그 키인지 확인한다)
+# 계약 키(BRIEF §5)는 _Doc.out·_findings·_overall·items.build_items·items.link_view·_decision_view·_bundle_check_view 가
+# 만드는 dict 그대로다 — 그 밖의 키는 넣지 않는다(tests/view_contract.py 가 정확히 그 키인지 확인한다)
 
 _BOX_MIN = -0.001
 _BOX_MAX = 1.001
@@ -93,7 +104,15 @@ Ranges = tuple[tuple[int, int], ...]
 
 
 def empty_view() -> dict[str, Any]:
-    return {"documents": [], "findings": [], "overall": _empty_overall(), "items": []}
+    return {
+        "documents": [],
+        "findings": [],
+        "overall": _empty_overall(),
+        "items": [],
+        "links": [],
+        "decision": None,
+        "bundle_check": None,
+    }
 
 
 def _empty_overall() -> dict[str, Any]:
@@ -101,7 +120,8 @@ def _empty_overall() -> dict[str, Any]:
 
 
 def build_view(result: Any) -> dict[str, Any]:
-    """저장된 result → {"documents", "findings", "overall", "items"}. 어떤 모양에도 예외를 던지지 않는다."""
+    """저장된 result → {"documents", "findings", "overall", "items", "links", "decision", "bundle_check"}.
+    어떤 모양에도 예외를 던지지 않는다."""
     try:
         return _build_view(result)
     except Exception as exc:  # 조회가 500 이 되지 않게 — 값 없이 예외 종류만 남긴다
@@ -583,13 +603,88 @@ def _overall(stages: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _items(documents: list[dict[str, Any]], findings: list[dict[str, Any]], checks: list[Any]) -> list[dict[str, Any]]:
+def _items(
+    documents: list[dict[str, Any]], findings: list[dict[str, Any]], checks: list[Any], bundle: Any = None
+) -> list[dict[str, Any]]:
     """검토사항 — 계산이 실패해도 items [] 로만(documents·findings·overall 은 그대로). 값 없이 예외 종류만 남긴다."""
     try:
-        return build_items(documents, findings, checks)
+        return build_items(documents, findings, checks, bundle)
     except Exception as exc:
         logger.warning("검토사항을 만들지 못해 items 를 비웁니다: %s", type(exc).__name__)
         return []
+
+
+# --- 최종 흐름 재료(links·decision·bundle_check·묶음 재료) ---------------------------------------------
+
+_T = TypeVar("_T")
+
+
+def _quiet(name: str, make: Callable[[], _T], empty: _T) -> _T:
+    """make() — 예외가 나면 그 값만 empty(값 없는 경고 — 고정 이름과 예외 종류만)."""
+    try:
+        return make()
+    except Exception as exc:
+        logger.warning("최종 흐름 값 하나를 비웁니다: %s (%s)", name, type(exc).__name__)
+        return empty
+
+
+@dataclass(frozen=True)
+class _FinalReads:
+    """final_flow 읽기 결과(한 번씩 — 단계가 없거나 못 읽으면 None)."""
+
+    links: Any
+    bundle: Any
+    decision: Any
+
+
+def _final_reads(stages: Sequence[Mapping[str, Any]]) -> _FinalReads:
+    from . import final_flow  # 순환 import(final_flow → findings) — 여기서 늦게
+
+    return _FinalReads(
+        links=_quiet("read_links", lambda: final_flow.read_links(stages), None),
+        bundle=_quiet("read_bundle_checks", lambda: final_flow.read_bundle_checks(stages), None),
+        decision=_quiet("read_decision", lambda: final_flow.read_decision(stages), None),
+    )
+
+
+def _doc_names() -> dict[str, str]:
+    """분류 코드 → 짧은 한국어 이름(final_flow.FINAL_DOC_TYPES)."""
+    from . import final_flow
+
+    return {code: name for code, (name, _group) in final_flow.FINAL_DOC_TYPES.items()}
+
+
+def _decision_view(raw: Any) -> dict[str, Any] | None:
+    """read_decision 결과 그대로(키 5개) — 객체가 아니면 None."""
+    from . import final_flow
+
+    if not isinstance(raw, Mapping):
+        return None
+    return {key: raw.get(key) for key in final_flow.DECISION_KEYS}
+
+
+def _bundle_check_view(raw: Any) -> dict[str, Any] | None:
+    """read_bundle_checks 결과 → {verdict, checks[…]}(규칙의 서류별 결과 documents 는 넣지 않는다). 없으면 None."""
+    if not isinstance(raw, Mapping):
+        return None
+    checks = raw.get("checks")
+    rows: list[dict[str, Any]] = []
+    for check in checks if isinstance(checks, list) else []:
+        if not isinstance(check, Mapping):
+            continue
+        field_name = check.get("field")
+        rows.append(
+            {
+                "id": check.get("id"),
+                "name": check.get("name"),
+                "severity": check.get("severity"),
+                "status": check.get("status"),
+                "field": field_name,
+                "label": mapped_label(field_name),
+                "group": check.get("group"),
+            }
+        )
+    return {"verdict": raw.get("verdict"), "checks": rows}
 
 
 def _build_view(result: Any) -> dict[str, Any]:
@@ -602,9 +697,15 @@ def _build_view(result: Any) -> dict[str, Any]:
     documents = [d.out() for d in ordered]
     findings = _findings(docs, item_risks(stages))
     overall = _overall(stages)
+    reads = _final_reads(stages)
+    pairs = _quiet("link_pairs", lambda: link_pairs(documents, findings, reads.links, _doc_names()), [])
+    bundle = _quiet("bundle_parts", lambda: bundle_parts(documents, reads.bundle, pairs), None)
     return {
         "documents": documents,
         "findings": findings,
         "overall": overall,
-        "items": _items(documents, findings, [d.checks for d in ordered]),
+        "items": _items(documents, findings, [d.checks for d in ordered], bundle),
+        "links": _quiet("links", lambda: build_links(pairs), []),
+        "decision": _quiet("decision", lambda: _decision_view(reads.decision), None),
+        "bundle_check": _quiet("bundle_check", lambda: _bundle_check_view(reads.bundle), None),
     }

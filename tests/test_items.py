@@ -132,6 +132,7 @@ def test_old_workflow_shape_items() -> None:
         "desc": "D3-05 소득 정보 — 원문 좌표가 없어 강조할 수 없습니다.",
         "next": "원본에서 직접 찾아 확인해 주세요.",
         "evidence": [{"label": "1쪽 열기", "page": 3, "finding_ids": ["2:income_info"], "finding_id": "2:income_info"}],
+        "link_id": None,
     }
     # 위치 없는 low 항목(income_info)은 수(n)에는 들고 근거에는 없다
     assert (items[2]["title"], items[2]["desc"]) == ("인식 신뢰도가 낮은 항목 2건", "D3-04, D3-05의 값이 틀렸을 수 있습니다.")
@@ -153,6 +154,7 @@ def test_failed_validation_document_makes_missing_item() -> None:
             "desc": MISSING_TEXT[0],
             "next": MISSING_TEXT[1],
             "evidence": [{**OPEN_FIRST, "page": 2}],
+            "link_id": None,
         }
     ]
     assert [d["validation"] for d in view["documents"]] == ["green", "red", "green"]  # documents[].validation 은 그대로
@@ -350,6 +352,7 @@ def test_other_verdicts_make_one_verdict_item(verdict: str) -> None:
             "desc": VERDICT_TEXT[1],
             "next": VERDICT_TEXT[2],
             "evidence": [{**OPEN_FIRST, "page": 3}],
+            "link_id": None,
         }
     ]
     assert verdict.strip() not in repr(items)  # verdict 글자는 어디에도 내지 않는다

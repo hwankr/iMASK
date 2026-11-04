@@ -563,6 +563,10 @@ def test_get_non_running_returns_stored_without_upstage(ctx: Ctx, status: str) -
         "findings": [],
         "overall": {"level": None, "text": "", "next_stage": None, "next_text": ""},
         "items": [],
+        # 최종 흐름 재료(final-flow T3) — 단계가 없으면 빈 값
+        "links": [],
+        "decision": None,
+        "bundle_check": None,
     }
     # ?include=stages 면 저장된 stages 를 그대로 넣는다
     with_stages = ctx.get(analysis_id, params={"include": "stages"}).json()["result"]
@@ -612,7 +616,7 @@ def test_get_completed_saves_result_and_deletes_file(ctx: Ctx, caplog: pytest.Lo
     assert body["upstage_status"] == "completed"
     # API 응답: response(원본)·stages 없음, 화면용 documents·findings·overall 있음(T1 findings-api)
     result = body["result"]
-    assert set(result) == {"format", "job", "summary", "documents", "findings", "overall", "items"}
+    assert set(result) == {"format", "job", "summary", "documents", "findings", "overall", "items", "links", "decision", "bundle_check"}
     assert result["format"] == "imask-upstage-v1"
     assert result["job"]["id"] == "job_up1"
     assert result["job"]["config_id"] == FAKE_CONFIG_ID

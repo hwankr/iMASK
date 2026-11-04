@@ -1,9 +1,10 @@
 # ==========================================================================
 #  최종 흐름(final_imask_workflow, 설정 "1") 읽기 — imask_backend.final_flow 와 새 단계 인식(네트워크 없음)
-#  자료: tests/fixtures/final_flow/ — 실제 응답 3건(A_smoke 6서류·B_blank_autotransfer 빈 서식 2서류·
-#  C_mismatch 3서류, 값은 모두 합성, 에이전트 id 는 <AGENT>)과 설정 원본(config.json, API step 형식).
+#  자료: tests/fixtures/final_flow/ — 실제 응답 5건(A_smoke 6서류·B_blank_autotransfer 빈 서식 2서류·
+#  C_mismatch 3서류·D_blank_applicant 신청인 성명 빈 2서류·E_team_forms 팀원 서식 4서류, 값은 모두 합성, 에이전트 id 는
+#  <AGENT>, Upstage id 는 자리표시자)과 설정 원본(config.json, API step 형식). D·E 는 final-flow T3 에서 더함.
 #  - 서류 종류 표가 설정의 분류 oneOf·경로와 같은지, 기존 5개 이름이 화면 DOC_TYPE_NAMES 와 같은지
-#  - 세 응답의 summarize·build_view(계약 모양 그대로, 묶음_검증이 서류별 validation 에 붙지 않음)
+#  - 다섯 응답의 summarize·build_view(계약 모양 그대로, 묶음_검증이 서류별 validation 에 붙지 않음)
 #  - read_bundle_checks·read_links·read_decision 의 기대값과 서류 번호가 findings 와 같은지, 값이 결과에 없는지
 #  - 옛 응답은 None, 응답 경계 강건성(모양·한도·서로게이트·깊은 중첩·선형 시간·예외 안전망)
 # ==========================================================================
@@ -73,7 +74,7 @@ from imask_backend.textsafe import has_unpaired_surrogates, text_is_safe
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "final_flow"
 RULES_TS = ROOT / "src" / "display" / "rules.ts"
-RUNS = ("A_smoke", "B_blank_autotransfer", "C_mismatch")
+RUNS = ("A_smoke", "B_blank_autotransfer", "C_mismatch", "D_blank_applicant", "E_team_forms")
 TIME_LIMIT = 1.0  # 큰 입력 한 묶음을 읽는 데 걸려도 되는 시간(초)
 
 CHECK_KEYS = {"id", "name", "severity", "passed", "field", "group", "status", "documents"}
@@ -161,9 +162,10 @@ def screen_doc_type_names() -> dict[str, str]:
 
 
 def test_existing_doc_type_names_match_screen():
+    # 기존 5개 + Other 는 늘 화면에 있다. 화면이 새 코드 이름을 더해도(final-flow T4) 같은 코드는 같은 이름이어야 한다
     screen = screen_doc_type_names()
     shared = [code for code in FINAL_DOC_TYPES if code in screen]
-    assert shared == ["loan_application", "consent_form", "income_proof", "power_of_attorney", "debt_transaction", "Other"]
+    assert {"loan_application", "consent_form", "income_proof", "power_of_attorney", "debt_transaction", "Other"} <= set(shared)
     for code in shared:
         assert FINAL_DOC_TYPES[code][0] == screen[code], code
 
@@ -175,13 +177,15 @@ def test_doc_type_names_are_short_and_unique():
     assert {group for _, group in FINAL_DOC_TYPES.values()} == set(GROUPS) | {None}
 
 
-# --- 세 고정 응답: 요약과 화면용 결과 ----------------------------------------------------------
+# --- 고정 응답: 요약과 화면용 결과 ----------------------------------------------------------
 
 SUMMARIES = {
     # (서류 수, 추출 서류 수, 위험도, 마지막 단계)
     "A_smoke": (6, 5, "상", "권장_조치"),
     "B_blank_autotransfer": (2, 2, "검토 필요", "검토_안내"),
     "C_mismatch": (3, 3, "검토 필요", "검토_안내"),
+    "D_blank_applicant": (2, 2, "검토 필요", "검토_안내"),
+    "E_team_forms": (4, 3, "상", "권장_조치"),
 }
 
 
@@ -293,6 +297,26 @@ BUNDLE_EXPECTED = {
             "위임장_대리인_성명": (CHECK_ABSENT, None),
         },
     ),
+    "D_blank_applicant": (
+        "red",
+        {
+            "신청서_신청인_성명": (CHECK_FAIL, [(0, False)]),
+            "확인서_신청인_성명": (CHECK_PASS, [(1, True)]),
+            "증빙_신청인_성명": (CHECK_ABSENT, None),
+            "위임장_위임인_성명": (CHECK_ABSENT, None),
+            "위임장_대리인_성명": (CHECK_ABSENT, None),
+        },
+    ),
+    "E_team_forms": (
+        "yellow",
+        {
+            "신청서_신청인_성명": (CHECK_PASS, [(0, True)]),
+            "확인서_신청인_성명": (CHECK_PASS, [(1, True)]),
+            "증빙_신청인_성명": (CHECK_ABSENT, None),
+            "위임장_위임인_성명": (CHECK_PASS, [(2, True)]),
+            "위임장_대리인_성명": (CHECK_PASS, [(2, True)]),
+        },
+    ),
 }
 
 
@@ -339,6 +363,8 @@ LINKS_EXPECTED = {
     "A_smoke": {1: ("확인서", LINK_LINKED), 2: ("증빙", LINK_LINKED), 4: ("증빙", LINK_LINKED), 3: ("위임장", LINK_LINKED)},
     "B_blank_autotransfer": {1: ("위임장", LINK_INSUFFICIENT)},
     "C_mismatch": {1: ("확인서", LINK_UNMATCHED), 2: ("증빙", LINK_LINKED)},
+    "D_blank_applicant": {1: ("확인서", LINK_INSUFFICIENT)},  # 기준(신청서) 신청인 성명이 비어 있다
+    "E_team_forms": {1: ("확인서", LINK_LINKED), 2: ("위임장", LINK_LINKED)},
 }
 
 
@@ -363,6 +389,8 @@ DECISION_EXPECTED = {
     "A_smoke": ("상", ["loan_application", "consent_form", "income_proof", "power_of_attorney", "debt_transaction"], []),
     "B_blank_autotransfer": ("검토 필요", ["auto_transfer_application", "power_of_attorney"], ["필수 항목 누락"]),
     "C_mismatch": ("검토 필요", ["loan_application", "consent_form", "income_proof"], ["서류 간 불일치"]),
+    "D_blank_applicant": ("검토 필요", ["loan_application", "consent_form"], ["필수 항목 누락"]),
+    "E_team_forms": ("상", ["debit_card_application", "fatca_crs_certification", "power_of_attorney"], []),
 }
 
 
@@ -387,6 +415,8 @@ def test_decision_sensitive_categories_of_fixtures():
     assert len(read_decision(stages_of("A_smoke"))["sensitive_categories"]) == 5
     assert read_decision(stages_of("B_blank_autotransfer"))["sensitive_categories"] == []
     assert len(read_decision(stages_of("C_mismatch"))["sensitive_categories"]) == 4
+    assert len(read_decision(stages_of("D_blank_applicant"))["sensitive_categories"]) == 3
+    assert len(read_decision(stages_of("E_team_forms"))["sensitive_categories"]) == 4
 
 
 # --- 값이 결과에 없다 · 응답을 그대로 줘도 된다 -------------------------------------------------
@@ -1357,7 +1387,7 @@ def test_unexpected_error_gives_none_and_quiet_log(monkeypatch, caplog, reader, 
 # --- 고정 자료에 Upstage 식별자 값이 없다(BRIEF §2 — T1-fix1 에서 자리표시자로 가림) ----------------------------
 
 _UPSTAGE_ID = re.compile(r"(?<![A-Za-z0-9_])(?:file|job|resp|msg)_[A-Za-z0-9]{8,}(?![A-Za-z0-9_])")
-_FIXTURE_ID = re.compile(r"(?:file|job|resp|msg)_FIXTURE[ABC][0-9]*")
+_FIXTURE_ID = re.compile(r"(?:file|job|resp|msg)_FIXTURE[A-E][0-9]*")
 _OTHER_ID = re.compile(r"(?<![A-Za-z0-9])(?:agt|cfg|proj)_[A-Za-z0-9]")
 
 

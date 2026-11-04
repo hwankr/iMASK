@@ -420,7 +420,9 @@ def test_unexpected_exception_returns_empty_view(monkeypatch: pytest.MonkeyPatch
 
 
 def test_contract_shape_of_full_view(base: dict[str, Any]) -> None:
-    assert set(base) == {"documents", "findings", "overall", "items"}  # items: 검토사항(review-items §5.3)
+    # items: 검토사항(review-items §5.3) · links·decision·bundle_check: 최종 흐름 재료(final-flow T3 — 옛 응답은 빈 값)
+    assert list(base) == ["documents", "findings", "overall", "items", "links", "decision", "bundle_check"]
+    assert (base["links"], base["decision"], base["bundle_check"]) == ([], None, None)
     assert_view(base)
 
 

@@ -54,6 +54,8 @@ describe('목록 항목 → Analysis — 키 하나하나', () => {
         detailReady: false,
         reviewable: false,
         overall: null,
+        decision: null,
+        bundleCheck: null,
         error: '',
         jobId: '',
         upstageStatus: '',

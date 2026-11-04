@@ -14,7 +14,12 @@
      detailReady 인데 review 가 객체가 아니면(검토 기록을 읽지 못함) 검토 상태 'none' · 빈 값이고 raw.reviewable false.
      그 밖(대기·분석 중·실패·옛 형식)은 review 가 있어도 'none' · 빈 이력.
    - 검토사항은 detailReady 일 때만 서버가 계산한 result.items 를 옮긴다(contract.ts toLiveItems — 없거나 배열이 아니면 [] =
-     옛 결과). reviewable 이면 해결 기록(review.items)을 덧씌운다(overlayItemReviews). 그 밖은 빈 목록. 연결은 아직 없다(빈 목록).
+     옛 결과). reviewable 이면 해결 기록(review.items)을 덧씌운다(overlayItemReviews). 그 밖은 빈 목록.
+   - 문서 간 연결은 detailReady 일 때만 서버가 계산한 result.links 를 옮긴다(contract.ts toLiveLinks — 읽기 전용, 없으면 []).
+     검토사항의 link_id 는 그 연결의 화면 번호(linkId)가 된다. 위험도 판정 키(result.decision) · 묶음 검증(result.bundle_check)은
+     raw.decision · raw.bundleCheck 에 두고(상세 판정 표 — 원래 글, 최종 규칙만), 판정 키가 있으면 주요 위험 사유 = 판단 근거 + 검토 사유 줄
+     (contract.ts riskReasonLines — 자르지 않은 응답 값에서 원문 값을 가린 뒤 최종 규칙을 적용한 글). 원문 값 바꾸기(raw-mask.ts)는
+     분석 하나를 읽을 때 한 번 만들어 연결 글과 주요 위험 사유에 같이 쓴다.
    - 백엔드가 준 원래 값은 raw 에 둔다(결과 JSON · 올린 파일 · detailReady · reviewable · overall · 오류 · 작업 번호 · 조회 상태 ·
      원래 시각 — 만든 · 바뀐 · 시작한 시각).
    - 목록(GET /analyses)은 상세 매핑과 따로 읽는다(readAnalysisList · toListAnalysis — 가벼운 항목):
@@ -26,6 +31,7 @@
 
 import { ASTATUS, HKIND, type AnalysisStatus, type HistoryKind, type ReviewStatus, type RiskLevel } from '@/display/rules';
 import { pad2 } from '@/lib/format';
+import { rawValueMasker } from '../raw-mask';
 import type { Analysis, AnalysisDoc, DocStatus, HistoryEntry, RawAnalysisInfo } from '../types';
 import type { AnalysisOut, DocumentOut } from './client';
 import {
@@ -33,12 +39,16 @@ import {
   markdownLines,
   overlayFindingReviews,
   overlayItemReviews,
+  readBundleCheck,
+  readDecision,
   readDocSources,
   readFile,
   readOverall,
+  riskReasonLines,
   toLiveDocs,
   toLiveFindings,
   toLiveItems,
+  toLiveLinks,
 } from './contract';
 
 /** 서울 시각 = UTC + 9시간 */
@@ -218,14 +228,21 @@ export function toAnalysis(out: AnalysisOut): Analysis {
   const reviewable = info !== null;
   const shown = info ?? NO_REVIEW;
   const findings = detailReady ? toLiveFindings((result as { findings?: unknown }).findings, sources, analyzedAt) : [];
+  // 원문 값 바꾸기 — 이 분석의 탐지 항목으로 한 번(연결 글 · 주요 위험 사유)
+  const mask = rawValueMasker(findings);
+  // 문서 간 연결 — 서버가 계산한 result.links(없으면 옛 결과 = 0개, 읽기 전용)
+  const links = detailReady ? toLiveLinks((result as { links?: unknown }).links, sources, findings, mask) : [];
   // 검토사항 — 서버가 계산한 result.items(없으면 옛 결과 = 0개). 위치는 덧씌우기 전 탐지 항목으로 찾는다(위치 · 번호는 덧씌우기와 무관)
-  const items = detailReady ? toLiveItems((result as { items?: unknown }).items, sources, findings) : [];
+  const items = detailReady ? toLiveItems((result as { items?: unknown }).items, sources, findings, links) : [];
+  const decision = readDecision(result);
   const raw: RawAnalysisInfo = {
     result,
     file,
     detailReady,
     reviewable,
     overall,
+    decision,
+    bundleCheck: readBundleCheck(result),
     error,
     jobId: str(out.upstage_job_id),
     upstageStatus: str(out.upstage_status),
@@ -246,11 +263,11 @@ export function toAnalysis(out: AnalysisOut): Analysis {
     docs: detailReady ? toLiveDocs(sources, file, extLabel(file?.mime, file?.name)) : documents.map((d) => toDoc(d, status, error)),
     findings: reviewable ? overlayFindingReviews(findings, (reviewBlock as { findings?: unknown }).findings, seoulDateTime) : findings,
     items: reviewable ? overlayItemReviews(items, (reviewBlock as { items?: unknown }).items, seoulDateTime) : items,
-    links: [],
+    links,
     history: shown.history,
     memo: shown.memo,
     memoAt: shown.memoAt,
-    riskReasons: markdownLines(overall?.text),
+    riskReasons: riskReasonLines(readDecision(result, mask), overall),
     recs: markdownLines(overall?.nextText),
     limits: '',
     reviewer: shown.reviewer,
@@ -284,6 +301,8 @@ export function toListAnalysis(item: unknown): Analysis | null {
     detailReady: false,
     reviewable: false,
     overall: null,
+    decision: null,
+    bundleCheck: null,
     error,
     jobId: '',
     upstageStatus: '',

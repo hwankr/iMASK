@@ -8,7 +8,8 @@
      항목마다 색이 바뀌는 곳만 ② 의 CSS 변수 값(var(--hi-soft) 등)을 넘긴다.
    - 행동(누름)은 담지 않는다. 화면 조각이 useDetailUi(선택·이동)와 DetailActions(T7 검토 동작)를 부른다.
    - 실제 분석(Analysis.raw 가 있음 — API 서비스만 채운다, DetailFacts.live)도 데모처럼 검토 동작을 쓴다. 다른 점:
-     결과 탭은 탐지 항목 · 검토 필요 · 분석 요약(연결은 아직 없음), 원문은 블록 대신 원본 파일 쪽(live — 파일 기준 쪽 ·
+     결과 탭은 탐지 항목 · 검토 필요 · (문서 간 연결 — 1개 이상일 때만, 판단 버튼 · 설명 줄 없는 읽기 전용) · 분석 요약,
+     원문은 블록 대신 원본 파일 쪽(live — 파일 기준 쪽 ·
      위치 상자)을 그린다. 검토사항(서버가 계산한 result.items)의 근거는 위치 상자 id 를 가리키므로 데모와 같은 규칙으로
      그 상자를 검토사항 색으로 강조하고 이름표를 단다 — 지금 쪽에 근거 상자가 없으면 원문 보기 안 item 안내(제목 'R-0n · 종류',
      글 = 할 일). 검토사항이 없을 때 빈 화면은 제목만(데모의 설명 줄은 실제 분석이 만들지 않는 종류를 말해서 뺀다).
@@ -34,7 +35,7 @@ import {
 import type { IconName } from '@/display/icon-names';
 import { clamp, fmtDT, fmtSize } from '@/lib/format';
 import type { Analysis, AnalysisDoc, DocLink, Finding, PageBlock, ReviewItem, Segment, TextValue } from '@/services/types';
-import { DETAIL_TABS, LIVE_DETAIL_TABS, focusAnchors, focusKey, passesFilter, type DetailFocus, type DetailTab, type DetailUiState, type FindingFilter, type MobileTab } from './detailState';
+import { DETAIL_TABS, LIVE_DETAIL_TABS, LIVE_LINK_TABS, focusAnchors, focusKey, passesFilter, type DetailFocus, type DetailTab, type DetailUiState, type FindingFilter, type MobileTab } from './detailState';
 import { FILE_FAILED, filePageOf, guideText, liveDocMeta, pageMissingText } from './liveViewerModel';
 
 /** 검토 기록을 불러오지 못한 실제 분석 — 막힌 '검토 완료' 버튼의 title */
@@ -660,7 +661,7 @@ export function viewerModel(a: Analysis, s: DetailUiState, x: DetailFacts, metri
       tone: 'run',
       icon: 'dg-i-info',
       title: '기타 서류 안내',
-      text: guideText(source.otherGuide) || '워크플로우가 대출 서류 5종에 해당하지 않는 기타 서류로 분류했습니다.',
+      text: guideText(source.otherGuide) || '워크플로우가 기타 서류로 분류했습니다.',
       pre: true,
     });
   if (mask && hasPage)
@@ -896,7 +897,7 @@ export interface LinkModel {
   canDecide: boolean;
 }
 
-/** 문서 간 연결 카드(원본 linkVM) */
+/** 문서 간 연결 카드(원본 linkVM) — 실제 분석(raw 있음)의 연결은 읽기 전용이라 판단 버튼이 없다 */
 export function linkModel(a: Analysis, l: DocLink, focus: DetailFocus | null): LinkModel {
   const sel = !!focus && focus.kind === 'link' && focus.id === l.id;
   return {
@@ -916,7 +917,7 @@ export function linkModel(a: Analysis, l: DocLink, focus: DetailFocus | null): L
     decisionText: l.decision
       ? l.decidedBy + ' · ' + fmtDT(l.decidedAt) + ' · ' + (l.decision === 'linked' ? '같은 사람 · 같은 건으로 판단' : '연결 아님으로 판단') + ' — ' + l.decisionNote
       : '',
-    canDecide: l.status === 'check' && !l.decision,
+    canDecide: !a.raw && l.status === 'check' && !l.decision,
   };
 }
 
@@ -983,6 +984,8 @@ export interface ResultsModel {
   itemsEmptyText: string;
   /* 문서 간 연결 */
   links: LinkModel[];
+  /** 연결 카드 위 설명 줄을 보이는지(데모만 — 실제 분석의 서류 대조는 이름 같은 값으로도 연결하므로 그 설명이 맞지 않는다) */
+  linksIntro: boolean;
   /* 기다림 */
   waiting: WaitingModel | null;
   /* 검토 메모 */
@@ -1016,8 +1019,8 @@ export function resultsModel(a: Analysis, s: DetailUiState, x: DetailFacts): Res
 
   const tabLabel: Record<DetailTab, string> = { findings: '탐지 항목', review: '검토 필요', links: '문서 간 연결', summary: '분석 요약' };
   const tabCount: Record<DetailTab, number | undefined> = { findings: fAll.length, review: x.openItems, links: a.links.length, summary: undefined };
-  // 실제 분석은 연결이 아직 없어 그 탭을 빼고 '분석 요약'(위험도 판정 · 다음 단계 · 결과 요약 · 단계별 JSON)을 둔다
-  const tabList = x.live ? LIVE_DETAIL_TABS : DETAIL_TABS;
+  // 실제 분석은 '분석 요약'(위험도 판정 · 다음 단계 · 결과 요약 · 단계별 JSON)을 두고, 문서 간 연결은 1개 이상일 때만 그 탭(읽기 전용)
+  const tabList = x.live ? (a.links.length ? LIVE_LINK_TABS : LIVE_DETAIL_TABS) : DETAIL_TABS;
 
   return {
     hasTabs: x.hasResults,
@@ -1044,6 +1047,7 @@ export function resultsModel(a: Analysis, s: DetailUiState, x: DetailFacts): Res
     itemsLocked: x.locked || x.readOnly,
     itemsEmptyText: x.live ? '' : ITEMS_EMPTY_TEXT,
     links: a.links.map((l) => linkModel(a, l, focus)),
+    linksIntro: !x.live,
     waiting: waitingModel(a, x),
     memo: a.memo,
     memoPreview: a.memo ? a.memo.replace(/\n/g, ' ') : '아직 작성한 메모가 없습니다.',

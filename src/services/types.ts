@@ -354,6 +354,8 @@ export interface DocLink {
   decisionNote: string;
   decidedAt: string;
   decidedBy: string;
+  /** 실제 분석에서만 — 계약 id(result.links[].id, 예 'link:0:1'). 화면 id 는 표시 번호(L-01). 데모는 넣지 않는다. */
+  live?: { id: string };
 }
 
 /* ---------- 검토 이력 ---------- */
@@ -429,6 +431,10 @@ export interface RawAnalysisInfo {
   reviewable: boolean;
   /** 계약 overall(묶음 전체 위험도 판정 · 다음 단계 안내). 없으면 null, 빠진 값은 '' */
   overall: RawOverall | null;
+  /** 계약 decision(최종 흐름 워크플로우 위험도_판정의 키 5개). 옛 결과 · 못 읽음은 null */
+  decision: RawDecision | null;
+  /** 계약 bundle_check(최종 흐름 워크플로우 묶음_검증 요약). 옛 결과 · 못 읽음은 null */
+  bundleCheck: RawBundleCheck | null;
   /** 실패 이유(백엔드 문구 그대로) */
   error: string;
   /** Upstage 작업 번호(job_…) */
@@ -469,6 +475,28 @@ export interface RawOverall {
   nextStage: string;
   /** 다음 단계 Markdown */
   nextText: string;
+}
+
+/** 계약 decision — 못 읽은 값은 null(확인된 빈 목록 [] 과 다르다) */
+export interface RawDecision {
+  /** 본문에 적힌 위험도(상·중·하·검토 필요) */
+  riskLevel: string | null;
+  /** 서류 종류 코드 목록 */
+  documentTypes: string[] | null;
+  /** 정보 종류 목록 */
+  sensitiveCategories: string[] | null;
+  /** 검토 사유 목록 */
+  reviewReasons: string[] | null;
+  /** 판단 근거 */
+  reason: string | null;
+}
+
+/** 계약 bundle_check 요약 */
+export interface RawBundleCheck {
+  /** 판정 — 모르는 값 · 없음은 '' */
+  verdict: 'green' | 'yellow' | 'red' | '';
+  /** status 가 'fail' 인 규칙 수 */
+  failed: number;
 }
 
 /* ---------- 업로드 파일 ---------- */

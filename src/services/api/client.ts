@@ -194,7 +194,7 @@ export interface ReviewItemOut {
   id: string;
   /** 화면 번호 'R-01'(100번째부터 3자리) */
   number: string;
-  /** 종류 — RTYPE 키(실제 분석은 missing · nolocation · lowconf · other) */
+  /** 종류 — RTYPE 키(실제 분석은 missing · nolocation · lowconf · other, 최종 흐름 워크플로우는 mismatch · weaklink 도) */
   type: string;
   document_index: number;
   /** 파일 기준 쪽(1부터) */
@@ -205,6 +205,44 @@ export interface ReviewItemOut {
   desc: string;
   next: string;
   evidence: { label: string; page: number; finding_ids: string[]; finding_id: string | null }[];
+  /** 연결 재료(mismatch · weaklink)만 그 연결의 계약 id(result.links[].id), 그 밖 null. 옛 결과에는 키가 없다 */
+  link_id?: string | null;
+}
+
+/**
+ * result.links[] 한 행 — 최종 흐름 워크플로우 서류 대조의 서류 쌍(읽기 전용). 옛 결과는 [] 또는 키 없음.
+ * 실제 값은 매핑(contract.ts toLiveLinks)이 방어적으로 읽는다.
+ */
+export interface DocLinkOut {
+  /** 계약 id 'link:<기준 서류 index>:<대상 서류 index>' */
+  id: string;
+  /** 화면 번호 'L-01' */
+  number: string;
+  status: 'confirmed' | 'check';
+  state: 'linked' | 'unmatched' | 'insufficient';
+  title: string;
+  field: string;
+  label: string;
+  /** 기준 · 대상 서류(fields 는 이름표 + 마스킹 값 — 원문 값이 아니다) */
+  docs: { document_index: number; page: number; fields: string; finding_ids: string[] }[];
+  basis: string[];
+  missing: string;
+  check: string;
+}
+
+/** result.decision — 위험도_판정 본문의 키 5개(못 읽은 값은 null). 옛 결과는 null 또는 키 없음 */
+export interface DecisionOut {
+  risk_level: string | null;
+  document_types: string[] | null;
+  sensitive_categories: string[] | null;
+  review_reasons: string[] | null;
+  reason: string | null;
+}
+
+/** result.bundle_check — 묶음_검증 요약. 옛 결과는 null 또는 키 없음 */
+export interface BundleCheckOut {
+  verdict: 'green' | 'yellow' | 'red' | null;
+  checks: { id: string; name: string; severity: string; status: 'pass' | 'fail' | 'absent' | 'unknown'; field: string | null; label: string | null; group: string | null }[];
 }
 
 /** review.items 의 값 하나(키 = 계약 id) — 해결 기록. 모양을 믿지 않는다(contract.ts overlayItemReviews) */

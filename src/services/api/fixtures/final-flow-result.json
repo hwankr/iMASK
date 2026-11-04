@@ -1,0 +1,624 @@
+{
+  "format": "imask-upstage-v1",
+  "job": {
+    "id": "job_fixture_final_flow",
+    "status": "completed",
+    "config_id": "1",
+    "created_at": 1793700000,
+    "usage": null
+  },
+  "summary": {
+    "stage_names": [
+      "step_1_parse",
+      "step_2_classify"
+    ],
+    "stage_counts": {
+      "step_1_parse": 1,
+      "step_2_classify": 1
+    },
+    "document_count": 5,
+    "document_types": [
+      "auto_transfer_application",
+      "fatca_crs_certification",
+      "income_proof",
+      "power_of_attorney",
+      "Other"
+    ],
+    "extracted_document_count": 4,
+    "risk_level": "검토 필요",
+    "final_stage": "검토_안내",
+    "other_document_count": 1
+  },
+  "documents": [
+    {
+      "index": 0,
+      "type": "auto_transfer_application",
+      "page_start": 1,
+      "page_end": 1,
+      "kind": "extracted",
+      "other_guide": null,
+      "validation": null
+    },
+    {
+      "index": 1,
+      "type": "fatca_crs_certification",
+      "page_start": 2,
+      "page_end": 2,
+      "kind": "extracted",
+      "other_guide": null,
+      "validation": null
+    },
+    {
+      "index": 2,
+      "type": "income_proof",
+      "page_start": 3,
+      "page_end": 4,
+      "kind": "extracted",
+      "other_guide": null,
+      "validation": null
+    },
+    {
+      "index": 3,
+      "type": "power_of_attorney",
+      "page_start": 5,
+      "page_end": 5,
+      "kind": "extracted",
+      "other_guide": null,
+      "validation": null
+    },
+    {
+      "index": 4,
+      "type": "Other",
+      "page_start": 6,
+      "page_end": 6,
+      "kind": "other",
+      "other_guide": "## 기타 서류 안내\n- **예상 서류 종류**: 지어낸 안내문",
+      "validation": null
+    }
+  ],
+  "findings": [
+    {
+      "id": "0:applicant_name",
+      "document_index": 0,
+      "field": "applicant_name",
+      "category": "이름",
+      "label": "성명",
+      "subject": "신청인",
+      "mapping_status": "ok",
+      "value": "김가상",
+      "masked": "김*상",
+      "exposure": "전체 노출",
+      "risk": "unrated",
+      "risk_source": null,
+      "risk_reason": null,
+      "page": 1,
+      "boxes": [
+        [
+          {
+            "x": 0.2,
+            "y": 0.2
+          },
+          {
+            "x": 0.28,
+            "y": 0.2
+          },
+          {
+            "x": 0.28,
+            "y": 0.21500000000000002
+          },
+          {
+            "x": 0.2,
+            "y": 0.21500000000000002
+          }
+        ]
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "0:applicant_phone",
+      "document_index": 0,
+      "field": "applicant_phone",
+      "category": "연락처·이메일",
+      "label": "휴대전화번호",
+      "subject": "신청인",
+      "mapping_status": "ok",
+      "value": "010-0000-0000",
+      "masked": "010-****-0000",
+      "exposure": "전체 노출",
+      "risk": "unrated",
+      "risk_source": null,
+      "risk_reason": null,
+      "page": 1,
+      "boxes": [
+        [
+          {
+            "x": 0.2,
+            "y": 0.3
+          },
+          {
+            "x": 0.28,
+            "y": 0.3
+          },
+          {
+            "x": 0.28,
+            "y": 0.315
+          },
+          {
+            "x": 0.2,
+            "y": 0.315
+          }
+        ]
+      ],
+      "confidence": "low"
+    },
+    {
+      "id": "0:account_number",
+      "document_index": 0,
+      "field": "account_number",
+      "category": "계좌번호",
+      "label": "출금 계좌번호",
+      "subject": "신청인",
+      "mapping_status": "ok",
+      "value": "000-00-000000",
+      "masked": "000-**-******",
+      "exposure": "전체 노출",
+      "risk": "unrated",
+      "risk_source": null,
+      "risk_reason": null,
+      "page": 1,
+      "boxes": [],
+      "confidence": "high"
+    },
+    {
+      "id": "1:applicant_name",
+      "document_index": 1,
+      "field": "applicant_name",
+      "category": "이름",
+      "label": "성명",
+      "subject": "신청인",
+      "mapping_status": "ok",
+      "value": "박가상",
+      "masked": "박*상",
+      "exposure": "전체 노출",
+      "risk": "unrated",
+      "risk_source": null,
+      "risk_reason": null,
+      "page": 2,
+      "boxes": [
+        [
+          {
+            "x": 0.3,
+            "y": 0.2
+          },
+          {
+            "x": 0.38,
+            "y": 0.2
+          },
+          {
+            "x": 0.38,
+            "y": 0.21500000000000002
+          },
+          {
+            "x": 0.3,
+            "y": 0.21500000000000002
+          }
+        ]
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "2:applicant_name",
+      "document_index": 2,
+      "field": "applicant_name",
+      "category": "이름",
+      "label": "성명",
+      "subject": "신청인",
+      "mapping_status": "ok",
+      "value": "김가상",
+      "masked": "김*상",
+      "exposure": "전체 노출",
+      "risk": "unrated",
+      "risk_source": null,
+      "risk_reason": null,
+      "page": 4,
+      "boxes": [
+        [
+          {
+            "x": 0.25,
+            "y": 0.4
+          },
+          {
+            "x": 0.33,
+            "y": 0.4
+          },
+          {
+            "x": 0.33,
+            "y": 0.41500000000000004
+          },
+          {
+            "x": 0.25,
+            "y": 0.41500000000000004
+          }
+        ]
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "2:income_info",
+      "document_index": 2,
+      "field": "income_info",
+      "category": "소득·거래정보",
+      "label": "소득금액",
+      "subject": "신청인",
+      "mapping_status": "ok",
+      "value": "소득금액: 00,000,000원",
+      "masked": "소득금액: **,***,***원",
+      "exposure": "전체 노출",
+      "risk": "unrated",
+      "risk_source": null,
+      "risk_reason": null,
+      "page": null,
+      "boxes": [],
+      "confidence": "low"
+    },
+    {
+      "id": "3:other_person_contact",
+      "document_index": 3,
+      "field": "other_person_contact",
+      "category": "연락처·이메일",
+      "label": "대리인 연락처",
+      "subject": "기타",
+      "mapping_status": "ok",
+      "value": "010-1111-0000",
+      "masked": "010-****-0000",
+      "exposure": "전체 노출",
+      "risk": "unrated",
+      "risk_source": null,
+      "risk_reason": null,
+      "page": 5,
+      "boxes": [
+        [
+          {
+            "x": 0.4,
+            "y": 0.5
+          },
+          {
+            "x": 0.48000000000000004,
+            "y": 0.5
+          },
+          {
+            "x": 0.48000000000000004,
+            "y": 0.515
+          },
+          {
+            "x": 0.4,
+            "y": 0.515
+          }
+        ]
+      ],
+      "confidence": "high"
+    }
+  ],
+  "overall": {
+    "level": "검토 필요",
+    "text": "## 위험도 판정\n**검토 필요**로 판단됩니다.【†1】\n\n- 서류 대조에서 신청인 성명이 서로 다른 서류가 있습니다.",
+    "next_stage": "검토_안내",
+    "next_text": "## 검토 안내\n- 신청인 성명이 다른 서류를 원본에서 확인합니다."
+  },
+  "items": [
+    {
+      "id": "missing:0:신청서_신청인_주소",
+      "number": "R-01",
+      "type": "missing",
+      "document_index": 0,
+      "page": 1,
+      "finding_id": null,
+      "title": "신청인 주소가 없습니다",
+      "desc": "필수 항목 검증을 통과하지 못했습니다.",
+      "next": "원본에서 직접 확인해 주세요.",
+      "evidence": [
+        {
+          "label": "1쪽 열기",
+          "page": 1,
+          "finding_ids": [],
+          "finding_id": null
+        }
+      ],
+      "link_id": null
+    },
+    {
+      "id": "nolocation:0:account_number",
+      "number": "R-02",
+      "type": "nolocation",
+      "document_index": 0,
+      "page": 1,
+      "finding_id": "0:account_number",
+      "title": "원문 위치가 없는 탐지 항목",
+      "desc": "D1-03 출금 계좌번호 — 원문 좌표가 없어 강조할 수 없습니다.",
+      "next": "원본에서 직접 찾아 확인해 주세요.",
+      "evidence": [
+        {
+          "label": "1쪽 열기",
+          "page": 1,
+          "finding_ids": [
+            "0:account_number"
+          ],
+          "finding_id": "0:account_number"
+        }
+      ],
+      "link_id": null
+    },
+    {
+      "id": "lowconf:0",
+      "number": "R-03",
+      "type": "lowconf",
+      "document_index": 0,
+      "page": 1,
+      "finding_id": null,
+      "title": "인식 신뢰도가 낮은 항목 1건",
+      "desc": "D1-02의 값이 틀렸을 수 있습니다.",
+      "next": "원본과 값을 비교해 확인해 주세요.",
+      "evidence": [
+        {
+          "label": "1쪽 값 보기",
+          "page": 1,
+          "finding_ids": [
+            "0:applicant_phone"
+          ],
+          "finding_id": null
+        }
+      ],
+      "link_id": null
+    },
+    {
+      "id": "mismatch:0:1",
+      "number": "R-04",
+      "type": "mismatch",
+      "document_index": 1,
+      "page": 2,
+      "finding_id": null,
+      "title": "자동이체 신청서와 신청인 성명이 다릅니다",
+      "desc": "서류 대조에서 같은 고객으로 확인되지 않았습니다.",
+      "next": "같은 고객의 서류인지 원본에서 확인해 주세요.",
+      "evidence": [
+        {
+          "label": "1쪽 값 보기",
+          "page": 2,
+          "finding_ids": [
+            "1:applicant_name"
+          ],
+          "finding_id": null
+        }
+      ],
+      "link_id": "link:0:1"
+    },
+    {
+      "id": "nolocation:2:income_info",
+      "number": "R-05",
+      "type": "nolocation",
+      "document_index": 2,
+      "page": 3,
+      "finding_id": "2:income_info",
+      "title": "원문 위치가 없는 탐지 항목",
+      "desc": "D3-02 소득금액 — 원문 좌표가 없어 강조할 수 없습니다.",
+      "next": "원본에서 직접 찾아 확인해 주세요.",
+      "evidence": [
+        {
+          "label": "1쪽 열기",
+          "page": 3,
+          "finding_ids": [
+            "2:income_info"
+          ],
+          "finding_id": "2:income_info"
+        }
+      ],
+      "link_id": null
+    },
+    {
+      "id": "lowconf:2",
+      "number": "R-06",
+      "type": "lowconf",
+      "document_index": 2,
+      "page": 3,
+      "finding_id": null,
+      "title": "인식 신뢰도가 낮은 항목 1건",
+      "desc": "D3-02의 값이 틀렸을 수 있습니다.",
+      "next": "원본과 값을 비교해 확인해 주세요.",
+      "evidence": [],
+      "link_id": null
+    },
+    {
+      "id": "weaklink:0:3",
+      "number": "R-07",
+      "type": "weaklink",
+      "document_index": 3,
+      "page": 5,
+      "finding_id": null,
+      "title": "연결 근거가 부족합니다",
+      "desc": "비교할 신청인 성명이 없습니다.",
+      "next": "같은 고객의 서류인지 원본에서 확인해 주세요.",
+      "evidence": [
+        {
+          "label": "1쪽 열기",
+          "page": 5,
+          "finding_ids": [],
+          "finding_id": null
+        }
+      ],
+      "link_id": "link:0:3"
+    },
+    {
+      "id": "other:4",
+      "number": "R-08",
+      "type": "other",
+      "document_index": 4,
+      "page": 6,
+      "finding_id": null,
+      "title": "기타 서류로 분류된 문서",
+      "desc": "워크플로우가 대출 서류 5종에 해당하지 않는 기타 서류로 분류했습니다.",
+      "next": "원본에 개인정보가 있는지 직접 확인해 주세요.",
+      "evidence": [
+        {
+          "label": "1쪽 열기",
+          "page": 6,
+          "finding_ids": [],
+          "finding_id": null
+        }
+      ],
+      "link_id": null
+    }
+  ],
+  "links": [
+    {
+      "id": "link:0:1",
+      "number": "L-01",
+      "status": "check",
+      "state": "unmatched",
+      "title": "자동이체 신청서 · FATCA/CRS 본인확인서",
+      "field": "applicant_name",
+      "label": "신청인 성명",
+      "docs": [
+        {
+          "document_index": 0,
+          "page": 1,
+          "fields": "신청인 성명 김*상",
+          "finding_ids": [
+            "0:applicant_name"
+          ]
+        },
+        {
+          "document_index": 1,
+          "page": 2,
+          "fields": "신청인 성명 박*상",
+          "finding_ids": [
+            "1:applicant_name"
+          ]
+        }
+      ],
+      "basis": [],
+      "missing": "두 서류의 신청인 성명이 다릅니다.",
+      "check": "같은 고객의 서류인지 원본에서 확인해 주세요."
+    },
+    {
+      "id": "link:0:2",
+      "number": "L-02",
+      "status": "confirmed",
+      "state": "linked",
+      "title": "자동이체 신청서 · 소득 증빙",
+      "field": "applicant_name",
+      "label": "신청인 성명",
+      "docs": [
+        {
+          "document_index": 0,
+          "page": 1,
+          "fields": "신청인 성명 김*상",
+          "finding_ids": [
+            "0:applicant_name"
+          ]
+        },
+        {
+          "document_index": 2,
+          "page": 4,
+          "fields": "신청인 성명 김*상",
+          "finding_ids": [
+            "2:applicant_name"
+          ]
+        }
+      ],
+      "basis": [
+        "두 서류의 신청인 성명이 같습니다."
+      ],
+      "missing": "",
+      "check": "두 서류를 함께 보관·전달할 때 열람 권한을 확인해 주세요."
+    },
+    {
+      "id": "link:0:3",
+      "number": "L-03",
+      "status": "check",
+      "state": "insufficient",
+      "title": "자동이체 신청서 · 위임장",
+      "field": "applicant_name",
+      "label": "신청인 성명",
+      "docs": [
+        {
+          "document_index": 0,
+          "page": 1,
+          "fields": "신청인 성명 김*상",
+          "finding_ids": [
+            "0:applicant_name"
+          ]
+        },
+        {
+          "document_index": 3,
+          "page": 5,
+          "fields": "신청인 성명 값 없음",
+          "finding_ids": []
+        }
+      ],
+      "basis": [],
+      "missing": "비교할 신청인 성명이 없습니다.",
+      "check": "같은 고객의 서류인지 원본에서 확인해 주세요."
+    }
+  ],
+  "decision": {
+    "risk_level": "검토 필요",
+    "document_types": [
+      "auto_transfer_application",
+      "fatca_crs_certification",
+      "income_proof",
+      "power_of_attorney",
+      "Other"
+    ],
+    "sensitive_categories": [
+      "이름",
+      "연락처",
+      "계좌번호"
+    ],
+    "review_reasons": [
+      "신청인 성명 불일치",
+      "필수 항목 누락"
+    ],
+    "reason": "서류 사이 신청인 성명이 맞지 않아 담당자 확인이 필요합니다."
+  },
+  "bundle_check": {
+    "verdict": "red",
+    "checks": [
+      {
+        "id": "신청서_신청인_주소",
+        "name": "신청서_신청인_주소",
+        "severity": "error",
+        "status": "fail",
+        "field": "applicant_address",
+        "label": "신청인 주소",
+        "group": "신청서"
+      },
+      {
+        "id": "확인서_신청인_성명",
+        "name": "확인서_신청인_성명",
+        "severity": "error",
+        "status": "pass",
+        "field": "applicant_name",
+        "label": "신청인 성명",
+        "group": "확인서"
+      },
+      {
+        "id": "증빙_신청인_성명",
+        "name": "증빙_신청인_성명",
+        "severity": "warning",
+        "status": "pass",
+        "field": "applicant_name",
+        "label": "신청인 성명",
+        "group": "증빙"
+      },
+      {
+        "id": "위임장_대리인_성명",
+        "name": "위임장_대리인_성명",
+        "severity": "warning",
+        "status": "absent",
+        "field": "agent_name",
+        "label": null,
+        "group": "위임장"
+      }
+    ]
+  }
+}

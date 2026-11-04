@@ -163,16 +163,32 @@ export type RuleId = keyof typeof RULES;
 
 /* ---------- 실제 분석 서류 종류 ---------- */
 
-/** 워크플로우 분류 코드 → 한국어 이름(실제 분석). 모르는 코드는 docTypeName 이 그대로 돌려준다 */
+/** 워크플로우 분류 코드 → 한국어 이름(실제 분석). 모르는 코드는 docTypeName 이 그대로 돌려준다.
+ *  이름은 백엔드 imask_backend/final_flow.py 의 FINAL_DOC_TYPES 와 같다(최종 흐름 워크플로우의 분류 코드 14개 + 'other') */
 export const DOC_TYPE_NAMES: Record<string, string> = {
   loan_application: '대출신청서',
   consent_form: '동의서',
   income_proof: '소득 증빙',
   power_of_attorney: '위임장',
   debt_transaction: '채무내역',
+  payment_guarantee_application: '지급보증거래 신청서',
+  consumer_compensation_claim: '소비자피해보상금 지급신청서',
+  foreign_household_confirmation: '외국인 세대구성원 확인서',
+  debit_card_application: '체크카드 가입신청서',
+  auto_transfer_application: '자동이체 신청서',
+  dormant_deposit_claim: '휴면예금 지급신청서',
+  fatca_crs_certification: 'FATCA/CRS 본인확인서',
+  retirement_pension_application: '퇴직연금 신청서',
   Other: '기타',
   other: '기타',
 };
+
+/** 묶음 검증 판정(실제 분석 — 최종 흐름 워크플로우의 묶음_검증 verdict) → 라벨 */
+export const BUNDLE_VERDICTS = {
+  green: '통과',
+  yellow: '주의',
+  red: '실패',
+} as const;
 
 /* ---------- 실제 분석 탐지 항목 안내 ---------- */
 

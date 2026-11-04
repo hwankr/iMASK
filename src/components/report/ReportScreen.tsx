@@ -201,7 +201,7 @@ function ReportBody({ analysis: a, initial }: { analysis: Analysis; initial?: Re
         onClose={closeExport}
         analysisName={a.name}
         code={a.code}
-        live={v.live}
+        live={v.liveJsonDesc}
         state={exp}
         onPickFormat={pickFormat}
         onExport={() => void runExport()}

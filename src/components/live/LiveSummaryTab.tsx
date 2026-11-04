@@ -3,8 +3,10 @@
 /* ==========================================================================
    실제 분석 상세 — 결과 패널 '분석 요약' 탭(데모에는 없다)
    - 위험도 판정(overall.text)과 다음 단계 문구(권장 조치 · 검토 안내 — next_text)를 글자 그대로 보인다
-     (줄바꿈 유지, 인용 표시 【…】만 지움 — HTML 로 그리지 않는다).
-   - 결과 요약 줄(분류한 서류 · 추출한 서류 · 위험도 · 마지막 단계 · 기타 서류 · 걸린 시간 · Upstage 작업 번호).
+     (줄바꿈 유지, 인용 표시 【…】만 지움 — HTML 로 그리지 않는다). 위험도 판정 키(raw.decision — 최종 흐름 워크플로우)가 있으면
+     판정 본문 대신 키 5개 표(위험도 · 서류 종류 · 정보 종류 · 검토 사유 · 판단 근거). 머리의 등급 표시는 그대로 overall.level 기준.
+   - 결과 요약 줄(분류한 서류 · 추출한 서류 · 위험도 · 마지막 단계 · 기타 서류 · (묶음 검증 · 문서 간 연결 — 값이 있을 때만) ·
+     걸린 시간 · Upstage 작업 번호).
    - 원본 단계별 JSON 은 접은 칸(<details>). 처음 펼칠 때 불러오고(useLiveStages — 상세 화면이 들고 있어 다시 부르지 않음),
      불러오는 중 · 실패(다시 시도) · 단계 없음을 보인다. 단계 목록은 기존 결과 JSON 보기와 같은 StageList.
    ========================================================================== */
@@ -15,7 +17,7 @@ import type { Analysis } from '@/services/types';
 import { guideText } from '@/components/detail/liveViewerModel';
 import { StageList } from './LiveResult';
 import type { LiveStagesState } from './liveHooks';
-import { nextStageTitle, riskText, stageRows, summaryRows } from './liveModel';
+import { decisionRows, finalFlowRows, nextStageTitle, riskText, stageRows, summaryRows, type SummaryRow } from './liveModel';
 import liveStyles from './LiveDetailScreen.module.css';
 import styles from './LiveSummaryTab.module.css';
 
@@ -26,12 +28,30 @@ export interface LiveSummaryTabProps {
   onLoadStages: () => void;
 }
 
+/** 이름 · 값 줄 목록(dl) — Upstage 작업 번호는 고정폭 */
+function Rows({ rows }: { rows: readonly SummaryRow[] }) {
+  return (
+    <dl className={styles.rows}>
+      {rows.map((r) => (
+        <div key={r.key} className={styles.row} data-row={r.key}>
+          <dt className={styles.label}>{r.label}</dt>
+          <dd className={cx(styles.value, r.key === 'job' && liveStyles.mono)}>{r.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 export function LiveSummaryTab({ analysis: a, stages, onLoadStages }: LiveSummaryTabProps) {
   const raw = a.raw;
   const overall = raw?.overall ?? null;
   const judge = guideText(overall?.text);
   const next = guideText(overall?.nextText);
-  const rows = summaryRows(raw?.result ?? null, { createdAt: raw?.createdAt ?? '', startedAt: raw?.startedAt ?? '', updatedAt: raw?.updatedAt ?? '', jobId: raw?.jobId ?? '' });
+  const decision = decisionRows(raw?.decision);
+  const base = summaryRows(raw?.result ?? null, { createdAt: raw?.createdAt ?? '', startedAt: raw?.startedAt ?? '', updatedAt: raw?.updatedAt ?? '', jobId: raw?.jobId ?? '' });
+  // 묶음 검증 · 문서 간 연결 줄은 '기타 서류' 다음(걸린 시간 · 작업 번호 앞)에
+  const at = base.findIndex((r) => r.key === 'other') + 1;
+  const rows = [...base.slice(0, at), ...finalFlowRows(raw?.bundleCheck, a.links), ...base.slice(at)];
   const [open, setOpen] = useState(false);
 
   return (
@@ -42,7 +62,7 @@ export function LiveSummaryTab({ analysis: a, stages, onLoadStages }: LiveSummar
           <RiskBadge level={a.risk} size="xs" />
           <span className={styles.level}>{riskText(overall?.level)}</span>
         </h3>
-        {judge ? <p className={styles.text}>{judge}</p> : <p className={styles.none}>위험도 판정 문구가 없습니다.</p>}
+        {decision ? <Rows rows={decision} /> : judge ? <p className={styles.text}>{judge}</p> : <p className={styles.none}>위험도 판정 문구가 없습니다.</p>}
       </section>
 
       <section className={styles.block} aria-labelledby="live-next-title">
@@ -56,14 +76,7 @@ export function LiveSummaryTab({ analysis: a, stages, onLoadStages }: LiveSummar
         <h3 id="live-rows-title" className={styles.title}>
           결과 요약
         </h3>
-        <dl className={styles.rows}>
-          {rows.map((r) => (
-            <div key={r.key} className={styles.row} data-row={r.key}>
-              <dt className={styles.label}>{r.label}</dt>
-              <dd className={cx(styles.value, r.key === 'job' && liveStyles.mono)}>{r.value}</dd>
-            </div>
-          ))}
-        </dl>
+        <Rows rows={rows} />
       </section>
 
       <details

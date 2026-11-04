@@ -23,6 +23,17 @@
      항목일 때 그 화면 번호(위치 유무와 무관 — 누르면 그 탐지 항목을 고른다). 탐지 항목 찾기는 Map 이라 항목 · 근거 수에 선형이다.
    - 검토사항 덧씌우기(overlayItemReviews): review.items[계약 id](자기 속성 · 객체만)의 해결 여부(정확히 true 일 때만) · 처리 내용 ·
      해결 시각(서울, 못 읽으면 '') · 처리자를 덧씌운다. 그 밖은 미해결 기본값.
+   - 문서 간 연결(toLiveLinks — 최종 흐름 워크플로우의 서류 대조, 읽기 전용): result.links[] 의 앞 MAX_LINKS 개를 DocLink 로 옮긴다.
+     id · number 가 식별자(identifier)이고 number 가 'L-' + 숫자 2자리 이상 · status 가 confirmed · check · docs 가 1~MAX_LINK_DOCS 개이고
+     모든 서류가 보이는 서류인 연결만, 같은 id · 같은 number 는 처음 받아들인 것만. 화면 id = number, 계약 id 는 live.id. 판단 값은 늘 비어 있다.
+     화면 글은 safeText(자르지 않은 글 전체에 원문 값 바꾸기 → 최종 규칙)를 지난다. 연결 서류의 anchors 는 검토사항 근거와 같은 규칙
+     (finding_ids 의 같은 서류 · 같은 쪽 탐지 항목 위치 ID, 겹치면 한 번 · 같은 탐지 id 는 한 번만 돈다).
+     검토사항의 link_id 가 같은 결과의 연결(live.id)이면 그 연결의 화면 번호를 linkId 로 둔다('연결 보기').
+   - 위험도 판정 키(readDecision)와 묶음 검증(readBundleCheck): result.decision · result.bundle_check 를 방어적으로 읽는다
+     (객체가 아니면 null, 못 읽은 값은 null — 확인된 빈 목록과 섞지 않는다). 목록은 앞 N개만, 글은 safeText(mask 를 주면 원문 값을
+     가린 글 — 보고서 사유), 서류 종류 코드는 식별자.
+   - 한도 · 서로게이트 규칙은 '바깥 글 · 목록 한도' 절(MAX_* · finalText · safeText · identifier)에 한 자리로 모았다.
+     글은 자르지 않는다(넘으면 통째로 버림).
    ========================================================================== */
 
 import {
@@ -44,7 +55,22 @@ import {
 } from '@/display/rules';
 import { pad2 } from '@/lib/format';
 import { unitBoxOnPage } from '@/lib/pageBox';
-import type { AnalysisDoc, DocSource, EvidenceRef, Finding, FindingBox, FindingLive, RawFileInfo, RawOverall, ReviewItem } from '../types';
+import { rawValueMasker } from '../raw-mask';
+import type {
+  AnalysisDoc,
+  DocLink,
+  DocSource,
+  EvidenceRef,
+  Finding,
+  FindingBox,
+  FindingLive,
+  LinkDocRef,
+  RawBundleCheck,
+  RawDecision,
+  RawFileInfo,
+  RawOverall,
+  ReviewItem,
+} from '../types';
 
 /** 항목 위험등급이 없고(risk_source null) 사유도 없을 때 보이는 판단 근거 */
 export const UNRATED_REASON = '워크플로우가 항목별 위험등급을 아직 판정하지 않아 미평가로 표시합니다.';
@@ -115,6 +141,166 @@ export function readOverall(result: unknown): RawOverall | null {
   if (!isObj(result) || !isObj(result.overall)) return null;
   const o = result.overall;
   return { level: str(o.level), text: str(o.text), nextStage: str(o.next_stage), nextText: str(o.next_text) };
+}
+
+/* ---------- 바깥 글 · 목록 한도(최종 흐름 워크플로우 — 연결 · 판정 키 · 묶음 검증) ----------
+   백엔드가 만든 값이라도 응답 경계에서 한 번 더 막는다(아주 긴 목록 · 글, 짝 없는 서로게이트).
+   - 목록(연결 · 근거 줄 · finding_ids · 판정 목록 · 묶음 검증 규칙)은 **앞 N개만 본다** — 뒤는 읽지도 않는다(시간이 한도에 묶인다).
+   - 연결 하나의 서류가 한도를 넘으면 그 연결을 버린다(모양이 틀린 연결 — 백엔드는 늘 서류 2개).
+   - 화면 · 보고서 글(연결 title · fields · basis · missing · check, 판정 글)은 **한 길(safeText)** 만 지난다:
+     자르지 않은 원래 글 전체 → 원문 값 가리기(mask — 있으면) → 최종 규칙(finalText: 짝 없는 서로게이트 → U+FFFD,
+     MAX_TEXT 코드 포인트를 넘으면 **통째로 버림**). 글을 자르지 않는다 — 잘린 자리에서 원문 값 조각이 가려지지 않고 남거나,
+     가린 결과가 한도 · 서로게이트 규칙을 벗어나는 일이 없게(V-T4-2 F1). 버린 글은 '', 목록 항목이면 그 항목을 버린다.
+   - 식별자(identifier — 계약 id · 화면 번호 · 서류 종류 코드)는 바꾸지 않는다: 비었거나 MAX_ID 코드 포인트를 넘거나
+     짝 없는 서로게이트가 있으면 그 항목(연결 · 목록 항목)을 버린다(바꾼 id 는 다른 것을 가리킬 수 있으므로). */
+
+/** 연결은 앞 200개만 본다(백엔드 서류 대조는 기준 하나에 대상 50개 한도 — MAX_LINK_TARGETS) */
+export const MAX_LINKS = 200;
+/** 연결 하나의 서류 수 한도 — 넘으면 그 연결을 버린다(백엔드는 늘 기준 · 대상 2개) */
+export const MAX_LINK_DOCS = 10;
+/** 연결 서류 하나의 finding_ids 는 앞 50개만(백엔드는 0~1개) */
+export const MAX_LINK_FINDING_IDS = 50;
+/** 연결 근거 줄은 앞 20줄만(백엔드는 0~1줄) */
+export const MAX_LINK_BASIS = 20;
+/** 판정 키 목록(서류 종류 · 정보 종류 · 검토 사유)은 앞 50개만(백엔드 MAX_DECISION_ITEMS 와 같다) */
+export const MAX_DECISION_ITEMS = 50;
+/** 묶음 검증 규칙은 앞 200개만 센다(백엔드 MAX_CHECKS 와 같다) */
+export const MAX_BUNDLE_CHECKS = 200;
+/** 화면 · 보고서 글 코드 포인트 한도(백엔드 MAX_DECISION_VALUE_LENGTH 와 같다) — 가린 결과가 넘으면 그 글을 통째로 버린다 */
+export const MAX_TEXT = 2000;
+/**
+ * 원래 글이 이 코드 단위 수를 넘으면 가리기 전에 통째로 버린다('' — 아무것도 보이지 않으므로 원문이 새지 않는다).
+ * 가리기 시간(글 길이 × 원문 값 수)을 한도에 묶는다. MAX_TEXT 의 10배라 한도 안에 들 수 있는 글은 모두 가려 본다.
+ */
+export const MAX_TEXT_SOURCE = 20_000;
+/** 식별자 코드 포인트 한도(백엔드 MAX_NAME_LENGTH 와 같다) — 넘으면 그 항목을 버린다 */
+export const MAX_ID = 200;
+
+const isHighSurrogate = (c: number): boolean => c >= 0xd800 && c <= 0xdbff;
+const isLowSurrogate = (c: number): boolean => c >= 0xdc00 && c <= 0xdfff;
+/** 짝 없는 서로게이트(u 플래그 — 짝이 맞는 쌍은 한 코드 포인트라 걸리지 않는다) */
+const LONE_SURROGATE = /[\uD800-\uDFFF]/gu;
+
+/** 원문 값 바꾸기 함수(raw-mask.ts rawValueMasker — 탐지 항목 원문 값 → masked) */
+export type Masker = (text: string) => string;
+
+/**
+ * 최종 규칙 — 짝 없는 서로게이트는 U+FFFD, MAX_TEXT 코드 포인트를 넘으면 통째로 버린다('' — 자르지 않는다).
+ * 한 번 훑고(넘는 순간 멈춘다), 바꿀 것이 없으면 받은 글을 그대로 돌려준다. U+FFFD 는 한 코드 포인트라 길이는 그대로다.
+ */
+export function finalText(s: string): string {
+  let n = 0;
+  let lone = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (isHighSurrogate(c) && i + 1 < s.length && isLowSurrogate(s.charCodeAt(i + 1))) i++;
+    else if (isHighSurrogate(c) || isLowSurrogate(c)) lone = true;
+    if (++n > MAX_TEXT) return '';
+  }
+  return lone ? s.replace(LONE_SURROGATE, '�') : s;
+}
+
+/**
+ * 바깥 글 → 화면 · 보고서 글 — 연결 글 · 판정 글 · 보고서 사유가 모두 지나는 한 길. 문자열이 아니면 ''.
+ * 원래 글이 MAX_TEXT_SOURCE 코드 단위를 넘으면 가리기 전에 통째로 버린다(''). 그 밖은
+ * **자르지 않은 원래 글 전체**에 가리기(mask — 있으면) → (trim) → 최종 규칙(finalText). 결과는 늘 MAX_TEXT 코드 포인트 이하이고
+ * 짝 없는 서로게이트가 없으며, 원문 값을 가린 뒤에만 길이를 본다(잘린 원문 조각이 남지 않는다).
+ */
+export function safeText(v: unknown, mask?: Masker | null, trim = false): string {
+  if (typeof v !== 'string' || v.length > MAX_TEXT_SOURCE) return '';
+  const masked = mask ? mask(v) : v;
+  return finalText(trim ? masked.trim() : masked);
+}
+
+/** 식별자 — 비지 않은 문자열이고 MAX_ID 코드 포인트 이하 · 짝 없는 서로게이트 없음이면 그대로, 아니면 null(그 항목을 버린다) */
+export function identifier(v: unknown): string | null {
+  if (typeof v !== 'string' || !v) return null;
+  let n = 0;
+  for (let i = 0; i < v.length; i++) {
+    const c = v.charCodeAt(i);
+    if (isHighSurrogate(c) && i + 1 < v.length && isLowSurrogate(v.charCodeAt(i + 1))) i++;
+    else if (isHighSurrogate(c) || isLowSurrogate(c)) return null;
+    if (++n > MAX_ID) return null;
+  }
+  return v;
+}
+
+/** 배열의 앞 max 개(배열이 아니면 null) — 뒤는 읽지 않는다 */
+function head(v: unknown, max: number): unknown[] | null {
+  return Array.isArray(v) ? v.slice(0, max) : null;
+}
+
+/* ---------- 위험도 판정 키 · 묶음 검증(최종 흐름 워크플로우) ---------- */
+
+/** 판정 글 하나 — safeText(가리기 → 다듬기 → 최종 규칙)의 결과가 비지 않으면 그 글, 아니면 null(못 읽음 · 버림) */
+function text(v: unknown, mask?: Masker | null): string | null {
+  const s = safeText(v, mask, true);
+  return s ? s : null;
+}
+
+/** 판정 글 목록 — 배열이 아니면 null(못 읽음), 배열이면 앞 MAX_DECISION_ITEMS 개 중 text 가 비지 않은 것만(버린 글은 그 항목을 버림) */
+function textList(v: unknown, mask?: Masker | null): string[] | null {
+  const items = head(v, MAX_DECISION_ITEMS);
+  if (!items) return null;
+  const out: string[] = [];
+  for (const x of items) {
+    const s = text(x, mask);
+    if (s !== null) out.push(s);
+  }
+  return out;
+}
+
+/** 식별자 목록(서류 종류 코드) — 배열이 아니면 null, 배열이면 앞 MAX_DECISION_ITEMS 개 중 다듬은 값이 식별자인 것만 */
+function idList(v: unknown): string[] | null {
+  const items = head(v, MAX_DECISION_ITEMS);
+  if (!items) return null;
+  const out: string[] = [];
+  for (const x of items) {
+    const s = identifier(typeof x === 'string' ? x.trim() : null);
+    if (s !== null) out.push(s);
+  }
+  return out;
+}
+
+/**
+ * result.decision(위험도_판정 본문의 키 5개) → RawDecision. 객체가 아니면 null(옛 결과 · 못 읽음).
+ * 글은 모두 safeText 를 지난다. mask 가 없으면 원래 글(상세 판정 표 — 최종 규칙만), 있으면 원문 값을 가린 글
+ * (보고서 · 내보내기의 주요 위험 사유 — 자르지 않은 응답 값에서 바로 만든다).
+ */
+export function readDecision(result: unknown, mask?: Masker | null): RawDecision | null {
+  if (!isObj(result) || !isObj(result.decision)) return null;
+  const d = result.decision;
+  return {
+    riskLevel: text(d.risk_level, mask),
+    documentTypes: idList(d.document_types),
+    sensitiveCategories: textList(d.sensitive_categories, mask),
+    reviewReasons: textList(d.review_reasons, mask),
+    reason: text(d.reason, mask),
+  };
+}
+
+/** 묶음 검증 판정 값 */
+const VERDICTS = ['green', 'yellow', 'red'] as const;
+
+/**
+ * result.bundle_check → RawBundleCheck. 객체가 아니면 null(옛 결과 · 못 읽음).
+ * 실패 규칙 = checks 의 앞 MAX_BUNDLE_CHECKS 개 중 status 가 'fail' 인 객체.
+ */
+export function readBundleCheck(result: unknown): RawBundleCheck | null {
+  if (!isObj(result) || !isObj(result.bundle_check)) return null;
+  const b = result.bundle_check;
+  let failed = 0;
+  for (const c of head(b.checks, MAX_BUNDLE_CHECKS) ?? []) if (isObj(c) && c.status === 'fail') failed++;
+  return { verdict: pick<RawBundleCheck['verdict']>(VERDICTS, b.verdict, ''), failed };
+}
+
+/**
+ * 주요 위험 사유 줄 — 위험도 판정 키가 있으면 읽을 수 있는 판단 근거(reason) + 검토 사유(review_reasons) 줄만
+ * (둘 다 없으면 빈 목록 — 보고서는 '-'), 판정 키가 없을 때만 overall 의 위험도 판정 Markdown 줄(옛 결과).
+ */
+export function riskReasonLines(decision: RawDecision | null, overall: RawOverall | null): string[] {
+  if (decision) return [...(decision.reason !== null ? [decision.reason] : []), ...(decision.reviewReasons ?? [])];
+  return markdownLines(overall?.text);
 }
 
 /* ---------- 서류 ---------- */
@@ -328,27 +514,69 @@ function pageInDoc(page: unknown, src: DocSource): number {
   return isInt(page) && page >= src.pageStart && page <= src.pageEnd ? page - src.pageStart + 1 : 1;
 }
 
-/**
- * result.items[] → 검토사항(서버 순서 그대로). 예외 없이 읽는다 — 모양이 틀린 항목 · 근거는 건너뛴다.
- * - items 가 배열이 아니면 []. 항목: 객체 · id(비지 않은 문자열) · number(ITEM_NUMBER) · type(RTYPE 자기 키) ·
- *   document_index(보이는 서류 — sources)일 때만. 같은 id · 같은 number 는 처음 받아들인 것만.
- * - findings 는 같은 결과의 탐지 항목(toLiveFindings) — 계약 id(live.id) → 탐지 항목 Map(처음 것)으로 찾는다.
- */
-export function toLiveItems(items: unknown, sources: readonly DocSource[], findings: readonly Finding[]): ReviewItem[] {
-  if (!Array.isArray(items)) return [];
+/** 보이는 서류(계약 index → 처음 서류) Map */
+function sourceMap(sources: readonly DocSource[]): Map<number, DocSource> {
   const byIndex = new Map<number, DocSource>();
   for (const src of sources) if (!byIndex.has(src.index)) byIndex.set(src.index, src);
+  return byIndex;
+}
+
+/** 같은 서류의 탐지 항목 찾기(계약 id 로 — 처음 것) — 다른 서류 · 없는 id · 문자열 아님은 null */
+function findingFinder(findings: readonly Finding[]): (id: unknown, docId: string) => Finding | null {
   const byContractId = new Map<string, Finding>();
   for (const f of findings) {
     const key = f.live?.id;
     if (typeof key === 'string' && key && !byContractId.has(key)) byContractId.set(key, f);
   }
-  /** 같은 서류의 탐지 항목(계약 id 로) — 다른 서류 · 없는 id · 문자열 아님은 null */
-  const findingOf = (id: unknown, docId: string): Finding | null => {
+  return (id, docId) => {
     if (typeof id !== 'string') return null;
     const f = byContractId.get(id);
     return f && f.docId === docId ? f : null;
   };
+}
+
+/**
+ * finding_ids 가 가리키는 같은 서류 · 같은 쪽(서류 안) 탐지 항목의 위치 ID 를 차례로(겹치는 위치 ID 는 한 번). 배열이 아니면 [].
+ * 이미 본 탐지 계약 id 는 건너뛴다 — 같은 id 가 N번 와도 그 항목의 위치 목록은 한 번만 돈다(id · 위치 수에 선형).
+ * max 가 있으면 finding_ids 의 앞 max 개만 본다(연결 — MAX_LINK_FINDING_IDS).
+ */
+function anchorsOf(ids: unknown, docId: string, page: number, findingOf: (id: unknown, docId: string) => Finding | null, max = Infinity): string[] {
+  const anchors: string[] = [];
+  if (!Array.isArray(ids)) return anchors;
+  const once = new Set<string>();
+  const seenIds = new Set<string>();
+  const n = Math.min(ids.length, max);
+  for (let k = 0; k < n; k++) {
+    const fid: unknown = ids[k];
+    if (typeof fid !== 'string' || seenIds.has(fid)) continue;
+    seenIds.add(fid);
+    const f = findingOf(fid, docId);
+    if (!f || f.page !== page) continue;
+    for (const a of f.anchors) {
+      if (once.has(a)) continue;
+      once.add(a);
+      anchors.push(a);
+    }
+  }
+  return anchors;
+}
+
+/**
+ * result.items[] → 검토사항(서버 순서 그대로). 예외 없이 읽는다 — 모양이 틀린 항목 · 근거는 건너뛴다.
+ * - items 가 배열이 아니면 []. 항목: 객체 · id(비지 않은 문자열) · number(ITEM_NUMBER) · type(RTYPE 자기 키) ·
+ *   document_index(보이는 서류 — sources)일 때만. 같은 id · 같은 number 는 처음 받아들인 것만.
+ * - findings 는 같은 결과의 탐지 항목(toLiveFindings) — 계약 id(live.id) → 탐지 항목 Map(처음 것)으로 찾는다.
+ * - links 는 같은 결과의 문서 간 연결(toLiveLinks) — link_id 가 그 계약 id(live.id)면 그 연결의 화면 번호를 linkId 로.
+ */
+export function toLiveItems(items: unknown, sources: readonly DocSource[], findings: readonly Finding[], links: readonly DocLink[] = []): ReviewItem[] {
+  if (!Array.isArray(items)) return [];
+  const byIndex = sourceMap(sources);
+  const findingOf = findingFinder(findings);
+  const linkNumber = new Map<string, string>();
+  for (const l of links) {
+    const key = l.live?.id;
+    if (typeof key === 'string' && key && !linkNumber.has(key)) linkNumber.set(key, l.id);
+  }
 
   const seenIds = new Set<string>();
   const seenNumbers = new Set<string>();
@@ -371,19 +599,7 @@ export function toLiveItems(items: unknown, sources: readonly DocSource[], findi
       for (const ev of it.evidence) {
         if (!isObj(ev) || typeof ev.label !== 'string' || !ev.label) continue;
         const page = pageInDoc(ev.page, src);
-        const anchors: string[] = [];
-        if (Array.isArray(ev.finding_ids)) {
-          const once = new Set<string>();
-          for (const fid of ev.finding_ids) {
-            const f = findingOf(fid, docId);
-            if (!f || f.page !== page) continue;
-            for (const a of f.anchors) {
-              if (once.has(a)) continue;
-              once.add(a);
-              anchors.push(a);
-            }
-          }
-        }
+        const anchors = anchorsOf(ev.finding_ids, docId, page, findingOf);
         const target = findingOf(ev.finding_id, docId);
         const ref: EvidenceRef = { label: ev.label, docId, page, anchors };
         if (target) ref.findingId = target.id;
@@ -408,7 +624,93 @@ export function toLiveItems(items: unknown, sources: readonly DocSource[], findi
     };
     const related = findingOf(it.finding_id, docId);
     if (related) item.findingId = related.id;
+    const linkId = typeof it.link_id === 'string' ? linkNumber.get(it.link_id) : undefined;
+    if (linkId) item.linkId = linkId;
     out.push(item);
+  }
+  return out;
+}
+
+/* ---------- 문서 간 연결(result.links — 서버가 계산, 읽기 전용) ---------- */
+
+/** 연결 화면 번호 — 'L-' + 숫자 2자리 이상(백엔드 L-01). ASCII 숫자만 */
+const LINK_NUMBER = /^L-\d{2,}$/;
+
+/** 연결 결과 상태 */
+const LINK_STATUSES = ['confirmed', 'check'] as const;
+
+/**
+ * result.links[] → 문서 간 연결(서버 순서 그대로). 예외 없이 읽는다 — 모양이 틀린 연결은 건너뛴다.
+ * - links 가 배열이 아니면 []. 앞 MAX_LINKS 개만 본다. 연결: 객체 · id(식별자) · number(식별자 · LINK_NUMBER) ·
+ *   status(confirmed · check) · docs(1~MAX_LINK_DOCS 개 — 모든 서류가 객체이고 document_index 가 보이는 서류)일 때만.
+ *   같은 id · 같은 number 는 처음 받아들인 것만.
+ * - 화면 글(title · 서류 fields · basis(앞 MAX_LINK_BASIS 줄 중 문자열) · missing · check)은 safeText 를 지난다 — 자르지 않은
+ *   원래 글 전체에 **원문 값 바꾸기**(이 결과의 탐지 항목 원문 값 → masked)를 먼저 하고, 그 결과에 최종 규칙(서로게이트 → U+FFFD,
+ *   MAX_TEXT 를 넘으면 통째로 버림)을 적용한다. 버린 근거 줄은 목록에서 뺀다. 연결 글은 마스킹 값만 담는 계약이라 정상 결과에서는
+ *   바뀌지 않고, 원문 값이 섞인 응답이 와도 상세 연결 카드 · 보고서 · 내보내기에 원문(조각 포함)이 나가지 않는다.
+ *   mask 는 부르는 쪽이 분석 하나를 읽을 때 한 번 만들어 넘긴다(없으면 여기서 findings 로 만든다).
+ *   탐지 항목의 value · id · 위치는 건드리지 않는다.
+ * - 판단(decision 등)은 늘 빈 값(읽기 전용).
+ * - 서류: { docId, page: 서류 안 쪽(범위 밖 · 정수 아님은 1쪽), fields, anchors: finding_ids(앞 MAX_LINK_FINDING_IDS 개)의 탐지 항목
+ *   위치 ID(검토사항 근거와 같은 규칙) }. 탐지 항목 찾기는 Map 이라 연결 · 서류 수에 선형이다.
+ */
+export function toLiveLinks(links: unknown, sources: readonly DocSource[], findings: readonly Finding[], mask?: Masker): DocLink[] {
+  const list = head(links, MAX_LINKS);
+  if (!list || list.length === 0) return [];
+  const byIndex = sourceMap(sources);
+  const findingOf = findingFinder(findings);
+  const masker = mask ?? rawValueMasker(findings);
+  const shown = (v: unknown): string => safeText(v, masker);
+
+  const seenIds = new Set<string>();
+  const seenNumbers = new Set<string>();
+  const out: DocLink[] = [];
+  for (const l of list) {
+    if (!isObj(l)) continue;
+    const id = identifier(l.id);
+    const number = identifier(l.number);
+    const { status } = l;
+    if (id === null || seenIds.has(id)) continue;
+    if (number === null || !LINK_NUMBER.test(number) || seenNumbers.has(number)) continue;
+    if (status !== 'confirmed' && status !== 'check') continue;
+    if (!Array.isArray(l.docs) || l.docs.length === 0 || l.docs.length > MAX_LINK_DOCS) continue;
+
+    const docs: LinkDocRef[] = [];
+    let ok = true;
+    for (const d of l.docs) {
+      const src = isObj(d) && isInt(d.document_index) ? byIndex.get(d.document_index) : undefined;
+      if (!src || !isObj(d)) {
+        // 객체가 아니거나 보이지 않는 서류 — 연결 전체를 버린다
+        ok = false;
+        break;
+      }
+      const docId = docIdFor(src.index);
+      const page = pageInDoc(d.page, src);
+      docs.push({ docId, page, fields: shown(d.fields), anchors: anchorsOf(d.finding_ids, docId, page, findingOf, MAX_LINK_FINDING_IDS) });
+    }
+    if (!ok) continue;
+    seenIds.add(id);
+    seenNumbers.add(number);
+
+    const basis: string[] = [];
+    for (const b of head(l.basis, MAX_LINK_BASIS) ?? []) {
+      const s = shown(b);
+      if (s) basis.push(s);
+    }
+    out.push({
+      id: number,
+      status: pick(LINK_STATUSES, status, 'check'),
+      title: shown(l.title),
+      docs,
+      basis,
+      missing: shown(l.missing),
+      check: shown(l.check),
+      decision: null,
+      decisionNote: '',
+      decidedAt: '',
+      decidedBy: '',
+      live: { id },
+    });
   }
   return out;
 }

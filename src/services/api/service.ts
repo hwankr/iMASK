@@ -42,7 +42,8 @@
      계약 id(ReviewItem.live.id)로 바꿔 보낸다 — 본문 { type: 'resolve_item', actor, item_id, note } · { type: 'reopen_item', actor, item_id }.
      없는 번호면 요청 없이 MSG_NO_ITEM 으로 거절, 조회가 404 면 위와 같이 ApiError(not_found). 성공 · 409 · 404 · 그 밖 실패의 떼기 · 알림은
      검토 동작과 같다(sendReview).
-   - pending = 조회한 분석의 미확인(open) 탐지 항목 · 미해결 검토사항(연결은 아직 없어 빈 목록), any = 둘 중 하나라도 있음. 없는 분석이면 빈 값.
+   - pending = 조회한 분석의 미확인(open) 탐지 항목 · 미해결 검토사항(문서 간 연결은 읽기 전용이라 판단할 것이 없어 빈 목록),
+     any = 둘 중 하나라도 있음. 없는 분석이면 빈 값.
    - 내보내기 파일(buildExport(id, format)): 분석을 조회해(위와 같이 나눠 씀) 없으면(404) 검토 동작처럼 ApiError(not_found)로(알림 한 번),
      보고서 대상(report-safe.ts isReportTarget — 완료 + 공통 계약 결과 + 검토 기록을 읽음)이 아니면 MSG_NO_REPORT 로 거절한다
      (화면은 기존 실패 문구를 보인다). 대상이면 원문 값을 지운 안전한 사본(reportSafeAnalysis)으로 공용 모듈(export-file.ts
@@ -51,7 +52,8 @@
    - 내보내기 기록(logExport) = 검토 동작과 같은 보내기(sendReview) 하나 — 본문 { type: 'log_export', actor, format, size, state,
      file_name }(크기 = file.size, 이름 = file.name). 보내기 전 조회는 하지 않는다. 성공 · 409 · 404 · 그 밖 실패의 떼기 · 알림은
      검토 동작과 같다(성공하면 보고서의 검토 기록 구역이 다시 그려진다).
-   - 연결 판단(decideLink)은 아직 백엔드가 없다 — '실제 분석에서는 아직 지원하지 않는 기능입니다.' 로 거절한다.
+   - 연결 판단(decideLink)은 백엔드가 없다(문서 간 연결 탭은 읽기 전용 — 판단 버튼을 그리지 않는다) —
+     '실제 분석에서는 아직 지원하지 않는 기능입니다.' 로 거절한다.
    - 분석 완료 이벤트(ServiceEvent 'done')는 보내지 않는다(탐지 0건 완료 토스트가 오해를 준다) — 위의 알림은 모두
      이벤트 없는 listener() 다.
    - 분석 데이터를 메모리 · 브라우저 저장소에 두지 않는다(목록은 서버가 준다) — 조회 결과는 요청마다 새로 만든 값이다.

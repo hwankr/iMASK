@@ -5,7 +5,8 @@
    - 휴대폰 배치(요약 카드 구분선 등)는 CSS 가 맡는다. 여기에는 폭과 상관없는 값만 둔다.
    - 실제 분석(Analysis.raw 가 있음 — 화면은 원문 값을 지운 안전한 사본을 넘긴다)도 데모와 같은 구역 01~08 · 대상 문서 표의
      '남은 검토사항' 열 · '남아 있는 검토사항' 구역(서버가 계산한 검토사항 중 미해결)을 쓴다. 다른 점(데모 값은 그대로):
-     요약 카드 3장(탐지 항목 · 담당자 확인 · 남은 검토사항 — '문서 간 연결' 카드는 아직 없어 뺀다, 미평가가 있으면 탐지 항목
+     요약 카드 3장(탐지 항목 · 담당자 확인 · 남은 검토사항 — 문서 간 연결이 0개면 '문서 간 연결' 카드를 뺀다(옛 워크플로우),
+     있으면(최종 흐름 워크플로우) 데모와 같은 4장, 미평가가 있으면 탐지 항목
      아랫줄에 ' · 미평가 n'), 위험등급별 탐지 분포 막대의 마지막 '미평가' 조각(1건 이상일 때 — 데모 막대는 높음 · 보통 · 낮음만),
      정보 종류별 표의 '미평가' 열(1건 이상일 때), 전체 탐지 항목은 서류 순번 → 서류 안 순번의 숫자 순
      (D2-01 이 D10-01 앞), 빈 위험 사유 · 권장 조치는 '-', 꼬리말 한 문장.
@@ -229,6 +230,8 @@ export interface ReportView {
   /** 실제 분석 보고서인지 */
   live: boolean;
   sections: ReportSections;
+  /** 내보내기 모달의 JSON 설명을 실제 분석 문구(문서 간 연결 없음)로 — 실제 분석이고 연결이 0개일 때 */
+  liveJsonDesc: boolean;
   code: string;
   name: string;
   /** 서비스 값 그대로 — 표기는 공통 상태 표기 컴포넌트가 ② 규칙으로 */
@@ -379,8 +382,9 @@ export function reportView(a: Analysis): ReportView {
     review: a.review,
     completedText: a.review === 'done' ? a.reviewer + ' · ' + fmtDT(a.reviewedAt) : '검토 진행 중 (완료 전)',
     notDone: a.review !== 'done',
-    /* 실제 분석에는 문서 간 연결이 아직 없다 — 그 카드를 빼고 세 장만 */
-    cards: live ? cards.filter((k) => k.key !== 'links') : cards,
+    /* 실제 분석은 문서 간 연결(최종 흐름 워크플로우의 서류 대조)이 있을 때만 그 카드 — 없으면 세 장만 */
+    cards: live && a.links.length === 0 ? cards.filter((k) => k.key !== 'links') : cards,
+    liveJsonDesc: live && a.links.length === 0,
     dist,
     distAria: '위험등급별 탐지 분포: ' + (dist.length ? dist.map((d) => d.label + ' ' + d.n + '건').join(', ') : '탐지 없음'),
     nFind: c.total,

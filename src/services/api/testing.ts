@@ -5,11 +5,16 @@
    result(stages 없음). 다음 작업의 가짜 백엔드도 같은 파일을 읽는다. items 키가 없다(옛 결과 = 검토사항 0개).
    고정 자료 fixtures/items-result.json = 위 자료의 사본 + 서버가 계산한 검토사항 result.items 8개(BRIEF §5.3 글 · 근거 규칙):
    서류 index 1 이 필수 항목 검증에 실패했다고 보고 validation 'red' + missing 1개, 나머지는 위 자료에서 규칙대로 나오는
-   lowconf 4 · nolocation 2 · other 1(검증 checks 는 result 에 없으므로 missing 은 응답 모양으로만 넣었다).
+   lowconf 4 · nolocation 2 · other 1(검증 checks 는 result 에 없으므로 missing 은 응답 모양으로만 넣었다). 항목마다 link_id null.
+   고정 자료 fixtures/final-flow-result.json = 최종 흐름 워크플로우 결과를 손으로 만든 것(스펙 T3 A·B 계약 모양 — 값은 지어낸 것):
+   서류 5개(자동이체 신청서 · FATCA/CRS 본인확인서 · 소득 증빙(2쪽) · 위임장 · 기타), 탐지 7개(위치 없음 2), 검토사항 8개
+   (missing · nolocation · lowconf · mismatch(link_id) · weaklink(link_id) · other), 연결 3개(check 2 · confirmed 1), decision, bundle_check.
+   백엔드 출력과 맞추는 시험은 통합 단계(T5)가 한다.
    ========================================================================== */
 
 import type { AnalysisListItemOut, AnalysisOut, DocumentOut } from './client';
 import doneResultFixture from './fixtures/done-result.json';
+import finalFlowResultFixture from './fixtures/final-flow-result.json';
 import itemsResultFixture from './fixtures/items-result.json';
 
 /** 가짜 fetch 가 받은 요청 */
@@ -92,6 +97,11 @@ export function contractResult(): Record<string, unknown> {
 /** 검토사항이 든 공통 계약 결과(fixtures/items-result.json) — 깊은 복사본 */
 export function itemsResult(): Record<string, unknown> {
   return structuredClone(itemsResultFixture) as unknown as Record<string, unknown>;
+}
+
+/** 최종 흐름 워크플로우 결과(fixtures/final-flow-result.json — 손으로 만든 모양) — 깊은 복사본 */
+export function finalFlowResult(): Record<string, unknown> {
+  return structuredClone(finalFlowResultFixture) as unknown as Record<string, unknown>;
 }
 
 /** AnalysisOut */

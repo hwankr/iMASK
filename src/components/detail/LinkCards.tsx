@@ -9,6 +9,8 @@ import styles from './LinkCards.module.css';
 export interface LinkCardsProps {
   links: LinkModel[];
   locked: boolean;
+  /** 카드 위 설명 줄(데모만 — 기본 보임) */
+  intro?: boolean;
   /** '근거 보기' — 그 문서 · 쪽의 연결 근거 위치로(휴대폰이면 원문 탭으로) */
   onPickDoc: (lid: string, idx: number) => void;
   actions: DetailActions;
@@ -16,14 +18,17 @@ export interface LinkCardsProps {
 
 /**
  * 문서 간 연결 탭(Main 544–563) — 연결 카드(상태 · ID · 제목, 문서별 근거 위치, 연결 근거, 부족한 근거,
- * 확인할 내용, 판단 결과, 판단 버튼(T7 모달)), 없음 상태.
+ * 확인할 내용, 판단 결과, 판단 버튼(T7 모달 — 실제 분석은 없음: canDecide false)), 없음 상태.
+ * 실제 분석은 설명 줄도 없다(intro false). 연결 근거가 하나도 없으면(실제 분석의 확인 필요 연결) 그 칸을 그리지 않는다.
  */
-export function LinkCards({ links, locked, onPickDoc, actions }: LinkCardsProps) {
+export function LinkCards({ links, locked, intro = true, onPickDoc, actions }: LinkCardsProps) {
   return (
     <>
-      <p className={styles.intro}>
-        문서 사이에서 같은 사람이나 같은 신청 건을 가리키는 정보를 찾았습니다. 이름만 같은 경우에는 연결된 것으로 보지 않고 ‘연결 확인 필요’로 표시합니다.
-      </p>
+      {intro ? (
+        <p className={styles.intro}>
+          문서 사이에서 같은 사람이나 같은 신청 건을 가리키는 정보를 찾았습니다. 이름만 같은 경우에는 연결된 것으로 보지 않고 ‘연결 확인 필요’로 표시합니다.
+        </p>
+      ) : null}
       {links.map((l) => (
         <article key={l.id} data-card={l.id} className={cx(styles.card, l.sel && styles.sel)}>
           <div className={styles.head}>
@@ -52,19 +57,21 @@ export function LinkCards({ links, locked, onPickDoc, actions }: LinkCardsProps)
               </li>
             ))}
           </ol>
-          <div className={styles.basis}>
-            <span className={styles.basisLabel}>연결 근거</span>
-            <ul className={styles.basisList}>
-              {l.basis.map((b, i) => (
-                <li key={i} className={styles.basisItem}>
-                  <span className={styles.basisIcon}>
-                    <Icon name="dg-i-check" size={15} strokeWidth={2.6} />
-                  </span>
-                  <span>{b}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          {l.basis.length ? (
+            <div className={styles.basis}>
+              <span className={styles.basisLabel}>연결 근거</span>
+              <ul className={styles.basisList}>
+                {l.basis.map((b, i) => (
+                  <li key={i} className={styles.basisItem}>
+                    <span className={styles.basisIcon}>
+                      <Icon name="dg-i-check" size={15} strokeWidth={2.6} />
+                    </span>
+                    <span>{b}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           {l.missing ? (
             <div className={styles.missing}>
               <span className={styles.missingIcon}>

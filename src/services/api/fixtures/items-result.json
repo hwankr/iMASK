@@ -997,7 +997,8 @@
           ],
           "finding_id": null
         }
-      ]
+      ],
+      "link_id": null
     },
     {
       "id": "missing:1:applicant_name_detected",
@@ -1016,7 +1017,8 @@
           "finding_ids": [],
           "finding_id": null
         }
-      ]
+      ],
+      "link_id": null
     },
     {
       "id": "nolocation:2:income_info",
@@ -1037,7 +1039,8 @@
           ],
           "finding_id": "2:income_info"
         }
-      ]
+      ],
+      "link_id": null
     },
     {
       "id": "lowconf:2",
@@ -1049,7 +1052,8 @@
       "title": "인식 신뢰도가 낮은 항목 1건",
       "desc": "D3-02의 값이 틀렸을 수 있습니다.",
       "next": "원본과 값을 비교해 확인해 주세요.",
-      "evidence": []
+      "evidence": [],
+      "link_id": null
     },
     {
       "id": "lowconf:3",
@@ -1070,7 +1074,8 @@
           ],
           "finding_id": null
         }
-      ]
+      ],
+      "link_id": null
     },
     {
       "id": "nolocation:4:credit_negative_info",
@@ -1091,7 +1096,8 @@
           ],
           "finding_id": "4:credit_negative_info"
         }
-      ]
+      ],
+      "link_id": null
     },
     {
       "id": "lowconf:4",
@@ -1112,7 +1118,8 @@
           ],
           "finding_id": null
         }
-      ]
+      ],
+      "link_id": null
     },
     {
       "id": "other:5",
@@ -1131,7 +1138,8 @@
           "finding_ids": [],
           "finding_id": null
         }
-      ]
+      ],
+      "link_id": null
     }
   ]
 }

@@ -76,6 +76,8 @@ describe('toAnalysis', () => {
       detailReady: false,
       reviewable: false,
       overall: null,
+      decision: null,
+      bundleCheck: null,
       error: '',
       jobId: '',
       upstageStatus: '',

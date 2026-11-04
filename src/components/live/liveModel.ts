@@ -3,13 +3,15 @@
    - 파일 검사(개수 1 · PDF·PNG·JPEG · 20MB 이하), 분석명, 진행 단계, 폴링 여부,
      경과·걸린 시간 문구(시작 시각 = startedAt, 없으면 createdAt — timingStart)
    - 결과 요약 줄(result.summary), 단계별 결과 목록(result.stages), 서류 종류·위험도·단계 라벨
+   - 최종 흐름 워크플로우: 위험도 판정 키 표(raw.decision), 결과 요약에 더하는 묶음 검증 · 문서 간 연결 줄(값이 있을 때만)
    결과 모양은 T2 '결과 저장 형식'(imask-upstage-v1)의 summary·stages 다. 모양이 달라도 예외 없이 빈 값으로.
    ========================================================================== */
 
 import { CONFIG } from '@/config/app';
-import { DOC_TYPE_NAMES, docTypeName, type AnalysisStatus } from '@/display/rules';
+import { BUNDLE_VERDICTS, DOC_TYPE_NAMES, docTypeName, type AnalysisStatus } from '@/display/rules';
 import { fmtSize, pad2 } from '@/lib/format';
 import type { RequestStep } from '@/services/analysis-service';
+import type { DocLink, RawBundleCheck, RawDecision } from '@/services/types';
 
 /* ---------- 파일 검사 ---------- */
 
@@ -243,6 +245,46 @@ export function summaryRows(
     { key: 'took', label: '걸린 시간', value: durationText(timingStart(info), info.updatedAt) || '-' },
     { key: 'job', label: 'Upstage 작업 번호', value: info.jobId || '-' },
   ];
+}
+
+/* ---------- 최종 흐름 워크플로우 — 위험도 판정 키 · 묶음 검증 · 문서 간 연결 ---------- */
+
+/** 목록 → ', ' 로 이은 글(못 읽음 · 빈 목록은 '-') */
+const joined = (list: readonly string[] | null): string => (list && list.length ? list.join(', ') : '-');
+
+/**
+ * 위험도 판정 키 표(분석 요약 '위험도 판정' 칸) — 판정 키가 없으면 null(지금처럼 판정 본문을 보인다).
+ * 위험도 · 서류 종류(코드 → 이름) · 정보 종류 · 검토 사유 · 판단 근거, 못 읽은 값 · 빈 목록은 '-'.
+ */
+export function decisionRows(d: RawDecision | null | undefined): SummaryRow[] | null {
+  if (!d) return null;
+  return [
+    { key: 'risk_level', label: '위험도', value: d.riskLevel ?? '-' },
+    { key: 'document_types', label: '서류 종류', value: joined(d.documentTypes ? d.documentTypes.map(docTypeName) : null) },
+    { key: 'sensitive_categories', label: '정보 종류', value: joined(d.sensitiveCategories) },
+    { key: 'review_reasons', label: '검토 사유', value: joined(d.reviewReasons) },
+    { key: 'reason', label: '판단 근거', value: d.reason ?? '-' },
+  ];
+}
+
+/**
+ * 결과 요약에 더하는 줄(값이 있을 때만) — 묶음 검증(판정 라벨 + 실패 규칙이 있으면 ' · 실패 n'),
+ * 문서 간 연결('연결 n · 확인 필요 m' — 연결 = confirmed, 확인 필요 = check).
+ */
+export function finalFlowRows(bundle: RawBundleCheck | null | undefined, links: readonly Pick<DocLink, 'status'>[]): SummaryRow[] {
+  const out: SummaryRow[] = [];
+  if (bundle) {
+    const parts: string[] = [];
+    if (bundle.verdict) parts.push(BUNDLE_VERDICTS[bundle.verdict]);
+    if (bundle.failed > 0) parts.push(`실패 ${bundle.failed}`);
+    if (parts.length) out.push({ key: 'bundle', label: '묶음 검증', value: parts.join(' · ') });
+  }
+  if (links.length) {
+    const linked = links.filter((l) => l.status === 'confirmed').length;
+    const check = links.filter((l) => l.status === 'check').length;
+    out.push({ key: 'links', label: '문서 간 연결', value: `연결 ${linked} · 확인 필요 ${check}` });
+  }
+  return out;
 }
 
 /** 단계 하나(result.stages[] — T1 parse_stages 결과) */

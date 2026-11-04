@@ -701,8 +701,8 @@ class _Hybrid:
         self.fake = fake
         self.database = database
 
-    def get_analysis(self, analysis_id: str) -> Any:
-        return self.fake.get_analysis(analysis_id)
+    def get_analysis(self, analysis_id: str, *, quiet: bool = False) -> Any:
+        return self.fake.get_analysis(analysis_id, quiet=quiet)
 
     def get_review(self, analysis_id: str) -> Any:
         return self.database.get_review(analysis_id)

@@ -12,7 +12,8 @@
 #    `insert … on conflict (analysis_id) do nothing` — 이미 행이 있으면 빈 응답 → None(예외로 흐름을 가르지 않는다).
 #    update_review: `update … where analysis_id=? and version=?` — 바뀐 행이 없으면 None(다른 요청이 먼저 씀).
 #    검토 행 오류(_review_error)는 값 없이: 동작 이름 + 예외 종류 + 영숫자 오류 코드만(바깥 오류 원문·메모·분석 id 없음).
-#    분석·문서·파일 경로의 _error(가린 짧은 이유 포함)는 그대로다.
+#    분석·문서·파일 경로의 _error(가린 짧은 이유 포함)는 그대로다. 단 get_analysis(…, quiet=True)(검토 동작 경로 —
+#    처음 읽기와 지워졌는지 다시 읽기, live-report V-T1-1 M1)는 검토 행과 같은 값 없는 오류(_quiet_error, HTTP 상태 없음).
 #  - 서명 다운로드 URL(create_signed_download_url): storage3 2.33 의 create_signed_url(path, expires_in) 은
 #    {'signedURL', 'signedUrl'} 에 이미 절대 주소(Storage 기준 주소 + /object/sign/…?token=…)를 담아 준다.
 #    다른 버전·가짜가 상대 경로를 주면 Storage 기준 주소(client.storage_url)에 붙인다. 없는 객체는 None.
@@ -109,8 +110,12 @@ class Store(Protocol):
         """{'signed_url', 'token', 'path'}"""
         ...
 
-    def get_analysis(self, analysis_id: str) -> dict[str, Any] | None:
-        """analyses 행 + 'documents'(그 분석의 문서 행 목록, 만든 순). 없으면 None."""
+    def get_analysis(self, analysis_id: str, *, quiet: bool = False) -> dict[str, Any] | None:
+        """analyses 행 + 'documents'(그 분석의 문서 행 목록, 만든 순). 없으면 None.
+
+        quiet 면 저장소 오류를 값 없이(검토 행과 같은 수준 — 동작 이름 + 예외 종류 + 영숫자 오류 코드) 낸다.
+        검토 동작 경로(imask_backend.reviews)만 쓴다. 기본값(False)은 지금 그대로(다른 경로의 로그를 바꾸지 않음).
+        """
         ...
 
     def claim_analysis(
@@ -328,7 +333,7 @@ class SupabaseStore:
             raise StoreError("분석 목록 읽기: 응답 모양이 다릅니다")
         return data
 
-    def get_analysis(self, analysis_id: str) -> dict[str, Any] | None:
+    def get_analysis(self, analysis_id: str, *, quiet: bool = False) -> dict[str, Any] | None:
         try:
             response = (
                 self._table("analyses")
@@ -338,6 +343,9 @@ class SupabaseStore:
                 .execute()
             )
         except Exception as exc:
+            # quiet(검토 동작 경로): 값 없는 오류. 기본은 지금 그대로 _error(가린 짧은 이유 포함)
+            if quiet:
+                raise self._quiet_error("분석 읽기", exc, with_status=False) from None
             raise self._error("분석 읽기", exc) from None
         row = _first(response.data)
         if row is None:

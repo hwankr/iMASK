@@ -7,6 +7,8 @@
 #    검토할 수 있는 탐지 항목 = 화면에 보이는 항목(document_index 가 유효한 서류에 속함 — toLiveFindings 와 같은 순서).
 #    표시 번호 D{서류 순번}-{서류 안 순번 두 자리}, 표시 이름 label → field → '이름 없는 항목'(화면처럼 JavaScript trim 기준),
 #    AI 값은 목록(fields.CATS·SUBJECTS·EXPOSURES) 밖이면 '기타 개인정보'·'기타'·'전체 노출'.
+#  - 동작 10종: set_status·confirm_many·mark_false_positive·restore·reclassify·save_finding_memo·save_memo(잠김 대상 7종),
+#    complete_review·reopen_review, log_export(내보내기 기록 — live-report BRIEF §5.6, 아래).
 #  - 요청 본문(parse_action): UTF-8 JSON 객체 하나(같은 키 두 번·NaN·깊은 중첩 → 400), 종류(type)별로 정확히 정해진 필드만,
 #    엄격한 타입, 목록 값. 400 문구 순서: 형식 → 처리자 이름 → 메모·사유(쓸 수 없는 문자 → 500자). 본문 크기(413)는 api 가 본다.
 #  - 동작 하나 = 검토 행 하나를 조건부로 쓴다(apply_review_action): 분석 읽기 → 검토 행 읽기(없으면 기본값 version 0)
@@ -19,7 +21,18 @@
 #    (shared-analyses BRIEF §5.6 — 그 사이 지워짐), 있거나 다시 읽지 못하면 지금처럼 502·409.
 #    version 조건부 쓰기(_write_review)는 다시 분석의 이력 한 줄(append_history_line — 다른 열은 그대로)도 같이 쓴다.
 #    이 경로의 로그·StoreError 문구에는 값(메모·분석 id·항목 id·바깥 오류 원문)을 넣지 않는다 — 검토 행 저장소 오류는
-#    SupabaseStore._review_error 가 동작 이름 + 예외 종류 + 영숫자 오류 코드만 남긴다(BRIEF §5.3).
+#    SupabaseStore._review_error 가 동작 이름 + 예외 종류 + 영숫자 오류 코드만 남긴다(BRIEF §5.3). 분석 행 읽기(처음 읽기
+#    _load_quiet·지워졌는지 다시 읽기 _analysis_gone)도 get_analysis(…, quiet=True) 로 같은 수준(live-report V-T1-1 M1 —
+#    10종 모두. 응답·오류 순서는 그대로, 로그만 조용해짐).
+#  - log_export(내보내기 기록): 본문은 정확히 type·actor·format('csv'|'json')·size(bool 아닌 정수 1~104,857,600)·
+#    state('handed'|'saved')·file_name(꼴·확장자가 format 과 맞음 — 규칙은 imask_backend/exports.py). 모양이 틀리면
+#    처리자 이름보다 먼저 400. 분석을 읽은 뒤 409 검토할 수 없음 다음에, file_name 이 이 분석의 기대 이름
+#    (exports.expected_file_name — 만든 날짜(서울)·id 앞 4자, 만든 날짜를 읽지 못하면 없음)과 다르면 400 형식.
+#    잠김과 무관(LOCKED_ACTIONS 밖 — 검토 완료 뒤에도 기록), 다른 열은 그대로 두고 이력 한 줄 + version 만 같은
+#    version 조건부 쓰기로 쓴다(행이 없으면 기본값 행 + version 1). 이력 줄 kind 'export', target = file_name,
+#    change '<CSV|JSON> · <크기(fmtSize 와 같은 글자)> · <다운로드 요청|저장 완료>', reason '민감한 값 마스킹'. 늘 changed true.
+#    오류 순서: 413 → 400 모양 → 400 처리자 → 404 분석 → 409 검토할 수 없음 → 400 이 분석의 이름 아님 → 409 이력 1000줄
+#    → 409 경쟁 패배(그 사이 지워졌으면 404).
 #  - 저장 형식: findings jsonb 의 키 = 계약 id 의 storage_key(json.dumps(id, ensure_ascii=True)[1:-1] — ASCII 만).
 #    항목 값은 처음 건드릴 때 AI 값으로 시작하고, 건드린 항목은 정규화한 값 + 바뀐 값으로 쓴다(그 항목의 모르는 키는 둔다).
 #    지금 결과에 없는 id·모르는 모양의 값·모양이 틀린 이력 줄은 지우지 않고 그대로 두되 응답에서는 무시한다.
@@ -29,6 +42,7 @@
 #    검토 행을 읽지 못하면 값 없는 경고 후 null(상세 화면이 깨지지 않게). 행이 없으면 기본값(needed·빈 값·version 0).
 #    history = [S1(분석 요청)] + [저장된 줄 중 kind 'retry'(다시 분석 요청, 저장 순서)] + [S2(최초 AI 결과)] + [그 밖 저장된 줄].
 #    S1·S2 는 조회할 때 만든다. 다시 분석은 failed 일 때만(= 완료 전), 검토 동작은 완료 뒤에만 생기므로 이 순서가 시간 순서다.
+#    내보내기 기록(kind 'export')도 '그 밖 저장된 줄'에 저장 순서로 들어간다.
 #  - 저장 키 충돌(서로 다른 id 가 같은 저장 키): json.loads 로 만든 문자열에서는 생기지 않는다(인접한 짝 없는 상위·하위
 #    서로게이트가 나올 수 없음). 그래도 생기면 뒤의 항목은 저장하지 않고(동작 404) 기본값으로만 센다 — 값이 섞이지 않게.
 # ==========================================================================
@@ -43,7 +57,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from .analyses import DONE, MSG_NOT_FOUND, ApiError, _load, _parse_time, _uuid_or_404, analysis_out
+from .analyses import DONE, MSG_NOT_FOUND, ApiError, _parse_time, _uuid_or_404, analysis_out
+from .exports import EXPORT_KIND, EXPORT_REASON, expected_file_name, export_change, export_fields_ok
 from .fields import CATS, EXPOSURES, SUBJECTS
 from .findings import build_view
 from .store import Store, StoreError
@@ -129,11 +144,12 @@ ACTION_FIELDS: dict[str, tuple[str, ...]] = {
     "save_memo": ("text",),
     "complete_review": ("note",),
     "reopen_review": ("reason",),
+    "log_export": ("format", "size", "state", "file_name"),  # 내보내기 기록(live-report BRIEF §5.6)
 }
 OPTIONAL_FIELDS: dict[str, tuple[str, ...]] = {"reclassify": ("category", "subject", "exposure")}
 TEXT_FIELDS = ("reason", "note", "text")
 SET_STATUSES = ("open", "confirmed")
-# 잠김(검토 완료) 동안 거절하는 동작(BRIEF §5.5 의 1~7)
+# 잠김(검토 완료) 동안 거절하는 동작(BRIEF §5.5 의 1~7). log_export 는 넣지 않는다(검토 완료 뒤에도 내보내기를 기록)
 LOCKED_ACTIONS = frozenset(
     {"set_status", "confirm_many", "mark_false_positive", "restore", "reclassify", "save_finding_memo", "save_memo"}
 )
@@ -170,6 +186,11 @@ class ReviewAction:
     subject: str | None = None
     exposure: str | None = None
     text: str = ""
+    # log_export 만(본문 format·size·state·file_name)
+    export_format: str | None = None
+    export_size: int | None = None
+    export_state: str | None = None
+    file_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -342,6 +363,12 @@ def validate_action(body: Any) -> ReviewAction:
         values["category"] = _optional_choice(body, "category", CATS)
         values["subject"] = _optional_choice(body, "subject", SUBJECTS)
         values["exposure"] = _optional_choice(body, "exposure", EXPOSURES)
+    if kind == "log_export":
+        if not export_fields_ok(body["format"], body["size"], body["state"], body["file_name"]):
+            raise _bad()
+        values.update(
+            export_format=body["format"], export_size=body["size"], export_state=body["state"], file_name=body["file_name"]
+        )
     text_field = next((name for name in TEXT_FIELDS if name in required), None)
     if text_field is not None:
         if not isinstance(body[text_field], str):
@@ -766,6 +793,17 @@ def _compute(
             change=f"{RSTATUS['done']} → {RSTATUS['needed']}",
             reason=action.text,
         )
+    if kind == "log_export":
+        # 잠김과 무관(LOCKED_ACTIONS 밖), 다른 열은 그대로 — 이력 한 줄 + version 만. 늘 changed true
+        if action.export_format is None or action.export_size is None or action.export_state is None:
+            raise ApiError(400, MSG_BAD_REQUEST)  # validate_action 을 지난 값에는 오지 않는다
+        return _Change(
+            columns={},
+            kind=EXPORT_KIND,
+            target=action.file_name or "",
+            change=export_change(action.export_format, action.export_size, action.export_state),
+            reason=EXPORT_REASON,
+        )
     raise ApiError(400, MSG_BAD_REQUEST)  # validate_action 을 지난 값에는 오지 않는다
 
 
@@ -788,10 +826,18 @@ def _write_review(
     return store.insert_review({"analysis_id": analysis_id, **review_defaults(), **values})
 
 
+def _load_quiet(store: Store, analysis_id: str) -> dict[str, Any]:
+    """검토 동작 경로의 분석 읽기 — 없으면 404. 저장소 오류는 값 없는 StoreError(get_analysis quiet — api 가 502)."""
+    row = store.get_analysis(analysis_id, quiet=True)
+    if row is None:
+        raise ApiError(404, MSG_NOT_FOUND)
+    return row
+
+
 def _analysis_gone(store: Store, analysis_id: str) -> bool:
-    """분석 행이 정말 없는지(다시 읽어 None). 다시 읽기 저장소 오류면 False — 원래 오류(502·409)를 그대로 낸다."""
+    """분석 행이 정말 없는지(값 없는 다시 읽기로 None). 다시 읽기 저장소 오류면 False — 원래 오류(502·409)를 그대로 낸다."""
     try:
-        return store.get_analysis(analysis_id) is None
+        return store.get_analysis(analysis_id, quiet=True) is None
     except StoreError:
         return False
 
@@ -801,11 +847,16 @@ def apply_review_action(
 ) -> ActionOutcome:
     """동작 하나를 검토 행에 조건부로 쓴다 → ActionOutcome. analyses 행은 읽기만 한다. Upstage 는 부르지 않는다."""
     analysis_id = _uuid_or_404(analysis_id)
-    row = _load(store, analysis_id)  # StoreError → 502, 없으면 404
+    row = _load_quiet(store, analysis_id)  # 값 없는 StoreError → 502, 없으면 404
     view = row_view(row)
     scope = review_scope(row, view)
     if scope is None or view is None:
         raise ApiError(409, MSG_NOT_REVIEWABLE)
+    # log_export: 이 분석의 파일 이름(만든 날짜·id 로 정해짐)이어야 한다 — 만든 날짜를 읽지 못하면 기대 이름이 없어 400
+    if action.type == "log_export":
+        expected = expected_file_name(row, action.export_format) if action.export_format is not None else None
+        if expected is None or action.file_name != expected:
+            raise ApiError(400, MSG_BAD_REQUEST)
     targets = _targets_for(scope, action) if action.finding_id is not None or action.finding_ids else ()
     moment = now() if callable(now) else (now or datetime.now(UTC))
 

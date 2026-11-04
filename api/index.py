@@ -19,6 +19,9 @@
 #    GET  /api/py/analyses/{id}/file       원본 파일 서명 다운로드 URL(10분) → 200, Cache-Control: no-store
 #    POST /api/py/analyses/{id}/review-actions
 #                                          검토 동작 하나 저장(imask_backend.reviews) → 200 {"analysis", "changed"}
+#                                          type: set_status·confirm_many·mark_false_positive·restore·reclassify·
+#                                          save_finding_memo·save_memo·complete_review·reopen_review·log_export(내보내기
+#                                          기록 — 이력 한 줄만, 검토 완료 뒤에도, 늘 changed true)
 #                                          본문은 직접 읽는다: 65,536 바이트를 넘으면 그 자리에서 413(Content-Length 없이도),
 #                                          JSON·필드 검사 400. Upstage 를 부르지 않는다(의존성도 받지 않음).
 #    POST /api/py/analyses/{id}/retry      실패한 분석을 같은 원본으로 진짜 다시 분석(imask_backend.manage) → 200 AnalysisOut.

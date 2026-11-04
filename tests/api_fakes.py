@@ -4,6 +4,7 @@
 #    조건부 갱신(expect_status·expect_no_job)과 cascade 삭제, updated_at 갱신을 흉내 낸다.
 #    fail 에 메서드 이름을 넣으면 그 메서드가 StoreError 를 던진다. before_update 로 경쟁을 흉내 낸다.
 #    create_signed_download_url 은 객체가 없으면 None, 있으면 JWT 꼴 토큰을 단 가짜 서명 URL(받은 인자는 기록).
+#    get_analysis 는 quiet 키워드(검토 동작 경로의 값 없는 오류 모드)를 받아 analysis_reads 에 남긴다(오류 문구는 같다).
 #    검토 행(analysis_reviews): get_review·insert_review(이미 있으면 None — on conflict do nothing)·update_review(version
 #    조건, 안 맞으면 None)와 updated_at 갱신, 분석 FK·check 제약·jsonb 가 거절하는 값(NUL·짝 없는 서로게이트)을 흉내 낸다.
 #    review_hooks 에 함수를 넣으면 검토 행을 쓰기 직전에 하나씩 꺼내 부른다(다른 요청이 끼어드는 경쟁 흉내).
@@ -75,6 +76,7 @@ class FakeStore:
         self.signed_uploads: list[dict[str, str]] = []
         self.signed_downloads: list[tuple[str, int]] = []  # (path, expires_in)
         self.get_count = 0
+        self.analysis_reads: list[bool] = []  # get_analysis 마다 quiet 인자(검토 동작 경로는 True)
         self.fail_get_calls: set[int] = set()  # n 번째 get_analysis 만 실패(예: 마지막 다시 읽기)
         self.reviews: dict[str, dict[str, Any]] = {}
         self.review_writes: list[tuple[str, str, dict[str, Any], int | None]] = []  # (메서드, 분석 id, 값, expect_version)
@@ -255,7 +257,8 @@ class FakeStore:
         self.signed_uploads.append(signed)
         return dict(signed)
 
-    def get_analysis(self, analysis_id: str) -> dict[str, Any] | None:
+    def get_analysis(self, analysis_id: str, *, quiet: bool = False) -> dict[str, Any] | None:
+        self.analysis_reads.append(quiet)  # 값 없는 오류 모드로 읽었는지(검토 동작 경로는 True — V-T1-1 M1)
         self._call("get_analysis")
         self.get_count += 1
         if self.get_count in self.fail_get_calls:

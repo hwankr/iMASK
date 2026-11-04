@@ -16,11 +16,9 @@
 #  - resolve_item(item_id·note)·reopen_item(item_id) — 검토사항 해결·다시 열기(review-items BRIEF §5.6): item_id 는 문자열,
 #    note 는 다른 글 필드와 같은 규칙(빈 글도 받음). 오류 순서: 413 → 400 형식 → 400 처리자 → 400 글 → 404 분석 →
 #    409 검토할 수 없음 → 404 검토사항(지금 결과에 없음·저장할 수 없음) → 409 잠김 → 409 검토사항 상태(이미 해결에 resolve·
-#    미해결에 reopen) → 409 이력 1000줄 → 409 경쟁 패배(그 사이 지워졌으면 404). 검토사항 상태 409 를 내려는 시도에 검토 행이
-#    없었다면(처음 읽기·경쟁 패배 뒤 다시 읽기 — 분석이 지워지면 검토 행도 cascade 로 사라진다) 값 없는 분석 다시 읽기
-#    (_analysis_gone)로 정말 없으면 404, 있거나 다시 읽기가 저장소 오류면 409 그대로(ItemStateConflict — T1-fix1, 기존 10종은
-#    그대로라 reopen_review 의 같은 경합은 아직 409). 쓰기는 다른 동작과 같은 version 조건부
-#    쓰기 하나(items 열 + 이력 한 줄 + version), 늘 changed true. 항목 값은 지금 값(없으면 미해결 기본값)에서 시작해
+#    미해결에 reopen) → 409 이력 1000줄 → 409 경쟁 패배. 그 사이 분석이 지워졌으면 404(아래 '삭제 경합' — 12종 공통).
+#    쓰기는 다른 동작과 같은 version 조건부 쓰기 하나(items 열 + 이력 한 줄 + version), 늘 changed true.
+#    항목 값은 지금 값(없으면 미해결 기본값)에서 시작해
 #    resolve 는 {resolved true, note, resolved_at 동작 시각, resolved_by 처리자}, reopen 은 resolved false 만(나머지 그대로).
 #    이력: resolve → kind 'resolve'·target '{R-nn} {종류 라벨}'·change '미해결 → 해결'·reason note,
 #    reopen → kind 'reopenItem'·같은 target·change '해결 → 미해결'·reason ''.
@@ -33,13 +31,21 @@
 #    분석 행과 결과는 검토 동작으로 바뀌지 않으므로 다시 읽지 않는다. analyses 행은 절대 쓰지 않는다(updated_at 트리거).
 #    Upstage 는 부르지 않는다. 오류 순서: 404 분석 → 409 검토할 수 없음 → 404 항목 → 409 잠김 → 409 상태 불일치
 #    → (바뀐 것 없음 → 200 changed false) → 409 이력 1000줄 → 409 경쟁 패배. 저장소 오류는 StoreError(api 가 502).
-#    검토 행 쓰기가 저장소 오류(삭제로 FK 위반 등)거나 모두 경쟁에 졌으면 분석 행을 다시 읽어 정말 없으면 404
-#    (shared-analyses BRIEF §5.6 — 그 사이 지워짐), 있거나 다시 읽지 못하면 지금처럼 502·409.
 #    version 조건부 쓰기(_write_review)는 다시 분석의 이력 한 줄(append_history_line — 다른 열은 그대로)도 같이 쓴다.
 #    이 경로의 로그·StoreError 문구에는 값(메모·분석 id·항목 id·바깥 오류 원문)을 넣지 않는다 — 검토 행 저장소 오류는
 #    SupabaseStore._review_error 가 동작 이름 + 예외 종류 + 영숫자 오류 코드만 남긴다(BRIEF §5.3). 분석 행 읽기(처음 읽기
 #    _load_quiet·지워졌는지 다시 읽기 _analysis_gone)도 get_analysis(…, quiet=True) 로 같은 수준(live-report V-T1-1 M1 —
 #    12종 모두. 응답·오류 순서는 그대로, 로그만 조용해짐). 검토사항 경로도 처리 내용·처리자·항목 id·규칙 이름을 남기지 않는다.
+#  - 삭제 경합(그 사이 분석이 지워짐 → 404 '분석 건을 찾을 수 없습니다.', 12종 모두 같은 규칙 — shared-analyses BRIEF §5.6 ·
+#    review-items BRIEF-F §5F F1). 분석이 지워지면 검토 행도 cascade 로 사라지므로 다음 셋에서 분석 행을 값 없이 다시
+#    읽어(_analysis_gone — get_analysis quiet) 정말 없으면 404, 있거나 다시 읽기가 저장소 오류면 원래 결과를 낸다.
+#    ① 검토 행 쓰기가 저장소 오류(insert 의 FK 위반 등) → 원래 502. ② MAX_ATTEMPTS 번 모두 경쟁에 짐 → 원래 409 경쟁.
+#    ③ 쓰지 않고 끝나는 시도 — _compute 의 상태 409(StateConflict: 잠김·탐지 항목 상태·이미 완료·완료 전 다시 열기·
+#    검토사항 상태) 또는 바뀐 것 없음(200 changed false) — 인데 그 시도에 읽은 검토 행이 None 일 때 → 원래 409·200.
+#    ③ 은 처음 읽기(분석 읽기 뒤·첫 검토 행 읽기 전에 지워짐)와 경쟁 패배 뒤 다시 읽기(UPDATE 0행 → 다시 읽은 행 None)
+#    둘 다에 걸린다. 검토 행이 있던 시도의 409·200 은 다시 읽지 않고 바로 낸다(추가 분석 읽기는 행이 None 인 시도에서만).
+#    검토 행이 None 이면 상태는 기본값(needed·미확인·미해결)이라 그 시도에서 실제로 ③ 에 걸리는 것은 reopen_review(완료 전)·
+#    set_status(open)·restore·reopen_item(상태 409)과 바뀐 것 없는 reclassify 다(나머지는 쓰기로 가서 ① 로 404).
 #  - log_export(내보내기 기록): 본문은 정확히 type·actor·format('csv'|'json')·size(bool 아닌 정수 1~104,857,600)·
 #    state('handed'|'saved')·file_name(꼴·확장자가 format 과 맞음 — 규칙은 imask_backend/exports.py). 모양이 틀리면
 #    처리자 이름보다 먼저 400. 분석을 읽은 뒤 409 검토할 수 없음 다음에, file_name 이 이 분석의 기대 이름
@@ -756,21 +762,23 @@ def _with_item(items: Mapping[str, Any], target: ItemTarget, value: Mapping[str,
     return out
 
 
-class ItemStateConflict(ApiError):
-    """검토사항 상태 409(이미 해결에 resolve · 미해결에 reopen) — 검토사항 두 동작만 낸다.
+class StateConflict(ApiError):
+    """검토 행 상태 때문에 쓰지 않는 409 — _compute 가 내는 409 는 모두 이것(12종 공통, review-items BRIEF-F §5F F1).
 
-    apply_review_action 이 이 시도에 검토 행이 없었을 때만(그 사이 분석이 지워져 검토 행도 cascade 로 사라졌을 수 있음)
-    분석을 다시 읽어 404 로 바꾼다. 응답은 ApiError 와 같다(409 + MSG_ITEM_STATE_CHANGED).
+    잠김(MSG_LOCKED)·탐지 항목 상태(MSG_STATE_CHANGED)·이미 완료(MSG_ALREADY_DONE)·완료 전 다시 열기(MSG_NOT_DONE)·
+    검토사항 상태(MSG_ITEM_STATE_CHANGED). apply_review_action 이 '바뀐 것 없음'과 같은 한 곳에서, 이 시도에 검토 행이
+    없었을 때만(그 사이 분석이 지워져 검토 행도 cascade 로 사라졌을 수 있음) 분석을 다시 읽어 404 로 바꾼다.
+    응답은 ApiError 와 같다(409 + 문구 — api 의 ApiError 처리기가 하위 클래스도 받는다).
     """
 
-    def __init__(self) -> None:
-        super().__init__(409, MSG_ITEM_STATE_CHANGED)
+    def __init__(self, detail: str) -> None:
+        super().__init__(409, detail)
 
 
 def _resolve_item(action: ReviewAction, target: ItemTarget, state: _State, at: str) -> _Change:
     current = item_state(target, state.items)
     if current["resolved"]:
-        raise ItemStateConflict()
+        raise StateConflict(MSG_ITEM_STATE_CHANGED)
     entry = {**current, "resolved": True, "note": action.text, "resolved_at": at, "resolved_by": action.actor}
     return _Change(
         columns={"items": _with_item(state.items, target, entry)},
@@ -784,7 +792,7 @@ def _resolve_item(action: ReviewAction, target: ItemTarget, state: _State, at: s
 def _reopen_item(target: ItemTarget, state: _State) -> _Change:
     current = item_state(target, state.items)
     if not current["resolved"]:
-        raise ItemStateConflict()
+        raise StateConflict(MSG_ITEM_STATE_CHANGED)
     entry = {**current, "resolved": False}  # note·resolved_at·resolved_by 는 그대로(데모 reopenItem 과 같다)
     return _Change(
         columns={"items": _with_item(state.items, target, entry)},
@@ -800,7 +808,7 @@ def _set_status(action: ReviewAction, target: Target, state: _State, at: str) ->
     before = current["status"]
     wanted = action.status or "open"
     if (wanted == "confirmed" and before != "open") or (wanted == "open" and before != "confirmed"):
-        raise ApiError(409, MSG_STATE_CHANGED)
+        raise StateConflict(MSG_STATE_CHANGED)
     entry = {**current, "status": wanted, "updated_at": at}
     return _Change(
         columns={"findings": _with_entry(state.findings, target, entry)},
@@ -834,7 +842,7 @@ def _confirm_many(targets: Sequence[Target], state: _State, at: str) -> _Change 
 def _mark_false_positive(action: ReviewAction, target: Target, state: _State, at: str) -> _Change:
     current = finding_state(target, state.findings)
     if current["status"] == "false_positive":
-        raise ApiError(409, MSG_STATE_CHANGED)
+        raise StateConflict(MSG_STATE_CHANGED)
     reason_type = action.reason_type or ""
     entry = {**current, "status": "false_positive", "fp_type": reason_type, "fp_note": action.text, "updated_at": at}
     return _Change(
@@ -849,7 +857,7 @@ def _mark_false_positive(action: ReviewAction, target: Target, state: _State, at
 def _restore(action: ReviewAction, target: Target, state: _State, at: str) -> _Change:
     current = finding_state(target, state.findings)
     if current["status"] != "false_positive":
-        raise ApiError(409, MSG_STATE_CHANGED)
+        raise StateConflict(MSG_STATE_CHANGED)
     ai = (target.category, target.subject, target.exposure)
     now_values = (current["category"], current["subject"], current["exposure"])
     status = "reclassified" if now_values != ai else "open"
@@ -917,9 +925,9 @@ def _compute(
     at: str,
     item: ItemTarget | None = None,
 ) -> _Change | None:
-    """검사(잠김·상태)와 새 값 계산. 바뀐 것이 없으면 None. 409 는 ApiError."""
+    """검사(잠김·상태)와 새 값 계산. 바뀐 것이 없으면 None. 409 는 모두 StateConflict(검토 행 상태 — 쓰지 않음)."""
     if action.type in LOCKED_ACTIONS and state.status == "done":
-        raise ApiError(409, MSG_LOCKED)
+        raise StateConflict(MSG_LOCKED)  # 검토 행이 없으면 status needed 라 여기 오지 않는다(같은 묶음으로 다룰 뿐)
     kind = action.type
     if kind in ITEM_ACTIONS:
         if item is None:
@@ -947,7 +955,7 @@ def _compute(
         )
     if kind == "complete_review":
         if state.status != "needed":
-            raise ApiError(409, MSG_ALREADY_DONE)
+            raise StateConflict(MSG_ALREADY_DONE)  # 검토 행이 없으면 needed 라 여기 오지 않는다
         left, open_items = _open_count(scope, state), _open_item_count(scope, state)
         parts = [f"미확인 탐지 {left}건"] if left else []
         if open_items:
@@ -962,7 +970,7 @@ def _compute(
         )
     if kind == "reopen_review":
         if state.status != "done":
-            raise ApiError(409, MSG_NOT_DONE)
+            raise StateConflict(MSG_NOT_DONE)
         return _Change(
             columns={"status": "needed", "reviewed_at": None},  # reviewer·completion_note 는 그대로(데모와 같다)
             kind="reopen",
@@ -1042,16 +1050,21 @@ def apply_review_action(
         raw = store.get_review(analysis_id)  # StoreError → 502
         state = _state(raw, for_write=True)
         at = _action_time(state.history, moment)
+        conflict: StateConflict | None = None
         try:
             planned = _compute(action, scope, targets, state, at, item)
-        except ItemStateConflict:
-            # 검토사항 두 동작만(T1-fix1): 이 시도에 검토 행이 없었다면(처음 읽기든 경쟁 패배 뒤 다시 읽기든) 그 사이 분석이
-            # 지워져 검토 행도 cascade 로 사라졌을 수 있다 — 값 없는 다시 읽기로 정말 없으면 404, 있거나 다시 읽기가
-            # 저장소 오류면 409 그대로. 검토 행이 있던 시도의 상태 409 는 바로 낸다. 기존 10종은 이 예외를 내지 않는다.
+        except StateConflict as exc:
+            conflict, planned = exc, None
+        if planned is None:
+            # 쓰지 않고 끝나는 시도(상태 409 · 바뀐 것 없음 200) — 12종 공통 한 곳(BRIEF-F §5F F1). 이 시도에 검토 행이
+            # 없었다면(처음 읽기든 경쟁 패배 뒤 다시 읽기든) 그 사이 분석이 지워져 검토 행도 cascade 로 사라졌을 수 있다:
+            # 값 없는 다시 읽기로 정말 없으면 404, 있거나 다시 읽기가 저장소 오류면 원래 결과. 검토 행이 있던 시도는
+            # 다시 읽지 않는다(추가 분석 읽기는 검토 행이 None 인 시도에서만).
             if raw is None and _analysis_gone(store, analysis_id):
-                raise ApiError(404, MSG_NOT_FOUND) from None
-            raise
-        if planned is None:  # 바뀐 것 없음 — 쓰지 않는다(이력·version 그대로)
+                raise ApiError(404, MSG_NOT_FOUND)
+            if conflict is not None:
+                raise conflict
+            # 바뀐 것 없음 — 쓰지 않는다(이력·version 그대로)
             return ActionOutcome(row=row, view=view, review=review_block(row, scope, raw), changed=False)
         if len(state.history) >= MAX_HISTORY:
             raise ApiError(409, MSG_HISTORY_FULL)

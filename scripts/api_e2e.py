@@ -25,8 +25,16 @@
 #    차례로 보낸다(actor api_e2e, 글은 이 스크립트가 만든 합성 문구). 처음 조회(needed·version 0·findings {}·이력 S1·S2)
 #    → 확인 → 확인 취소 → 2건 한꺼번에 확인 → 같은 항목 다시 확인 409(상태 불일치) → 오탐 표시 → 오탐 취소(→ 미확인)
 #    → 분류 수정(정보 종류) → 같은 값 분류 수정(changed false·이력 없음) → 오탐 표시 → 오탐 취소(→ 분류 수정)
-#    → 항목 메모 저장·삭제 → 검토 메모 → 검토 완료(남은 미확인 수가 문구에) → 잠김 409·이미 완료 409 → 다시 열기
+#    → 항목 메모 저장·삭제 → 검토 메모 → 검토 완료(남은 미확인 수가 문구에) → 잠김 409·이미 완료 409
+#    → 내보내기 기록 log_export(**잠긴 상태에서**): CSV(handed)·JSON(saved) 두 번 — 200·changed true·새 이력 줄
+#    (kind export · target = 파일 이름 · change 'CSV · <크기> · 다운로드 요청'/'JSON · <크기> · 저장 완료' · reason
+#    '민감한 값 마스킹') · review 의 다른 값(status done·findings·memo·memo_at·reviewer·reviewed_at·completion_note) 그대로,
+#    거절 두 가지(이 분석의 이름이 아님 — 서울 날짜 하루 다름 → 400, size 0 → 400) → 다시 열기
 #    (reviewer·completion_note 남음, reviewed_at null) → 400 두 가지(모르는 type, 501자 글).
+#    log_export 기대값도 계약대로 따로 만든다: 파일 이름 = iMASK_DG-<created_at 의 서울(UTC+9) 날짜 YYYYMMDD>-<id 의 ASCII
+#    영숫자 앞 4자 대문자> + '_검토결과_탐지항목.csv' | '_검토결과.json'(화면 analysisCode 와 같은 꼴), 크기 표기 = 화면 fmtSize
+#    (1,048,576 미만 max(1, Math.round(b/1024))KB, 아니면 (b/1048576).toFixed(1)MB — JS 처럼 '절반은 올림', _fmt_size).
+#    크기는 그럴듯한 값(CSV 6,127 → 6KB · JSON 1,310,720 → 1.3MB — MB 소수 첫째 자리 동점)을 보낸다.
 #    단계마다 응답 상태·changed·review 값·새 이력 줄(id H{version}·actor·kind·target·change·reason)을 보고 GET 으로 다시
 #    읽어 같은지 확인한다(오류 단계는 다시 읽은 review 가 그대로인지 = 쓰기 없음). 마지막에 이력 id H1…Hn 연속,
 #    at 이 줄어들지 않음, 저장 줄 수 = 쓴 동작 수 = version, 분석 created_at·updated_at 이 처음 조회와 같음(분석 시각·
@@ -89,13 +97,15 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import mimetypes
 import os
 import sys
 import time
 from collections import Counter
 from collections.abc import Callable, Mapping
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
@@ -172,6 +182,15 @@ TEXT_FINDING_MEMO = "api_e2e 항목 메모"
 TEXT_MEMO = "api_e2e 검토 메모"
 TEXT_COMPLETE = "api_e2e 검토 완료"
 TEXT_REOPEN = "api_e2e 다시 열기"
+
+# 내보내기 기록 계약(log_export — live-report BRIEF §5.6·§5.8 백엔드 문구). 백엔드 함수를 쓰지 않고 따로 적는다.
+EXPORT_KIND = "export"
+EXPORT_REASON = "민감한 값 마스킹"
+EXPORT_SUFFIXES = {"csv": "_검토결과_탐지항목.csv", "json": "_검토결과.json"}
+EXPORT_STATES = {"handed": "다운로드 요청", "saved": "저장 완료"}
+EXPORT_CSV_SIZE = 6_127  # 그럴듯한 CSV 크기 → '6KB'
+EXPORT_JSON_SIZE = 1_310_720  # MB 소수 첫째 자리 동점(1.25) → JS toFixed '1.3MB'(파이썬 round·format 이면 '1.2MB')
+SEOUL = timezone(timedelta(hours=9))  # 분석 번호의 날짜 기준(서울 = UTC+9 고정)
 
 # 공유 목록·삭제·다시 분석 계약(shared-analyses — BRIEF §5.2~5.5, §5.8 백엔드 문구)
 LIST_PATH = "/api/py/analyses"
@@ -636,6 +655,28 @@ def _when(value: Any) -> datetime | None:
     return moment if moment.tzinfo is not None else None
 
 
+def _fmt_size(size: int) -> str:
+    """화면 src/lib/format.ts fmtSize 와 같은 글자(계약대로 따로 — 백엔드 함수를 쓰지 않음).
+    1,048,576 미만이면 max(1, Math.round(b/1024)) + 'KB', 아니면 (b/1048576).toFixed(1) + 'MB'.
+    b/1024·b/1048576 은 정확한 이진 소수라 JS Math.round·toFixed 는 양수에서 '절반은 올림'이다 — 정확한 분수로 계산한다
+    (파이썬 round()·format(.1f) 는 동점에서 짝수 쪽이라 2,560 B·1,310,720 B 에서 다르다)."""
+    if size < 1_048_576:
+        return f"{max(1, math.floor(Fraction(size, 1024) + Fraction(1, 2)))}KB"
+    tenths = math.floor(Fraction(size * 10, 1_048_576) + Fraction(1, 2))
+    return f"{tenths // 10}.{tenths % 10}MB"
+
+
+def _export_name(row: Mapping[str, Any], fmt: str, *, shift_days: int = 0) -> str | None:
+    """이 분석의 내보내기 파일 이름(화면 analysisCode 와 같은 꼴): iMASK_DG-<created_at 의 서울 날짜 YYYYMMDD>-<id 의 ASCII
+    영숫자 앞 4자 대문자> + 형식별 꼬리. shift_days 는 거절 확인용(날짜만 다른 이름). created_at 을 읽지 못하면 None."""
+    moment = _when(row.get("created_at"))
+    if moment is None:
+        return None
+    day = moment.astimezone(SEOUL) + timedelta(days=shift_days)
+    head = "".join(c for c in str(row.get("id")) if c.isascii() and c.isalnum())[:4].upper()
+    return f"iMASK_DG-{day:%Y%m%d}-{head}{EXPORT_SUFFIXES[fmt]}"
+
+
 def _review_targets(result: Any) -> list[dict[str, str]]:
     """검토할 수 있는 탐지 항목(화면에 보이는 항목) — 표시 번호·표시 이름·AI 값. 화면 toLiveFindings 와 같은 순서."""
     if not isinstance(result, Mapping):
@@ -1075,6 +1116,43 @@ def _check_reviews(run: Run, analysis_id: str) -> bool:
         MSG_REVIEW_LOCKED,
     )
     flow.refuse("이미 완료 — complete_review → 409", {"type": "complete_review", "note": ""}, 409, MSG_REVIEW_ALREADY_DONE)
+
+    # 내보내기 기록(log_export) — 검토 완료로 잠긴 상태에서도 된다. 이력 한 줄 + version 만, review 의 다른 값은 그대로.
+    names = {fmt: _export_name(first, fmt) for fmt in EXPORT_SUFFIXES}
+    wrong_name = _export_name(first, "csv", shift_days=1)
+    csv_name, json_name = names["csv"], names["json"]
+    if csv_name is None or json_name is None or wrong_name is None:
+        flow.report("log_export — 이 분석의 파일 이름", ["created_at 을 읽을 수 없어 기대 파일 이름을 만들 수 없음"])
+    else:
+
+        def export_kept(review: Mapping[str, Any], before: Mapping[str, Any]) -> list[str]:
+            # 잠김과 무관: 이력·version 말고는 바뀌지 않는다(검토 상태 done·항목 값·메모·검토자·완료 시각)
+            problems = [f"review {key} 가 바뀜" for key in sorted(REVIEW_KEYS - {"history", "version"}) if review.get(key) != before.get(key)]
+            if review.get("status") != "done":
+                problems.append(f"status {review.get('status')!r}(기대 done — 잠긴 상태 그대로)")
+            return problems
+
+        for fmt, size, state in (("csv", EXPORT_CSV_SIZE, "handed"), ("json", EXPORT_JSON_SIZE, "saved")):
+            name = names[fmt]
+            label = fmt.upper()
+            flow.write(
+                f"log_export {label}·{state}(잠긴 상태 · {size:,} B → {_fmt_size(size)})",
+                {"type": "log_export", "format": fmt, "size": size, "state": state, "file_name": name},
+                (EXPORT_KIND, name, f"{label} · {_fmt_size(size)} · {EXPORT_STATES[state]}", EXPORT_REASON),
+                export_kept,
+            )
+        flow.refuse(
+            "log_export 이 분석의 이름이 아님(서울 날짜 하루 다름) → 400",
+            {"type": "log_export", "format": "csv", "size": EXPORT_CSV_SIZE, "state": "handed", "file_name": wrong_name},
+            400,
+            MSG_REVIEW_BAD_REQUEST,
+        )
+        flow.refuse(
+            "log_export size 0 → 400",
+            {"type": "log_export", "format": "csv", "size": 0, "state": "handed", "file_name": csv_name},
+            400,
+            MSG_REVIEW_BAD_REQUEST,
+        )
 
     def reopen_check(review: Mapping[str, Any], _before: Mapping[str, Any]) -> list[str]:
         want = {"status": "needed", "reviewed_at": None, "reviewer": REVIEW_ACTOR, "completion_note": TEXT_COMPLETE, "memo": TEXT_MEMO}

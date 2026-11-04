@@ -6,9 +6,13 @@
 #  done 확인(T1 findings-api): 화면용 결과(documents·findings·overall)·응답 크기·원본 파일(sha256) 확인,
 #  --analysis-id(만들기·시작 없이 조회만), 계약 위반·원본 불일치·stages 섞임 → 종료 코드 1, 원문 값·서명 URL 미출력.
 #  done 응답은 손으로 지은 가짜 결과(fake_findings)를 FakeStore 에 넣고 실제 조회 로직(analysis_read_out)으로 만든 것이다.
-#  검토 동작 확인(review-actions): POST 를 실제 review_action_out 으로 처리해 — 흐름 전체 통과(단계 21·쓰기 13·analyses 불변),
+#  검토 동작 확인(review-actions): POST 를 실제 review_action_out 으로 처리해 — 흐름 전체 통과(단계 25·쓰기 15·analyses 불변),
 #  예상과 다른 응답(409 자리에 200·이력 문구 다름·changed 다름) → 종료 코드 1, --no-review → review-actions 요청 없음,
 #  --analysis-id → 읽기만(review-actions 요청 없음 · 모양 확인), review null → 종료 코드 1.
+#  내보내기 기록(log_export, live-report T3): 잠긴 상태에서 CSV·JSON 두 번(본문 6키·이 분석의 이름·그럴듯한 크기, 이력 줄 H13·H14
+#  문구·크기 표기)·거절 두 번(이름 아님·size 0 → 400, 쓰기 없음), 계약과 다른 가짜 응답(문구·잠김 409·바뀌면 안 되는 열·거절 자리에
+#  200·거절하며 쓰기·다른 400 문구) → 종료 코드 1, 크기 표기(_fmt_size)가 공유 표 tests/fmt_size_cases.json·백엔드 fmt_size 와 같음,
+#  파일 이름(_export_name)이 손으로 적은 값·백엔드 expected_file_name 과 같음(자정 경계·Z·해 넘김), created_at 을 못 읽으면 보내지 않음.
 #  공유 목록·삭제·다시 분석(shared-analyses): 가짜 API(FakeApi — 목록은 실제 list_out, 삭제는 FakeStore cascade)로 목록 확인·
 #  삭제 확인·기본 삭제(정상·비정상 종료·--no-start)·--keep·실패 경로(목록 계약 위반·지워지지 않는 삭제·삭제 502·연결 오류),
 #  실제 FastAPI 앱(shared_ctx.install — FakeStore + 가짜 Upstage 서버)으로 --retry-flow(통과·고정 기대값과 따로 판정·옛 이력 순서·
@@ -52,8 +56,16 @@ DONE_RESULT = stored_result()  # format·job·summary·stages·response(가짜 �
 CREATED_AT = "2026-11-03T06:41:36.66673+00:00"  # done 분석의 시각(검토 동작 시각 = 지금보다 앞)
 UPDATED_AT = "2026-11-03T06:42:20.213505+00:00"
 REVIEW_PATH = f"/api/py/analyses/{ANALYSIS_ID}/review-actions"
-REVIEW_STEPS = 21  # 처음 조회 1 + 동작 19(쓰기 13 · changed false 1 · 거절 5) + 마지막 확인 1
-REVIEW_WRITES = 13
+REVIEW_STEPS = 25  # 처음 조회 1 + 동작 23(쓰기 15 · changed false 1 · 거절 7) + 마지막 확인 1
+REVIEW_WRITES = 15  # 검토 동작 13 + 내보내기 기록 2(log_export CSV·JSON — 잠긴 상태에서)
+REVIEW_POSTS = 23  # 보내는 review-actions POST 수
+REVIEW_OK_POSTS = 16  # 그중 200(쓰기 15 + changed false 1)
+# 내보내기 기록(log_export) 기대값 — 계약대로 손으로 적은 값(ANALYSIS_ID 의 영숫자 앞 4자 '0000', CREATED_AT 06:41 UTC = 서울 11-03)
+EXPORT_CODE = "DG-20261103-0000"
+EXPORT_CSV = f"iMASK_{EXPORT_CODE}_검토결과_탐지항목.csv"
+EXPORT_JSON = f"iMASK_{EXPORT_CODE}_검토결과.json"
+EXPORT_WRONG = "iMASK_DG-20261104-0000_검토결과_탐지항목.csv"  # 하루 다른 날짜(이 분석의 이름이 아님)
+EXPORT_POSTS = (17, 18, 19, 20)  # log_export POST 순번(CSV · JSON · 이름 아님 400 · size 0 400) — 잠김 409 둘 뒤, 다시 열기 앞
 MSG_NOT_FOUND = "분석 건을 찾을 수 없습니다."
 REMOVED = "정리: 이번 실행이 만든 분석을 지웠습니다(DELETE 204 · 다시 읽어 404)"  # 끝 정리 — 204 뒤 다시 읽어 없음 확인
 
@@ -743,7 +755,7 @@ def test_review_flow_passes_against_real_review_logic(script: Any, capsys: Any) 
     assert "[실패]" not in out
     assert f"검토 동작 확인: {REVIEW_STEPS}/{REVIEW_STEPS} 통과 · 쓴 동작 {REVIEW_WRITES}건 — 기대대로" in out
     assert "결과: 기대대로" in out
-    # 순서대로 보낸 동작(BRIEF §5.5 의 9종 + 거절 확인)
+    # 순서대로 보낸 동작(BRIEF §5.5 의 9종 + 내보내기 기록 log_export + 거절 확인)
     assert _review_types(api) == [
         "set_status",
         "set_status",
@@ -761,12 +773,25 @@ def test_review_flow_passes_against_real_review_logic(script: Any, capsys: Any) 
         "complete_review",
         "set_status",
         "complete_review",
+        "log_export",
+        "log_export",
+        "log_export",
+        "log_export",
         "reopen_review",
         "delete_everything",
         "save_memo",
     ]
     assert {body.get("actor") for body in api.review_posts} == {"api_e2e"}
-    # 저장된 검토 행: 쓰기 13번 = version 13 = 이력 13줄, 다시 연 상태
+    # log_export 본문: 정확히 6키, 이 분석의 이름·그럴듯한 크기(계약대로 손으로 적은 값)
+    exports = [api.review_posts[n - 1] for n in EXPORT_POSTS]
+    assert all(set(body) == {"type", "actor", "format", "size", "state", "file_name"} for body in exports)
+    assert [(b["format"], b["size"], b["state"], b["file_name"]) for b in exports] == [
+        ("csv", 6127, "handed", EXPORT_CSV),
+        ("json", 1310720, "saved", EXPORT_JSON),
+        ("csv", 6127, "handed", EXPORT_WRONG),
+        ("csv", 0, "handed", EXPORT_CSV),
+    ]
+    # 저장된 검토 행: 쓰기 15번 = version 15 = 이력 15줄, 다시 연 상태
     saved = api.store.reviews[ANALYSIS_ID]
     assert saved["version"] == REVIEW_WRITES and len(saved["history"]) == REVIEW_WRITES
     assert [line["kind"] for line in saved["history"]] == [
@@ -782,9 +807,17 @@ def test_review_flow_passes_against_real_review_logic(script: Any, capsys: Any) 
         "fmemo",
         "memo",
         "complete",
+        "export",
+        "export",
         "reopen",
     ]
+    # 내보내기 줄 두 개(H13·H14) — 계약 문구(데모 logExport 와 같음), 크기 표기 = 화면 fmtSize(1,310,720 B → 1.3MB 동점 올림)
+    assert [{k: line[k] for k in ("id", "actor", "kind", "target", "change", "reason")} for line in saved["history"][12:14]] == [
+        {"id": "H13", "actor": "api_e2e", "kind": "export", "target": EXPORT_CSV, "change": "CSV · 6KB · 다운로드 요청", "reason": "민감한 값 마스킹"},
+        {"id": "H14", "actor": "api_e2e", "kind": "export", "target": EXPORT_JSON, "change": "JSON · 1.3MB · 저장 완료", "reason": "민감한 값 마스킹"},
+    ]
     assert saved["status"] == "needed" and saved["reviewer"] == "api_e2e" and saved["reviewed_at"] is None
+    assert "log_export CSV·handed(잠긴 상태 · 6,127 B → 6KB)" in out and "log_export JSON·saved(잠긴 상태 · 1,310,720 B → 1.3MB)" in out
     # analyses 행은 쓰지 않는다(분석 시각·걸린 시간 불변)
     row = api.store.analyses[ANALYSIS_ID]
     assert (row["created_at"], row["updated_at"]) == (CREATED_AT, UPDATED_AT)
@@ -955,11 +988,235 @@ def test_review_flow_through_real_app_never_builds_upstage(script: Any, capsys: 
     assert code == 0, out[-3000:]
     assert f"검토 동작 확인: {REVIEW_STEPS}/{REVIEW_STEPS} 통과" in out
     assert built == []
-    assert len(api.review_posts) == 19
-    assert [p["status"] for p in posts].count(200) == 14
+    assert len(api.review_posts) == REVIEW_POSTS
+    assert [p["status"] for p in posts].count(200) == REVIEW_OK_POSTS
     assert api.store.reviews[ANALYSIS_ID]["version"] == REVIEW_WRITES
     row = api.store.analyses[ANALYSIS_ID]
     assert (row["created_at"], row["updated_at"]) == (CREATED_AT, UPDATED_AT)
+    # 내보내기 기록은 실제 경로에서도 잠긴 상태에서 200 두 번 · 거절 400 두 번
+    assert [posts[n - 1]["type"] for n in EXPORT_POSTS] == ["log_export"] * 4
+    assert [posts[n - 1]["status"] for n in EXPORT_POSTS] == [200, 200, 400, 400]
+
+
+# --- 내보내기 기록(log_export) — 계약과 다른 응답이면 실패(live-report T3) ------------------------------
+# 기대값(파일 이름·크기 표기·문구)은 스크립트가 계약대로 따로 만든다. 여기서는 손으로 적은 값·공유 크기 표와 맞는지,
+# 그리고 가짜 서버가 계약과 다르게 답하면(문구·잠김·바뀌면 안 되는 열·거절) 검증기가 실패하는지 본다. 네트워크 없음.
+
+
+def _export_out(api: FakeApi, body: dict[str, Any]) -> dict[str, Any]:
+    """그 본문을 실제 검토 로직으로 처리한 응답(저장은 정상)."""
+    return review_action_out(api.store, ANALYSIS_ID, parse_action(json.dumps(body).encode()))
+
+
+def _export_line(n_post: int, key: str, value: str) -> Callable[[FakeApi, dict[str, Any], int], httpx.Response | None]:
+    """n번째 POST(log_export)의 저장·응답 이력 줄 key 를 value 로 바꾼다(저장과 응답이 같아 다시 읽기는 맞는다)."""
+
+    def override(api: FakeApi, body: dict[str, Any], n: int) -> httpx.Response | None:
+        if n != n_post:
+            return None
+        assert body["type"] == "log_export"
+        _export_out(api, body)
+        api.store.reviews[ANALYSIS_ID]["history"][-1][key] = value
+        return _json_response(200, {"analysis": api.read_done(), "changed": True})
+
+    return override
+
+
+def _export_locked(api: FakeApi, body: dict[str, Any], n: int) -> httpx.Response | None:
+    # 잠긴 상태의 내보내기 기록을 다른 동작처럼 409 로 거절하는 서버
+    if body.get("type") == "log_export" and n == EXPORT_POSTS[0]:
+        return httpx.Response(409, json={"detail": "검토를 완료한 분석은 바꿀 수 없습니다."})
+    return None
+
+
+def _export_moves(column: str, value: Any) -> Callable[[FakeApi, dict[str, Any], int], httpx.Response | None]:
+    """첫 log_export 를 정상 저장한 뒤 검토 행의 다른 열도 바꾸는 서버(저장·응답·다시 읽기가 모두 같다)."""
+
+    def override(api: FakeApi, body: dict[str, Any], n: int) -> httpx.Response | None:
+        if n != EXPORT_POSTS[0]:
+            return None
+        _export_out(api, body)
+        api.store.reviews[ANALYSIS_ID][column] = value
+        return _json_response(200, {"analysis": api.read_done(), "changed": True})
+
+    return override
+
+
+def _export_refusal_accepted(n_post: int) -> Callable[[FakeApi, dict[str, Any], int], httpx.Response | None]:
+    """거절해야 할 log_export(이름 아님·size 0)에 200 changed false 로 답하는 서버(쓰기 없음)."""
+
+    def override(api: FakeApi, body: dict[str, Any], n: int) -> httpx.Response | None:
+        if n != n_post:
+            return None
+        return _json_response(200, {"analysis": api.read_done(), "changed": False})
+
+    return override
+
+
+def _export_refusal_writes(api: FakeApi, body: dict[str, Any], n: int) -> httpx.Response | None:
+    # 이름이 아닌 요청에 400 으로 답하면서 이력은 써 버리는 서버(맞는 이름으로 저장)
+    if n != EXPORT_POSTS[2]:
+        return None
+    _export_out(api, {**body, "file_name": EXPORT_CSV})
+    return httpx.Response(400, json={"detail": "요청 형식이 올바르지 않습니다."})
+
+
+def _export_wrong_400_detail(api: FakeApi, body: dict[str, Any], n: int) -> httpx.Response | None:
+    # size 0 자리에 다른 400 문구
+    if n == EXPORT_POSTS[3]:
+        return httpx.Response(400, json={"detail": "처리자 이름이 올바르지 않습니다."})
+    return None
+
+
+@pytest.mark.parametrize(
+    ("override", "message"),
+    [
+        (_export_line(EXPORT_POSTS[1], "change", "JSON · 1.2MB · 저장 완료"), "새 이력 change: 'JSON · 1.2MB · 저장 완료'"),
+        (_export_line(EXPORT_POSTS[0], "change", "CSV · 6KB · 저장 완료"), "새 이력 change: 'CSV · 6KB · 저장 완료'"),
+        (_export_line(EXPORT_POSTS[0], "reason", ""), "새 이력 reason: ''"),
+        (_export_line(EXPORT_POSTS[0], "kind", "memo"), "새 이력 kind: 'memo'"),
+        (_export_line(EXPORT_POSTS[0], "target", EXPORT_WRONG), "새 이력 target:"),
+        (_export_line(EXPORT_POSTS[1], "actor", "다른 처리자"), "새 이력 actor: '다른 처리자'"),
+        (_export_locked, "HTTP 409 검토를 완료한 분석은 바꿀 수 없습니다.(기대 200"),
+        (_export_moves("status", "needed"), "review status 가 바뀜"),
+        (_export_moves("reviewer", "다른 검토자"), "review reviewer 가 바뀜"),
+        (_export_moves("completion_note", ""), "review completion_note 가 바뀜"),
+        (_export_moves("memo", "다른 메모"), "review memo 가 바뀜"),
+        (_export_moves("reviewed_at", None), "review reviewed_at 가 바뀜"),
+        (_export_moves("findings", {}), "review findings 가 바뀜"),
+        (_export_refusal_accepted(EXPORT_POSTS[2]), "HTTP 200"),
+        (_export_refusal_accepted(EXPORT_POSTS[3]), "HTTP 200"),
+        (_export_refusal_writes, "다시 읽은 review 가 바뀜(쓰기가 있었음)"),
+        (_export_wrong_400_detail, "HTTP 400 처리자 이름이 올바르지 않습니다.(기대 400 요청 형식이 올바르지 않습니다.)"),
+    ],
+    ids=[
+        "python_round_size_text",
+        "state_text_differs",
+        "reason_differs",
+        "kind_differs",
+        "target_differs",
+        "actor_differs",
+        "locked_409",
+        "status_unlocked",
+        "reviewer_changed",
+        "completion_note_changed",
+        "memo_changed",
+        "reviewed_at_changed",
+        "findings_changed",
+        "wrong_name_accepted",
+        "size_zero_accepted",
+        "refusal_still_writes",
+        "wrong_400_detail",
+    ],
+)
+def test_unexpected_export_response_fails(script: Any, capsys: Any, override: Any, message: str) -> None:
+    api = FakeApi(poll_mode="done", review_override=override)
+    assert _run(script, api, _done_upstage(), []) == 1
+    out = capsys.readouterr().out
+    assert "[실패]" in out
+    assert message in out
+    failed = [line for line in out.splitlines() if "[실패]" in line]
+    assert any("log_export" in line or "마지막 —" in line for line in failed), failed
+    assert "검토 동작 확인: " in out and "— 기대와 다름" in out
+    assert "결과: 기대와 다름" in out
+
+
+def test_export_steps_are_numbered_after_lock_checks(script: Any, capsys: Any) -> None:
+    # 단계 번호: 잠김 409(16)·이미 완료 409(17) 다음 18~21 이 내보내기 기록, 22 가 다시 열기
+    api = FakeApi(poll_mode="done")
+    assert _run(script, api, _done_upstage(), ["--keep"]) == 0
+    out = capsys.readouterr().out
+    assert "[통과] 17. 이미 완료 — complete_review → 409" in out
+    assert "[통과] 18. log_export CSV·handed(잠긴 상태 · 6,127 B → 6KB) — 이력 15줄 · version 13" in out
+    assert "[통과] 19. log_export JSON·saved(잠긴 상태 · 1,310,720 B → 1.3MB) — 이력 16줄 · version 14" in out
+    assert "[통과] 20. log_export 이 분석의 이름이 아님(서울 날짜 하루 다름) → 400 — HTTP 400 · 쓰기 없음" in out
+    assert "[통과] 21. log_export size 0 → 400 — HTTP 400 · 쓰기 없음" in out
+    assert "[통과] 22. reopen_review" in out
+    assert f"[통과] {REVIEW_STEPS:02d}. 마지막 —" in out
+    # 저장 행: 내보내기 줄 at 이 검토 완료 줄 at 보다 앞서지 않는다
+    history = api.store.reviews[ANALYSIS_ID]["history"]
+    stamps = [datetime.fromisoformat(line["at"]) for line in history]
+    assert stamps == sorted(stamps)
+
+
+def test_fmt_size_matches_shared_table(script: Any) -> None:
+    # 스크립트의 크기 표기(계약대로 따로 만든 것)가 화면·백엔드와 같이 쓰는 표(tests/fmt_size_cases.json)와 모두 같다
+    cases = json.loads((ROOT / "tests" / "fmt_size_cases.json").read_text(encoding="utf-8"))
+    assert cases and all(isinstance(b, int) and isinstance(t, str) for b, t in cases)
+    assert [[b, script._fmt_size(b)] for b, _ in cases] == cases
+    # 동점에서 파이썬 round()·format 과 다르다(JS '절반은 올림')
+    assert script._fmt_size(2560) == "3KB" and round(2560 / 1024) == 2
+    assert script._fmt_size(1310720) == "1.3MB" and f"{1310720 / 1048576:.1f}" == "1.2"
+    assert script._fmt_size(script.EXPORT_CSV_SIZE) == "6KB" and script._fmt_size(script.EXPORT_JSON_SIZE) == "1.3MB"
+
+
+def test_fmt_size_agrees_with_backend_on_a_sweep(script: Any) -> None:
+    # 같은 계약을 따로 구현한 백엔드 fmt_size 와 경계 근처를 훑어 비교(스크립트는 백엔드를 import 하지 않는다)
+    from imask_backend.exports import fmt_size
+
+    kb_ties = {(2 * k + 1) * 512 + d for k in range(1024) for d in (-1, 0, 1)}  # b/1024 = n + 0.5
+    mb_ties = {(2 * j + 1) * 262_144 + d for j in range(200) for d in (-1, 0, 1)}  # 10b/1048576 = m + 0.5
+    sizes = {*range(0, 6000), *range(1_048_000, 1_049_200), *kb_ties, *mb_ties, 104_857_599, 104_857_600}
+    assert [s for s in sorted(sizes) if script._fmt_size(s) != fmt_size(s)] == []
+
+
+@pytest.mark.parametrize(
+    ("analysis_id", "created_at", "code"),
+    [
+        (ANALYSIS_ID, CREATED_AT, "DG-20261103-0000"),  # 소수 초 5자리
+        ("7b944f1e-1234-4abc-8def-0123456789ab", "2026-11-04T15:00:00+00:00", "DG-20261105-7B94"),  # 서울 자정(다음 날)
+        ("7b944f1e-1234-4abc-8def-0123456789ab", "2026-11-04T14:59:59.999999+00:00", "DG-20261104-7B94"),  # 자정 바로 앞
+        ("7b944f1e-1234-4abc-8def-0123456789ab", "2026-11-04T15:00:00Z", "DG-20261105-7B94"),  # Z
+        ("7b944f1e-1234-4abc-8def-0123456789ab", "2026-12-31T15:00:00.123456+00:00", "DG-20270101-7B94"),  # 해 넘김
+        ("ab-c1-2345-6789", "2026-11-04T05:06:07.123456+00:00", "DG-20261104-ABC1"),  # 하이픈 건너뜀
+    ],
+    ids=["fraction5", "seoul_midnight", "before_midnight", "zulu", "new_year", "hyphens"],
+)
+def test_export_name_follows_the_contract(script: Any, analysis_id: str, created_at: str, code: str) -> None:
+    row = {"id": analysis_id, "created_at": created_at}
+    assert script._export_name(row, "csv") == f"iMASK_{code}_검토결과_탐지항목.csv"
+    assert script._export_name(row, "json") == f"iMASK_{code}_검토결과.json"
+    # 백엔드가 받는 이 분석의 이름과 같다(따로 만든 두 구현 비교)
+    from imask_backend.exports import expected_file_name
+
+    assert expected_file_name(row, "csv") == script._export_name(row, "csv")
+    assert expected_file_name(row, "json") == script._export_name(row, "json")
+    shifted = script._export_name(row, "csv", shift_days=1)
+    assert shifted is not None and shifted != script._export_name(row, "csv") and len(shifted) == len(script._export_name(row, "csv"))
+
+
+@pytest.mark.parametrize("created_at", [None, "", "2026-11-04T15:00:00", "not a time", 20261104])
+def test_export_name_needs_a_readable_created_at(script: Any, created_at: Any) -> None:
+    assert script._export_name({"id": ANALYSIS_ID, "created_at": created_at}, "csv") is None
+
+
+def test_unreadable_created_at_fails_the_export_step(script: Any, capsys: Any) -> None:
+    # 처음 조회의 created_at 을 읽지 못하면 log_export 를 보내지 않고 그 단계를 실패로 적는다(이름을 추측하지 않음)
+    api = FakeApi(poll_mode="done")
+    real_read = api.read_done
+    unreadable = "2026-11-03 06:41"  # 시간대 없음 — _when 이 읽지 않는다
+
+    def read_done(include: bool = False) -> dict[str, Any]:
+        body = real_read(include)
+        body["created_at"] = unreadable
+        if isinstance(body.get("review"), dict):
+            body["review"]["history"][0]["at"] = unreadable  # S1 은 created_at 그대로(처음 조회 확인은 지나게)
+        return body
+
+    api.read_done = read_done  # type: ignore[method-assign]
+    assert _run(script, api, _done_upstage(), []) == 1
+    out = capsys.readouterr().out
+    assert "[실패] 18. log_export — 이 분석의 파일 이름" in out
+    assert "log_export" not in _review_types(api)
+
+
+def test_analysis_id_mode_sends_no_export_log(script: Any, capsys: Any) -> None:
+    # --analysis-id(읽기 전용)에서는 log_export 를 보내지 않는다(기존 분석에 이력이 써지지 않게)
+    api = FakeApi(poll_mode="done")
+    assert _run(script, api, FakeUpstageServer(), ["--analysis-id", ANALYSIS_ID]) == 0
+    assert _review_requests(api) == [] and api.review_posts == []
+    assert api.store.reviews == {}
+    assert "log_export" not in capsys.readouterr().out
 
 
 # --- 특수한 추출 키(표시 이름·이력 target 경계, V-T3-1 m1·m2) -----------------------------------
@@ -1128,7 +1385,7 @@ def test_review_post_body_sends_lone_surrogate_id(script: Any) -> None:
     api = _api_with_first_key("probe" + chr(0xD800))
     assert _run(script, api, _done_upstage(), []) == 0
     posts = _review_requests(api)
-    assert len(posts) == 19
+    assert len(posts) == REVIEW_POSTS
     for request in posts:
         request.content.decode("utf-8")
         assert request.headers["content-type"] == "application/json"
@@ -1151,7 +1408,7 @@ def test_real_app_body_limit_accepts_long_korean_and_surrogate_ids(script: Any, 
     assert f"검토 동작 확인: {REVIEW_STEPS}/{REVIEW_STEPS} 통과 · 쓴 동작 {REVIEW_WRITES}건 — 기대대로" in out
     assert code == 0
     assert built == []
-    assert len(posts) == 19 and 413 not in [p["status"] for p in posts]
+    assert len(posts) == REVIEW_POSTS and 413 not in [p["status"] for p in posts]
     assert max(p["bytes"] for p in posts) < 65_536
     if new_key.startswith("한"):
         assert posts[0]["bytes"] > 33_000  # UTF-8 그대로(한 글자 3바이트) — 예전 ASCII escape 면 약 66KB 로 413

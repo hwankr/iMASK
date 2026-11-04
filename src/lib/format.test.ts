@@ -1,5 +1,11 @@
+/* 형식 도우미 테스트. fmtSize 는 백엔드와 같이 쓰는 크기 표(tests/fmt_size_cases.json — 파이썬 fmt_size 도 같은 표로
+   확인한다)의 모든 줄과 같은 글자를 내야 한다(내보내기 이력 줄의 크기 표기 = 화면 표기). */
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { clamp, fmtDT, fmtSize, nowStr, pad2, utf8Len } from './format';
+
+const SIZE_CASES_PATH = fileURLToPath(new URL('../../tests/fmt_size_cases.json', import.meta.url));
 
 describe('pad2', () => {
   it('한 자리를 두 자리로 채운다', () => {
@@ -44,6 +50,27 @@ describe('fmtSize', () => {
   it('값이 없으면 -', () => {
     expect(fmtSize(null)).toBe('-');
     expect(fmtSize(undefined)).toBe('-');
+  });
+  it('공유 크기 표(tests/fmt_size_cases.json)의 모든 줄과 같다 — 백엔드 fmt_size 와 같은 표', () => {
+    const cases: unknown = JSON.parse(readFileSync(SIZE_CASES_PATH, 'utf8'));
+    // 표 모양: [[정수 바이트, "글자"], …] — 비지 않고, 바이트는 0 이상 정수 오름차순(겹침 없음)
+    expect(Array.isArray(cases)).toBe(true);
+    const rows = cases as unknown[];
+    expect(rows.length).toBeGreaterThan(0);
+    let last = -1;
+    for (const row of rows) {
+      expect(Array.isArray(row) && row.length === 2).toBe(true);
+      const [bytes, text] = row as [unknown, unknown];
+      expect(Number.isSafeInteger(bytes) && (bytes as number) >= 0).toBe(true);
+      expect(typeof text).toBe('string');
+      expect(bytes as number).toBeGreaterThan(last);
+      last = bytes as number;
+    }
+    const got = (rows as [number, string][]).map(([bytes]) => [bytes, fmtSize(bytes)]);
+    expect(got).toEqual(rows);
+    // 동점 경계(KB 2,560 · MB 소수 첫째 자리 1,310,720)가 표에 있다 — JS 의 '절반은 올림'
+    expect(rows).toContainEqual([2560, '3KB']);
+    expect(rows).toContainEqual([1310720, '1.3MB']);
   });
 });
 

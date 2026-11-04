@@ -3,10 +3,10 @@ import type { ReportView } from './reportModel';
 import { ReportSection } from './ReportSection';
 import styles from './ReportLists.module.css';
 
-/** 02 주요 위험 사유 — Main 640–643. 사유 목록(높음 점) · 없을 때 안내 · 분석 한계(주의 띠) */
+/** 02 주요 위험 사유 — Main 640–643. 사유 목록(높음 점) · 없을 때 안내(실제 분석은 '-') · 분석 한계(주의 띠) */
 export function ReportReasons({ v }: { v: ReportView }) {
   return (
-    <ReportSection n={2} title="주요 위험 사유">
+    <ReportSection n={v.sections.reasons} title="주요 위험 사유">
       {v.reasons.length > 0 ? (
         <ol className={styles.list}>
           {v.reasons.map((r, i) => (
@@ -33,10 +33,11 @@ export function ReportReasons({ v }: { v: ReportView }) {
   );
 }
 
-/** 05 남아 있는 검토사항 — Main 659–662 */
+/** 05 남아 있는 검토사항 — Main 659–662. 실제 분석에는 이 구역이 없다(sections.remaining null) */
 export function ReportRemaining({ v }: { v: ReportView }) {
+  if (v.sections.remaining === null) return null;
   return (
-    <ReportSection n={5} title="남아 있는 검토사항">
+    <ReportSection n={v.sections.remaining} title="남아 있는 검토사항">
       {v.remaining.length > 0 ? (
         <ul className={styles.remaining}>
           {v.remaining.map((r) => (
@@ -62,10 +63,10 @@ export function ReportRemaining({ v }: { v: ReportView }) {
   );
 }
 
-/** 06 권장 조치 — Main 665–668 */
+/** 06 권장 조치 — Main 665–668(실제 분석은 05, 없으면 '-') */
 export function ReportRecs({ v }: { v: ReportView }) {
   return (
-    <ReportSection n={6} title="권장 조치">
+    <ReportSection n={v.sections.recs} title="권장 조치">
       {v.recs.length > 0 ? (
         <ol className={styles.list}>
           {v.recs.map((r, i) => (
@@ -78,16 +79,16 @@ export function ReportRecs({ v }: { v: ReportView }) {
           ))}
         </ol>
       ) : (
-        <p className={styles.empty}>분석이 끝나면 권장 조치가 표시됩니다.</p>
+        <p className={styles.empty}>{v.noRecsText}</p>
       )}
     </ReportSection>
   );
 }
 
-/** 07 검토자 메모 — Main 671–674 */
+/** 07 검토자 메모 — Main 671–674(실제 분석은 06) */
 export function ReportMemo({ v }: { v: ReportView }) {
   return (
-    <ReportSection n={7} title="검토자 메모">
+    <ReportSection n={v.sections.memo} title="검토자 메모">
       <div className={cx(styles.memo, !v.hasMemo && styles.memoEmpty)}>{v.memo}</div>
       {v.completionNote ? (
         <div className={styles.completion}>

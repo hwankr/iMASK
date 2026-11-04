@@ -213,28 +213,35 @@ describe('저장 — 서비스 호출과 토스트 문구(원본 그대로)', ()
   });
 });
 
-describe("검토 완료 토스트의 '보고서 보기' — 보고서가 있는 분석(데모)만", () => {
-  const liveDone = () =>
-    toAnalysis(
-      analysisOut({
-        status: 'done',
-        result: contractResult(),
-        review: { status: 'needed', memo: '', memo_at: null, reviewer: '', reviewed_at: null, completion_note: '', findings: {}, history: [], version: 0 },
-      }),
-    );
+describe("검토 완료 토스트의 '보고서 보기' — 데모 분석과 실제 분석 중 보고서 대상", () => {
+  const NEW_REVIEW = { status: 'needed', memo: '', memo_at: null, reviewer: '', reviewed_at: null, completion_note: '', findings: {}, history: [], version: 0 };
+  const liveDone = (review: unknown = NEW_REVIEW) => toAnalysis(analysisOut({ status: 'done', result: contractResult(), review: structuredClone(review) }));
 
-  it('hasReport — 데모 true · 실제 분석 false', async () => {
+  it('hasReport — 데모 true · 실제 보고서 대상 true · 실제 대상 아님 false', async () => {
     expect(hasReport(await get(createService(), 'A1'))).toBe(true);
-    expect(hasReport(liveDone())).toBe(false);
+    expect(hasReport(await get(createService(), 'A6'))).toBe(true);
+    expect(hasReport(liveDone())).toBe(true);
+    // 검토 기록을 읽지 못함(review null) · 옛 형식 완료 · 실패 · 대기
+    expect(hasReport(liveDone(null))).toBe(false);
+    expect(hasReport(toAnalysis(analysisOut({ status: 'done', result: { format: 'imask-upstage-v1' }, review: NEW_REVIEW })))).toBe(false);
+    expect(hasReport(toAnalysis(analysisOut({ status: 'failed', error: '실패' })))).toBe(false);
+    expect(hasReport(toAnalysis(analysisOut()))).toBe(false);
   });
 
-  it("실제 분석의 검토 완료 — 같은 문구, '보고서 보기' 없음(openReport false)", async () => {
+  it("실제 분석의 검토 완료 — 같은 문구 + '보고서 보기'(openReport true)", async () => {
     const a = liveDone();
     const calls: string[] = [];
     const svc = { completeReview: async (id: string, note: string) => void calls.push(id + '|' + note) } as unknown as AnalysisService;
     const done = await applyReviewModal(svc, a, { type: 'complete', note: '  남은 이유 ', error: '' });
-    expect(done).toEqual({ text: '검토를 완료했습니다 · 목록의 검토 상태와 요약 숫자에 반영했습니다.', openReport: false });
+    expect(done).toEqual({ text: '검토를 완료했습니다 · 목록의 검토 상태와 요약 숫자에 반영했습니다.', openReport: true });
     expect(calls).toEqual([a.id + '|남은 이유']);
+  });
+
+  it("보고서 대상이 아닌 실제 분석 — '보고서 보기' 없음(openReport false)", async () => {
+    const a = liveDone(null);
+    const svc = { completeReview: async () => {} } as unknown as AnalysisService;
+    const done = await applyReviewModal(svc, a, { type: 'complete', note: '', error: '' });
+    expect(done).toEqual({ text: '검토를 완료했습니다 · 목록의 검토 상태와 요약 숫자에 반영했습니다.', openReport: false });
   });
 });
 

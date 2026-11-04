@@ -8,8 +8,8 @@
      항목마다 색이 바뀌는 곳만 ② 의 CSS 변수 값(var(--hi-soft) 등)을 넘긴다.
    - 행동(누름)은 담지 않는다. 화면 조각이 useDetailUi(선택·이동)와 DetailActions(T7 검토 동작)를 부른다.
    - 실제 분석(Analysis.raw 가 있음 — API 서비스만 채운다, DetailFacts.live)도 데모처럼 검토 동작을 쓴다. 다른 점:
-     결과 탭은 탐지 항목 · 분석 요약(검토사항 · 연결은 아직 없음), 검토 완료 띠에 '보고서 보기'가 없고(보고서가 아직 없음),
-     원문은 블록 대신 원본 파일 쪽(live — 파일 기준 쪽 · 위치 상자)을 그린다.
+     결과 탭은 탐지 항목 · 분석 요약(검토사항 · 연결은 아직 없음), 원문은 블록 대신 원본 파일 쪽(live — 파일 기준 쪽 ·
+     위치 상자)을 그린다. 검토 완료 띠의 '보고서 보기'는 데모와 같다(실제 분석 보고서 — 보고서 화면이 reportGate 로 가른다).
      검토 기록을 불러오지 못한 실제 분석(raw.reviewable false)은 readOnly — 검토 동작 버튼만 막는다
      (검토 완료 버튼 title 만 '검토 기록을 불러오지 못했습니다'). 데모 분석에는 raw 가 없어 값이 전과 같다.
    ========================================================================== */
@@ -226,8 +226,7 @@ export function bannerModel(a: Analysis, x: DetailFacts): BannerModel | null {
       icon: 'dg-i-check-badge',
       title: '검토 완료 · ' + a.reviewer + ' · ' + fmtDT(a.reviewedAt),
       text: '위험등급과 최초 탐지 결과는 검토 완료 후에도 그대로 유지됩니다.',
-      // 실제 분석은 보고서가 아직 없다
-      actions: x.live ? [] : [{ key: 'openReport', label: '보고서 보기', disabled: false }],
+      actions: [{ key: 'openReport', label: '보고서 보기', disabled: false }],
     };
   return null;
 }

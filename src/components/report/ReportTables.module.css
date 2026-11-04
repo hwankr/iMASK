@@ -109,6 +109,10 @@
 .warn {
   color: var(--warn);
 }
+/* 미평가 수(실제 분석 정보 종류별 표) — ② RISK.unrated.fg 와 같은 토큰 */
+.na {
+  color: var(--na);
+}
 /* ② 표시 규칙의 색(처리 상태 · 위험 · 확인 상태)을 그대로 */
 .colored {
   color: var(--cell-fg);

@@ -2,7 +2,7 @@
 
 import type { ExportFormat } from '@/display/rules';
 import { Icon, Modal, RadioList, Spinner, cx } from '@/components/ui';
-import { FORMAT_OPTIONS, exportView, type ExportUiState } from './exportModel';
+import { FORMAT_OPTIONS, LIVE_FORMAT_OPTIONS, exportView, type ExportUiState } from './exportModel';
 import styles from './ExportModal.module.css';
 
 export interface ExportModalProps {
@@ -16,17 +16,22 @@ export interface ExportModalProps {
   onPickFormat: (format: ExportFormat) => void;
   /** '파일 만들기 · 저장' / '다시 시도' / '다시 내보내기' */
   onExport: () => void;
+  /** 실제 분석이면 JSON 형식 설명이 다르다(검토사항 · 문서 간 연결 없음) */
+  live?: boolean;
 }
 
 /* 형식 설명은 원본처럼 보통 굵기 — 공통 RadioList 는 고른 줄의 라벨 전체를 굵게(700) 하므로 설명 글자에서 되돌린다 */
-const OPTIONS = FORMAT_OPTIONS.map((o) => ({ ...o, description: <span className={styles.desc}>{o.description}</span> }));
+const withDesc = (list: typeof FORMAT_OPTIONS | typeof LIVE_FORMAT_OPTIONS) =>
+  list.map((o) => ({ ...o, description: <span className={styles.desc}>{o.description}</span> }));
+const OPTIONS = withDesc(FORMAT_OPTIONS);
+const LIVE_OPTIONS = withDesc(LIVE_FORMAT_OPTIONS);
 
 /**
  * 결과 내보내기 모달 — Main 733–744 · modalVM 'export'(2505–2518).
  * 형식(CSV·JSON), 마스킹 안내, 파일 이름, 진행 상태 5가지(만드는 중 · 내보내기 완료 · 파일을 만들었습니다 · 저장 취소 · 실패),
- * 만든 파일 미리보기(앞부분). 파일 내용은 서비스(buildExport)가 만든 그대로다.
+ * 만든 파일 미리보기(앞부분). 파일 내용은 서비스(buildExport)가 만든 그대로다. 실제 분석은 JSON 형식 설명만 다르다.
  */
-export function ExportModal({ open, onClose, analysisName, code, state, onPickFormat, onExport }: ExportModalProps) {
+export function ExportModal({ open, onClose, analysisName, code, state, onPickFormat, onExport, live = false }: ExportModalProps) {
   const v = exportView(state, code);
   return (
     <Modal
@@ -40,7 +45,7 @@ export function ExportModal({ open, onClose, analysisName, code, state, onPickFo
         { label: v.primaryLabel, onClick: onExport, variant: 'primary', loading: v.busy, autoFocus: true },
       ]}
     >
-      <RadioList legend="파일 형식" name="dg-exp-format" options={OPTIONS} value={state.format} onChange={onPickFormat} disabled={v.busy} />
+      <RadioList legend="파일 형식" name="dg-exp-format" options={live ? LIVE_OPTIONS : OPTIONS} value={state.format} onChange={onPickFormat} disabled={v.busy} />
 
       <div className={styles.mask}>
         <span className={styles.maskIcon}>

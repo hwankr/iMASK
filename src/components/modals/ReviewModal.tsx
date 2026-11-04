@@ -8,7 +8,7 @@
      저장 실패는 모달 안 SAVE_FAILED(409 겹침이면 서비스 알림으로 최신 상태가 다시 불러와진다). 분석이 이미 지워졌으면(404)
      모달을 닫고 오류 토스트 '이미 지워진 분석입니다.'(다시 불러와 '찾을 수 없음' 화면이 된다).
      검토 완료 토스트의 '보고서 보기'는 지금 기준 경로(useRouteBase — `/demo` 아래면 /demo/…)의 보고서로 간다.
-     실제 분석은 보고서가 아직 없어 붙이지 않는다(reviewModalModel 의 hasReport → openReport false).
+     데모 분석과 실제 분석 중 보고서 대상에 붙인다(reviewModalModel 의 hasReport — 대상이 아니면 openReport false).
    - 검토 완료 모달은 남은 항목을 받은 뒤 연다. 그 조회가 처음부터 실패하면 열지 않고 SAVE_FAILED 를 오류 토스트로
      한 번 보인 뒤 모달 자리를 비운다(pendingGate) — 다시 누르면 새로 조회한다.
    - 사유 · 메모 입력칸에 처음 포커스(원본 autoFocus), Esc · 닫기 · 배경 누름으로 닫힘, 닫히면 연 버튼으로 포커스.

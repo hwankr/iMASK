@@ -226,6 +226,9 @@ export const EXPORT_FORMATS = [
 
 export type ExportFormat = (typeof EXPORT_FORMATS)[number]['key'];
 
+/** 실제 분석의 JSON 형식 설명 — 실제 분석 파일에는 검토사항 · 문서 간 연결이 없다(데모는 EXPORT_FORMATS 그대로) */
+export const LIVE_EXPORT_JSON_DESC = '분석 정보, 탐지 항목, 검토 이력을 모두 담습니다.';
+
 /* ---------- 도우미 ---------- */
 
 function hasKey<T extends object>(table: T, key: string | null | undefined): key is Extract<keyof T, string> {

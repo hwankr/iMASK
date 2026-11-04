@@ -6,7 +6,8 @@
    - 정보 종류 · 정보주체 · 노출 상태 · 오탐 사유 목록과 라벨은 ② 표시 규칙에서만 가져온다.
    - 위험등급 · 최초 탐지 결과는 바꾸지 않는다 — 서비스가 지키고, 화면은 서비스가 준 값을 그대로 보인다.
    - 'error'(분석 오류 내용) 모달은 목록 화면에서만 연다(원본 1935) — 목록의 ErrorModal 이 그린다.
-   - 검토 완료 토스트의 '보고서 보기'는 보고서가 있는 분석(데모)에만 붙인다(hasReport) — 실제 분석은 보고서가 아직 없다.
+   - 검토 완료 토스트의 '보고서 보기'는 보고서를 열 수 있는 분석에만 붙인다(hasReport) — 데모 분석, 그리고 실제 분석 중
+     보고서 대상(완료 + 공통 계약 결과 + 검토 기록을 읽음 — report-safe.ts isReportTarget).
    - 검토 완료 모달은 남은 항목(서비스 pending)을 받은 뒤 연다(pendingGate). 첫 조회가 실패하면 열지 않고
      기존 SAVE_FAILED 를 오류 토스트로 한 번 보인 뒤 모달 자리를 비운다 — 다음 클릭이 새로 조회한다.
      실패를 빈 pending 으로 보지 않는다(남은 항목을 모른 채 완료하지 않게).
@@ -15,6 +16,7 @@
 import { CATS, EXPOSURES, FP_REASONS, RTYPE, SUBJECTS, byRisk, riskView, type Exposure, type FpReason, type InfoCategory, type InfoSubject } from '@/display/rules';
 import type { ModalWidth } from '@/components/ui';
 import type { AnalysisService, Pending } from '@/services/analysis-service';
+import { isReportTarget } from '@/services/report-safe';
 import type { Analysis, Finding } from '@/services/types';
 import { docName } from '@/components/detail/detailModel';
 import type { DetailModal } from '@/components/detail/detailState';
@@ -338,9 +340,9 @@ export function pendingGate(data: Pending | undefined, error: unknown): PendingG
   return error === undefined ? 'wait' : 'fail';
 }
 
-/** 보고서를 열 수 있는 분석인지 — 데모만(실제 분석 Analysis.raw 는 보고서가 아직 없다) */
+/** 보고서를 열 수 있는 분석인지 — 데모 분석(raw 없음)이거나 실제 분석 중 보고서 대상 */
 export function hasReport(a: Analysis): boolean {
-  return !a.raw;
+  return !a.raw || isReportTarget(a);
 }
 
 /** 저장 뒤 토스트 — 원본 문구 그대로. openReport 면 '보고서 보기' 행동을 붙인다 */

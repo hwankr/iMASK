@@ -8,7 +8,7 @@
    - 실제 분석은 백엔드(FastAPI)가 Upstage Studio 워크플로우를 호출해 실행하고,
      화면은 분석 상태 · 결과 · 검토 기록만 주고받는다.
    - 메서드마다 '실제:' 주석은 실제 분석 서비스(src/services/api/service.ts)가 부르는 경로다.
-     아직 백엔드가 없는 것은 '실제 분석에서는 아직 지원하지 않음'(거절)이라고 적었다.
+     아직 백엔드가 없는 것(검토사항 · 문서 간 연결)은 '실제 분석에서는 아직 지원하지 않음'(거절)이라고 적었다.
    - 로그인이 없다 — 실제 분석은 주소를 아는 누구나 같은 목록을 보고 · 검토하고 · 지울 수 있다(대회용).
    ========================================================================== */
 
@@ -167,13 +167,17 @@ export interface AnalysisService {
   completeReview(id: string, note: string): Promise<void>;
   /** 완료한 검토를 다시 연다(사유 기록). 실제: POST /api/py/analyses/{id}/review-actions(type reopen_review) */
   reopenReview(id: string, reason: string): Promise<void>;
-  /** 내보내기 파일(CSV·JSON)을 만든다. 마스킹된 표시값만 담는다. 실제 분석에서는 아직 지원하지 않음 */
+  /**
+   * 내보내기 파일(CSV·JSON)을 만든다. 마스킹된 표시값만 담는다(계산은 공용 모듈 src/services/export-file.ts).
+   * 실제: GET /api/py/analyses/{id} 로 지금 분석을 받아 보고서 대상(완료 + 공통 계약 결과 + 검토 기록)만 — 원문 값을 지운 사본으로
+   * 화면에서 만든다(brand 인자는 쓰지 않는다 · 생성 시각은 서울). 없으면(404) · 대상이 아니면 거절
+   */
   buildExport(id: string, format: ExportFormat, brand?: string): Promise<ExportFile>;
-  /** 내보내기 결과를 검토 이력에 남긴다. 실제 분석에서는 아직 지원하지 않음 */
+  /** 내보내기 결과를 검토 이력에 남긴다. 실제: POST /api/py/analyses/{id}/review-actions(type log_export — 형식 · 크기 · 결과 · 파일 이름) */
   logExport(id: string, file: ExportFile, state: ExportLogState): Promise<void>;
   /**
    * 유일한 예외: 변경 알림 구독. 구독 해제 함수를 돌려준다.
-   * 실제: 분석 요청 · 다시 분석(응답을 받으면) · 삭제(성공 · 404) · 검토 동작(성공 · 409 · 404) 뒤, 그리고 조회(list · get)에서
+   * 실제: 분석 요청 · 다시 분석(응답을 받으면) · 삭제(성공 · 404) · 검토 동작 · 내보내기 기록(성공 · 409 · 404) 뒤, 그리고 조회(list · get)에서
    * 진행 중으로 본 분석이 끝난 것을 처음 볼 때 한 번(이벤트 없는 알림). 진행은 상세 화면 · 목록 화면이 3초마다 조회한다.
    */
   subscribe(listener: (event?: ServiceEvent) => void): () => void;

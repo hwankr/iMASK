@@ -39,7 +39,15 @@
      그 밖 실패는 떼지도 알리지도 않고 그 오류로 거절한다. reclassify 는 응답의 changed 를 돌려준다.
      confirmMany 는 빈 목록이면 요청 · 알림 없이 끝낸다.
    - pending = 조회한 분석의 미확인(open) 탐지 항목(검토사항 · 연결은 아직 없어 빈 목록). 없는 분석이면 빈 값.
-   - 검토사항(resolveItem · reopenItem) · 연결 판단(decideLink) · 내보내기(buildExport · logExport)는 아직 백엔드가 없다 —
+   - 내보내기 파일(buildExport(id, format)): 분석을 조회해(위와 같이 나눠 씀) 없으면(404) 검토 동작처럼 ApiError(not_found)로(알림 한 번),
+     보고서 대상(report-safe.ts isReportTarget — 완료 + 공통 계약 결과 + 검토 기록을 읽음)이 아니면 MSG_NO_REPORT 로 거절한다
+     (화면은 기존 실패 문구를 보인다). 대상이면 원문 값을 지운 안전한 사본(reportSafeAnalysis)으로 공용 모듈(export-file.ts
+     buildExportFile)이 파일을 만든다 — 브랜드는 늘 CONFIG.brandName(brand 인자는 쓰지 않는다 — 서버가 받는 파일 이름 꼴),
+     생성 시각은 서울 시각, live: true. 데모 코어 · 샘플은 import 하지 않는다.
+   - 내보내기 기록(logExport) = 검토 동작과 같은 보내기(sendReview) 하나 — 본문 { type: 'log_export', actor, format, size, state,
+     file_name }(크기 = file.size, 이름 = file.name). 보내기 전 조회는 하지 않는다. 성공 · 409 · 404 · 그 밖 실패의 떼기 · 알림은
+     검토 동작과 같다(성공하면 보고서의 검토 기록 구역이 다시 그려진다).
+   - 검토사항(resolveItem · reopenItem) · 연결 판단(decideLink)은 아직 백엔드가 없다 —
      '실제 분석에서는 아직 지원하지 않는 기능입니다.' 로 거절한다.
    - 분석 완료 이벤트(ServiceEvent 'done')는 보내지 않는다(탐지 0건 완료 토스트가 오해를 준다) — 위의 알림은 모두
      이벤트 없는 listener() 다.
@@ -55,6 +63,8 @@
 
 import { CONFIG } from '@/config/app';
 import type { AnalysisService, LiveExtras, LiveFile, Pending, RequestAnalysisInput, RetryResult, ServiceEvent } from '../analysis-service';
+import { buildExportFile } from '../export-file';
+import { isReportTarget, reportSafeAnalysis } from '../report-safe';
 import type { Analysis, UploadFile } from '../types';
 import {
   ApiError,
@@ -69,7 +79,7 @@ import {
   type ReviewActionOut,
 } from './client';
 import { downloadFile, fileInfoError } from './file-download';
-import { readAnalysisList, toAnalysis } from './mapping';
+import { readAnalysisList, seoulNow, toAnalysis } from './mapping';
 import { UploadConfigError, uploadWithSupabase, type Uploader } from './upload';
 
 export const MSG_ONE_FILE = '실제 분석에는 파일 1개를 올려 주세요.';
@@ -80,6 +90,8 @@ export const MSG_UNSUPPORTED = '실제 분석에서는 아직 지원하지 않�
 export const MSG_NO_ANALYSIS = '분석 건을 찾을 수 없습니다.';
 /** 검토 동작 — 화면 번호의 탐지 항목이 지금 분석에 없을 때(요청하지 않는다) */
 export const MSG_NO_FINDING = '탐지 항목을 찾을 수 없습니다.';
+/** 내보내기 — 보고서 대상이 아닌 분석(대기 · 분석 중 · 실패 · 옛 형식 · 검토 기록을 읽지 못함). 화면은 기존 실패 문구를 보인다 */
+export const MSG_NO_REPORT = '보고서를 만들 수 없는 분석입니다.';
 /** 다시 분석이 시작하다 실패했는데 이유(error)가 비었을 때 — 실제 분석 실패 띠와 같은 문구 */
 export const MSG_NO_REASON = '실패 이유를 받지 못했습니다.';
 
@@ -481,12 +493,22 @@ export function createApiService(deps: ApiServiceDeps = {}): ApiService {
       await sendReview(id, { type: 'reopen_review', reason });
     },
 
+    /* ---------- 내보내기(파일은 화면 쪽 공용 모듈 · 기록은 POST …/review-actions log_export) ---------- */
+
+    async buildExport(id, format) {
+      const a = await reviewTarget(id); // 없으면(404) 요청 없이 ApiError(not_found) — 떼고 한 번 알린다(화면이 목록으로)
+      if (!isReportTarget(a)) throw new Error(MSG_NO_REPORT);
+      return buildExportFile(reportSafeAnalysis(a), format, { brand: CONFIG.brandName, generatedAt: seoulNow(), live: true });
+    },
+
+    async logExport(id, file, state) {
+      await sendReview(id, { type: 'log_export', format: file.format, size: file.size, state, file_name: file.name });
+    },
+
     /* ---------- 아직 백엔드가 없는 기능 ---------- */
     resolveItem: unsupported,
     reopenItem: unsupported,
     decideLink: unsupported,
-    buildExport: unsupported,
-    logExport: unsupported,
 
     subscribe(listener) {
       listeners.add(listener);

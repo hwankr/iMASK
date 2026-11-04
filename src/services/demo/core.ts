@@ -10,18 +10,8 @@
    ========================================================================== */
 
 import { CONFIG } from '@/config/app';
-import {
-  analysisStatusView,
-  FSTATUS,
-  HKIND,
-  LSTATUS,
-  reviewStatusView,
-  riskView,
-  RTYPE,
-  type ExportFormat,
-  type FpReason,
-} from '@/display/rules';
-import { fmtDT, fmtSize, nowStr, utf8Len } from '@/lib/format';
+import { FSTATUS, reviewStatusView, RTYPE, type ExportFormat, type FpReason } from '@/display/rules';
+import { fmtSize, nowStr } from '@/lib/format';
 import { loanDocs, loanResults, mkA, rawSamples, summaryText } from '@/samples';
 import type {
   ExportLogState,
@@ -42,6 +32,7 @@ import type {
   ReviewItem,
   UploadFile,
 } from '../types';
+import { buildExportFile } from '../export-file';
 import { seedReviewActions } from './seed';
 
 /** 원본 uid(p) — 화면에서 쓰는 임시 ID(샘플 파일 등) */
@@ -53,9 +44,6 @@ type LogInput = Pick<HistoryEntry, 'kind' | 'target' | 'change'> & Partial<Pick<
 
 /** createQueued 가 쓰는 파일 정보 */
 export type QueuedFileInput = Pick<UploadFile, 'name' | 'ext' | 'size'>;
-
-/** 내보내기 탐지 항목 한 줄(열 이름 = 키, 순서 그대로) */
-type ExportRow = Record<string, string | number>;
 
 /** 동기 코어 — 프로토타입 svc 객체와 같은 메서드 */
 export interface DemoCore {
@@ -419,45 +407,12 @@ export function createDemoCore(onChange: () => void, onEvent?: (event: ServiceEv
       if (!a) return;
       log(a, { kind: 'export', target: file.name, change: (file.format === 'csv' ? 'CSV' : 'JSON') + ' · ' + fmtSize(file.size) + (state === 'saved' ? ' · 저장 완료' : ' · 다운로드 요청'), reason: '민감한 값 마스킹' });
     },
-    /* 내보내기 파일 생성 — 마스킹된 표시값만 담습니다 */
+    /* 내보내기 파일 생성 — 마스킹된 표시값만 담습니다(계산은 공용 모듈 export-file.ts — 실제 분석 서비스도 같은 함수를 쓴다) */
     buildExport(aid, format, brand) {
       const a = getA(aid);
       /* 원본은 없는 분석에서 TypeError 로 끝나고 화면이 try/catch 로 받는다. 같은 뜻의 오류를 분명하게 던진다. */
       if (!a) throw new Error('분석 건을 찾을 수 없습니다: ' + aid);
-      const docT = (id: string) => {
-        const d = a.docs.find((x) => x.id === id);
-        return d ? d.title || d.name : '';
-      };
-      const rows: ExportRow[] = a.findings.map((f) => ({
-        항목ID: f.id, 정보종류: f.cat, 세부항목: f.label, 표시값_마스킹: f.masked, 정보주체: f.subject, 문서: docT(f.docId), 페이지: f.page,
-        원문위치: f.anchors.length ? '확인됨' : '위치 확인 필요', 노출상태: f.exposure, 위험등급: riskView(f.risk).label, 판단근거: f.reason, 적용규칙: f.rule,
-        확인상태: FSTATUS[f.status].label, 담당자메모: f.memo || '', 최초AI_정보종류: f.ai.cat, 최초AI_정보주체: f.ai.subject, 최초AI_노출상태: f.ai.exposure,
-      }));
-      const base = (brand || CONFIG.brandName) + '_' + a.code + '_검토결과';
-      if (format === 'csv') {
-        const cols = rows.length ? Object.keys(rows[0]) : ['항목ID'];
-        const esc = (v: string | number | null | undefined) => {
-          const s = String(v == null ? '' : v);
-          return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-        };
-        const lines = [cols.join(',')].concat(rows.map((r) => cols.map((c) => esc(r[c])).join(',')));
-        const text = '﻿' + lines.join('\r\n') + '\r\n';
-        return { format: 'csv', name: base + '_탐지항목.csv', mime: 'text/csv;charset=utf-8', text, size: utf8Len(text), preview: lines.slice(0, 6).join('\n') };
-      }
-      const obj = {
-        보고서: { 서비스: brand || CONFIG.brandName, 생성시각: fmtDT(now()), 데모데이터: true, 마스킹: '민감한 값은 마스킹된 표시값만 포함' },
-        분석: { 분석ID: a.code, 분석명: a.name, 접수일시: fmtDT(a.submittedAt), 분석상태: analysisStatusView(a.status).label, 위험등급: riskView(a.risk).label, 검토상태: reviewStatusView(a.review).label, 검토자: a.reviewer || '', 검토완료시각: a.reviewedAt ? fmtDT(a.reviewedAt) : '' },
-        대상문서: a.docs.map((d) => ({ 문서: d.title || d.name, 파일명: d.name, 형식: d.ext, 페이지: d.pageCount || (d.pages ? d.pages.length : null), 처리상태: analysisStatusView(d.status).label, 오류: d.error || '' })),
-        주요위험사유: a.riskReasons,
-        탐지항목: rows,
-        검토사항: a.items.map((i) => ({ ID: i.id, 유형: RTYPE[i.type].label, 내용: i.title, 상태: i.resolved ? '해결' : '미해결', 처리내용: i.note || '' })),
-        문서간연결: a.links.map((l) => ({ ID: l.id, 내용: l.title, 판단: l.decision ? (l.decision === 'linked' ? '연결 맞음' : '연결 아님') : LSTATUS[l.status].label, 근거: l.basis })),
-        권장조치: a.recs,
-        검토메모: a.memo || '',
-        검토이력: a.history.map((h) => ({ 시각: fmtDT(h.at), 처리자: h.actor, 구분: HKIND[h.kind] || h.kind, 대상: h.target, 내용: h.change, 사유: h.reason || '' })),
-      };
-      const text = JSON.stringify(obj, null, 2);
-      return { format: 'json', name: base + '.json', mime: 'application/json', text, size: utf8Len(text), preview: text.split('\n').slice(0, 16).join('\n') };
+      return buildExportFile(a, format, { brand: brand || CONFIG.brandName, generatedAt: now(), live: false });
     },
   };
   return svc;

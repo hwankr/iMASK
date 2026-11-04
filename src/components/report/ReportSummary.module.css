@@ -7,6 +7,11 @@
   gap: var(--space-20) 0;
 }
 
+/* 카드 2장(실제 분석 — 탐지 항목 · 담당자 확인) — 데스크톱 · 휴대폰 모두 2열(빈 칸 없이 한 줄) */
+.cardsTwo {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 /* 카드 — padding:2px 20px 2px {{c.pl}}; border-left:{{c.sep}} — 첫 카드(휴대폰은 3번째도)는 선·왼쪽 여백 없음 */
 .card {
   display: flex;

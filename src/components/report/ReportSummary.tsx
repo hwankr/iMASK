@@ -5,12 +5,12 @@ import { ReportSection } from './ReportSection';
 import styles from './ReportSummary.module.css';
 
 /**
- * 01 결과 요약 — Main 627–638. 요약 숫자 4개(세어 올라감), 위험등급별 탐지 분포 막대(차례로 자람 dg-grow), 등급 유지 안내.
+ * 01 결과 요약 — Main 627–638. 요약 숫자 4개(세어 올라감 — 실제 분석은 2개), 위험등급별 탐지 분포 막대(차례로 자람 dg-grow), 등급 유지 안내.
  */
 export function ReportSummary({ v }: { v: ReportView }) {
   return (
-    <ReportSection n={1} title="결과 요약" look="summary">
-      <div className={styles.cards}>
+    <ReportSection n={v.sections.summary} title="결과 요약" look="summary">
+      <div className={cx(styles.cards, v.cards.length === 2 && styles.cardsTwo)}>
         {v.cards.map((c) => (
           <div key={c.key} className={styles.card}>
             <span className={styles.label}>{c.label}</span>

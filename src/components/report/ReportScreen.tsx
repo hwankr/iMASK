@@ -6,21 +6,26 @@
    - 이동 주소(목록 · '상세 검토로 돌아가기')는 지금 기준 경로(useRouteBase)로 만든다(src/lib/routes.ts).
    - 위험등급·근거는 서비스 값 그대로, 민감한 값은 마스킹된 표시값만 보여 준다(reportModel).
    - 결과 내보내기: service.buildExport → 브라우저 다운로드(lib/download) → 'handed' → service.logExport
-     (검토 이력에 '결과 내보내기' 기록 — 변경 알림으로 보고서의 08 구역이 다시 그려진다).
+     (검토 이력에 '결과 내보내기' 기록 — 변경 알림으로 보고서의 검토 기록 구역이 다시 그려진다). 기록 실패는 삼키고 결과 표시는 그대로.
+   - 실제 분석(Analysis.raw 있음)은 그리기 전에 reportGate 로 가른다: 대기 · 분석 중 · 실패 · 일부 실패 · 옛 형식은 짧은 안내
+     (LiveReportNotice — 제목 + 상세로 가기), 검토 기록을 읽지 못한 분석은 불러오기 실패 블록(다시 불러오기), 보고서 대상만 본문.
+     본문은 원문 값을 지운 안전한 사본(reportSafeAnalysis)으로만 그린다. 생성 시각은 서울 시각(데모는 브라우저 시각 그대로).
    ========================================================================== */
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { LiveReportNotice } from '@/components/live/LiveReportNotice';
 import { Button, Icon, Skeleton, VisuallyHidden } from '@/components/ui';
-import { CONFIG } from '@/config/app';
 import type { ExportFormat } from '@/display/rules';
 import { downloadFile } from '@/lib/download';
 import { fmtDT, nowStr } from '@/lib/format';
 import { detailHref, listHref } from '@/lib/routes';
 import { useAnalysis, useRouteBase, useService } from '@/services/react';
+import { reportClock, reportSafeAnalysis } from '@/services/report-safe';
 import type { Analysis, ExportFile } from '@/services/types';
 import { ExportModal } from './ExportModal';
 import { BUILD_FAILED_MESSAGE, freshExport, type ExportUiState } from './exportModel';
+import { reportGate } from './reportGate';
 import { ReportHead } from './ReportHead';
 import { ReportHistory } from './ReportHistory';
 import { ReportMemo, ReportReasons, ReportRecs, ReportRemaining } from './ReportLists';
@@ -51,29 +56,38 @@ export function ReportScreen({ id, initial }: ReportScreenProps) {
   }, [data, router, base]);
 
   if (data === undefined) {
-    if (error)
-      return (
-        <div className={styles.screen}>
-          <p role="alert" className={styles.error}>
-            보고서를 불러오지 못했습니다.
-            <Button size="sm" variant="secondary" onClick={() => void refresh()}>
-              다시 불러오기
-            </Button>
-          </p>
-        </div>
-      );
+    if (error) return <ReportLoadFailed onRetry={() => void refresh()} />;
     return <ReportSkeleton />;
   }
   if (data === null) return <ReportSkeleton label="분석 건을 찾을 수 없어 목록으로 돌아갑니다." />;
+  /* 실제 분석 — 보고서 대상만 본문(데모 분석은 늘 'report') */
+  const gate = reportGate(data);
+  if (gate === 'waiting' || gate === 'unavailable') return <LiveReportNotice id={id} kind={gate} />;
+  if (gate === 'loadFailed') return <ReportLoadFailed onRetry={() => void refresh()} />;
   return <ReportBody analysis={data} initial={initial} />;
+}
+
+/** 불러오기 실패 — 조회 오류, 또는 검토 기록을 읽지 못한 실제 분석 */
+function ReportLoadFailed({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className={styles.screen}>
+      <p role="alert" className={styles.error}>
+        보고서를 불러오지 못했습니다.
+        <Button size="sm" variant="secondary" onClick={onRetry}>
+          다시 불러오기
+        </Button>
+      </p>
+    </div>
+  );
 }
 
 function ReportBody({ analysis: a, initial }: { analysis: Analysis; initial?: ReportInitial }) {
   const service = useService();
   const base = useRouteBase();
-  const v = reportView(a);
-  /* 보고서를 연 시각(원본 generatedAt: fmtDT(nowStr())) — 다시 그려도 바뀌지 않게 처음 값을 둔다 */
-  const [generatedAt] = useState(() => fmtDT(nowStr()));
+  /* 실제 분석은 원문 값을 지운 안전한 사본으로만 그린다(데모는 같은 객체) — 분석이 바뀔 때만 다시 만든다(모달 상태로 다시 그려도 그대로) */
+  const v = useMemo(() => reportView(reportSafeAnalysis(a)), [a]);
+  /* 보고서를 연 시각(원본 generatedAt: fmtDT(nowStr()) — 실제 분석은 서울 시각) — 다시 그려도 바뀌지 않게 처음 값을 둔다 */
+  const [generatedAt] = useState(() => fmtDT(reportClock(a)));
 
   const [exportOpen, setExportOpen] = useState(() => !!initial?.exportModal);
   const [exp, setExp] = useState<ExportUiState>(() => initial?.exportModal ?? freshExport());
@@ -176,10 +190,9 @@ function ReportBody({ analysis: a, initial }: { analysis: Analysis; initial?: Re
         <ReportMemo v={v} />
         <ReportHistory v={v} />
         <footer className={styles.footer}>
-          <span>
-            이 보고서는 {CONFIG.brandName} 데모 환경에서 만든 예시입니다. 위험 규칙 ID와 위험 기준은 데모용이며, 실측 정확도나 공식 인증 결과가 아닙니다.
-          </span>
-          <span>민감한 값은 마스킹해 표시했습니다. 원문 값은 보고서와 내보내기 파일에 포함하지 않습니다.</span>
+          {v.footer.map((line) => (
+            <span key={line}>{line}</span>
+          ))}
         </footer>
       </article>
 
@@ -188,6 +201,7 @@ function ReportBody({ analysis: a, initial }: { analysis: Analysis; initial?: Re
         onClose={closeExport}
         analysisName={a.name}
         code={a.code}
+        live={v.live}
         state={exp}
         onPickFormat={pickFormat}
         onExport={() => void runExport()}

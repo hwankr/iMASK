@@ -14,7 +14,7 @@
    - retryAnalysis = POST /analyses/{id}/retry(본문 { actor }) → 200 다시 시작한(또는 시작하다 실패한) 분석.
    ========================================================================== */
 
-import type { Exposure, FpReason, InfoCategory, InfoSubject } from '@/display/rules';
+import type { ExportFormat, Exposure, FpReason, InfoCategory, InfoSubject } from '@/display/rules';
 
 /** 오류 종류 */
 export type ApiErrorCode = 'not_found' | 'conflict' | 'bad_request' | 'server' | 'network';
@@ -176,7 +176,10 @@ export type ReviewActionIn =
   | (ReviewActionBase & { type: 'save_finding_memo'; finding_id: string; text: string })
   | (ReviewActionBase & { type: 'save_memo'; text: string })
   | (ReviewActionBase & { type: 'complete_review'; note: string })
-  | (ReviewActionBase & { type: 'reopen_review'; reason: string });
+  | (ReviewActionBase & { type: 'reopen_review'; reason: string })
+  /* 내보내기 기록 — format csv·json, size = 내려받는 파일의 UTF-8 바이트, state handed(다운로드 요청)·saved(저장 완료),
+     file_name = 화면이 만든 파일 이름(서버가 이 분석의 이름인지 확인한다) */
+  | (ReviewActionBase & { type: 'log_export'; format: ExportFormat; size: number; state: 'handed' | 'saved'; file_name: string });
 
 /** 검토 동작 응답 — 갱신된 분석(조회와 같은 모양) + 실제로 바뀌었는지(분류 수정에서 바뀐 값이 없으면 false) */
 export interface ReviewActionOut {

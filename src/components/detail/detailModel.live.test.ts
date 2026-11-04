@@ -313,7 +313,7 @@ describe('실제 분석 — 검토 완료 뒤 · 검토 기록을 불러오지 �
     version: 3,
   };
 
-  it("검토 완료 — 잠김, '검토 다시 열기', 검토 완료 띠(검토자 · 서울 시각)에 '보고서 보기' 없음", () => {
+  it("검토 완료 — 잠김, '검토 다시 열기', 검토 완료 띠(검토자 · 서울 시각)에 데모와 같은 '보고서 보기'", () => {
     const a = liveAnalysis(undefined, DONE_REVIEW);
     const s = stateOf(a);
     const x = detailFacts(a, s);
@@ -326,7 +326,7 @@ describe('실제 분석 — 검토 완료 뒤 · 검토 기록을 불러오지 �
     const b = bannerModel(a, x);
     expect(b?.variant).toBe('done');
     expect(b?.title).toBe('검토 완료 · 김민지 · 2026.11.03 10:20');
-    expect(b?.actions).toEqual([]);
+    expect(b?.actions).toEqual([{ key: 'openReport', label: '보고서 보기', disabled: false }]);
     const rs = resultsModel(a, s, x);
     expect(rs.locked).toBe(true);
     expect(rs.memoPreview).toBe('검토 메모 둘째 줄');

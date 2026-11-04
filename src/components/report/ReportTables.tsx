@@ -14,10 +14,10 @@ const DOC_TABLE_TITLE = '대상 문서와 문서별 확인 결과';
 /** 08 구역의 소제목(ReportHistory h3)이자 수정 표의 이름 */
 export const CHANGE_TABLE_TITLE = '최초 AI 결과와 담당자 수정';
 
-/** 03 대상 문서와 문서별 확인 결과 — Main 645–648 */
+/** 03 대상 문서와 문서별 확인 결과 — Main 645–648. 실제 분석에는 '남은 검토사항' 열이 없다(docOpenCol) */
 export function ReportDocTable({ v }: { v: ReportView }) {
   return (
-    <ReportSection n={3} title={DOC_TABLE_TITLE}>
+    <ReportSection n={v.sections.docs} title={DOC_TABLE_TITLE}>
       <div className={styles.scroll}>
         <table className={cx(styles.table, styles.docTable)}>
           <caption>
@@ -31,7 +31,11 @@ export function ReportDocTable({ v }: { v: ReportView }) {
               <th scope="col" className={cx(styles.th, styles.nowrap, styles.right)}>탐지</th>
               <th scope="col" className={cx(styles.th, styles.nowrap, styles.right)}>{RISK.high.label}</th>
               <th scope="col" className={cx(styles.th, styles.nowrap, styles.right)}>담당자 확인</th>
-              <th scope="col" className={cx(styles.th, styles.nowrap, styles.right)}>남은 검토사항</th>
+              {v.docOpenCol ? (
+                <th scope="col" className={cx(styles.th, styles.nowrap, styles.right)}>
+                  남은 검토사항
+                </th>
+              ) : null}
             </tr>
           </thead>
           <tbody>
@@ -48,7 +52,9 @@ export function ReportDocTable({ v }: { v: ReportView }) {
                 <td className={cx(styles.td, styles.right, styles.tab)}>{d.nFind}</td>
                 <td className={cx(styles.td, styles.right, styles.tab, styles.heavy, d.highOn ? styles.hi : styles.muted)}>{d.nHigh}</td>
                 <td className={cx(styles.td, styles.right, styles.tab)}>{d.reviewed}</td>
-                <td className={cx(styles.td, styles.right, styles.tab, styles.heavy, d.open ? styles.warn : styles.muted)}>{d.open}</td>
+                {v.docOpenCol ? (
+                  <td className={cx(styles.td, styles.right, styles.tab, styles.heavy, d.open ? styles.warn : styles.muted)}>{d.open}</td>
+                ) : null}
               </tr>
             ))}
           </tbody>
@@ -58,10 +64,13 @@ export function ReportDocTable({ v }: { v: ReportView }) {
   );
 }
 
-/** 04 탐지 항목 요약 — Main 652–656. 정보 종류별 표 + 전체 탐지 항목(펼치기, 표시값 마스킹) */
+/**
+ * 04 탐지 항목 요약 — Main 652–656. 정보 종류별 표 + 전체 탐지 항목(펼치기, 표시값 마스킹).
+ * 실제 분석에 미평가 항목이 있으면 정보 종류별 표의 '낮음' 뒤에 '미평가' 열(catUnratedCol).
+ */
 export function ReportFindings({ v }: { v: ReportView }) {
   return (
-    <ReportSection n={4} title="탐지 항목 요약">
+    <ReportSection n={v.sections.findings} title="탐지 항목 요약">
       <div className={styles.scroll}>
         <table className={cx(styles.table, styles.catTable)}>
           <caption>
@@ -74,6 +83,11 @@ export function ReportFindings({ v }: { v: ReportView }) {
               <th scope="col" className={cx(styles.th, styles.right)}>{RISK.high.label}</th>
               <th scope="col" className={cx(styles.th, styles.right)}>{RISK.medium.label}</th>
               <th scope="col" className={cx(styles.th, styles.right)}>{RISK.low.label}</th>
+              {v.catUnratedCol ? (
+                <th scope="col" className={cx(styles.th, styles.right)}>
+                  {RISK.unrated.label}
+                </th>
+              ) : null}
               <th scope="col" className={cx(styles.th, styles.right)}>확인</th>
               <th scope="col" className={cx(styles.th, styles.right)}>{FSTATUS.false_positive.label}</th>
             </tr>
@@ -86,6 +100,9 @@ export function ReportFindings({ v }: { v: ReportView }) {
                 <td className={cx(styles.td, styles.tdCat, styles.right, styles.tab, c.high ? styles.hi : styles.faint)}>{c.high}</td>
                 <td className={cx(styles.td, styles.tdCat, styles.right, styles.tab, c.medium ? styles.md : styles.faint)}>{c.medium}</td>
                 <td className={cx(styles.td, styles.tdCat, styles.right, styles.tab, c.low ? styles.lo : styles.faint)}>{c.low}</td>
+                {v.catUnratedCol ? (
+                  <td className={cx(styles.td, styles.tdCat, styles.right, styles.tab, c.unrated ? styles.na : styles.faint)}>{c.unrated}</td>
+                ) : null}
                 <td className={cx(styles.td, styles.tdCat, styles.right, styles.tab)}>{c.reviewed}</td>
                 <td className={cx(styles.td, styles.tdCat, styles.right, styles.tab)}>{c.fp}</td>
               </tr>
@@ -138,7 +155,7 @@ export function ReportFindings({ v }: { v: ReportView }) {
   );
 }
 
-/** 08 안의 '최초 AI 결과와 담당자 수정' 표 — Main 679 */
+/** 08(실제 분석은 07) 안의 '최초 AI 결과와 담당자 수정' 표 — Main 679 */
 export function ReportChangeTable({ v }: { v: ReportView }) {
   return (
     <div className={styles.scroll}>

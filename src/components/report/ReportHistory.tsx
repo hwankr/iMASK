@@ -6,12 +6,12 @@ import { CHANGE_TABLE_TITLE, ReportChangeTable } from './ReportTables';
 import styles from './ReportHistory.module.css';
 
 /**
- * 08 수정 이력과 검토 기록 — Main 676–700.
+ * 08 수정 이력과 검토 기록 — Main 676–700(실제 분석은 07).
  * 최초 AI 결과와 담당자 수정(표 또는 없음 안내), 검토 기록(세로 선 + 구분별 색 점 타임라인).
  */
 export function ReportHistory({ v }: { v: ReportView }) {
   return (
-    <ReportSection n={8} title="수정 이력과 검토 기록" look="history">
+    <ReportSection n={v.sections.history} title="수정 이력과 검토 기록" look="history">
       <h3 className={styles.h3}>{CHANGE_TABLE_TITLE}</h3>
       {v.changes.length > 0 ? (
         <ReportChangeTable v={v} />

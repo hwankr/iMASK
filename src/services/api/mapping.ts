@@ -60,6 +60,11 @@ export function seoulDateTime(value: unknown): string {
   return `${y}-${pad2(mo)}-${pad2(d)} ${pad2(h)}:${pad2(mi)}`;
 }
 
+/** 지금 시각(서울) 'YYYY-MM-DD HH:mm' — 실제 분석 보고서 · 내보내기 파일의 생성 시각(seoulDateTime 과 같은 기준) */
+export function seoulNow(date: Date = new Date()): string {
+  return seoulDateTime(date.toISOString());
+}
+
 /** 분석 번호 'DG-YYYYMMDD-XXXX' — 만든 날짜(서울) + id 앞 4자 대문자. 날짜를 모르면 'DG-XXXX' */
 export function analysisCode(id: unknown, createdAt: unknown): string {
   const head = str(id).replace(/[^0-9a-zA-Z]/g, '').slice(0, 4).toUpperCase();

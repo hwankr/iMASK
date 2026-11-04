@@ -21,13 +21,29 @@
 #    other 에 other_guide·extracted 에 validation, overall 상/권장_조치·
 #    risk 분포(허용 값·risk_source 와 맞는지만 — unrated 를 강제하지 않음)·계약 키·id 중복·document_index·
 #    boxes 0~1, 기본 응답에 stages·response 없음, 응답 크기(기본 GET vs ?include=stages GET 바이트 — 기본이 작아야 함).
+#    검토사항(result.items, review-items BRIEF §5.3): 계약 모양(키·순서·타입·R-nn 1부터 연속·id 중복 없음·보이는 서류·쪽 범위·
+#    그 서류의 탐지 항목 참조 — 실패하면 'items[n].키' 위치만 출력) + 이 스크립트가 응답의 documents·findings 로 **따로 계산한
+#    기대값**과 정확히 같음(nolocation = 위치 없는 보이는 탐지 항목 · lowconf = 서류마다 신뢰도 low 묶음·NUMS · other = 기타 서류,
+#    id·number·type·document_index·page·finding_id·고정 글·근거 label·page·finding_ids·finding_id). 검증 checks 는 응답에 없어
+#    missing 항목은 계산할 수 없다 — 보이는 서류의 validation 이 모두 green(또는 null)일 때만 missing 0개를 기대하고, 아니면
+#    '새 모양'으로 실패를 알린다(숫자를 느슨하게 하지 않는다 — _expected_items).
 #    원본 파일: GET /analyses/{id}/file 200·키 {url, mime_type, filename} → url 로(사용자 지정 헤더 없이) 받아 올린 내용과
 #    sha256 비교. 원문 값(value·masked)·서명 URL 은 출력하지 않는다(개수·분포·바이트 수만).
 #  검토 동작 확인(review-actions, 기본 켬): **이번 실행이 만든 분석이 done 이 된 뒤에만** POST /analyses/{id}/review-actions 를
 #    차례로 보낸다(actor api_e2e, 글은 이 스크립트가 만든 합성 문구). 처음 조회(needed·version 0·findings {}·이력 S1·S2)
 #    → 확인 → 확인 취소 → 2건 한꺼번에 확인 → 같은 항목 다시 확인 409(상태 불일치) → 오탐 표시 → 오탐 취소(→ 미확인)
 #    → 분류 수정(정보 종류) → 같은 값 분류 수정(changed false·이력 없음) → 오탐 표시 → 오탐 취소(→ 분류 수정)
-#    → 항목 메모 저장·삭제 → 검토 메모 → 검토 완료(남은 미확인 수가 문구에) → 잠김 409·이미 완료 409
+#    → 항목 메모 저장·삭제 → 검토 메모
+#    → 검토사항(review-items §5.6, 첫 검토사항 R-01): resolve_item(review.items[id] = {resolved true, note, resolved_at = 새 이력
+#    at, resolved_by api_e2e} · 이력 resolve · 'R-01 <종류 라벨>' · '미해결 → 해결' · reason = note) → 다시 resolve 409(검토사항 상태
+#    바뀜) → reopen_item(resolved false · note·resolved_at·resolved_by 남음 · 이력 reopenItem · '해결 → 미해결' · reason '')
+#    → 다시 reopen 409 → 다시 resolve(새 처리 내용) → 없는 item_id 404 → 400 두 가지(reopen_item 에 note · 501자 note).
+#    검토사항이 0개면 이 부분은 '건너뜀(검토사항 0개)'. 처음 조회는 review.items {} 여야 한다.
+#    검토사항 동작을 보내기 **전에** result.items 전체의 계약 모양(done 확인과 같은 검사)을 본다 — 틀리면 값 없는 실패 위치
+#    (items[n].필드)만 적고 보내지 않는다. 출력에 쓰는 번호는 스크립트가 만든 순번(R-{i:02d} — 받은 번호가 같을 때만 대상)이고,
+#    받은 id·글은 출력하지 않는다(본문 item_id 에만). review 블록의 status·version·changed 도 계약 값이 아니면 '<타입>' 으로만 적는다.
+#    → 검토 완료(남은 미확인 탐지 수 · 미해결 검토사항 수(= 검토사항 수 − 해결한 1개)가 문구에) → 잠김 409·이미 완료 409
+#    → 잠긴 채 resolve_item·reopen_item 409(잠김)
 #    → 내보내기 기록 log_export(**잠긴 상태에서**): CSV(handed)·JSON(saved) 두 번 — 200·changed true·새 이력 줄
 #    (kind export · target = 파일 이름 · change 'CSV · <크기> · 다운로드 요청'/'JSON · <크기> · 저장 완료' · reason
 #    '민감한 값 마스킹') · review 의 다른 값(status done·findings·memo·memo_at·reviewer·reviewed_at·completion_note) 그대로,
@@ -39,8 +55,8 @@
 #    크기는 그럴듯한 값(CSV 6,127 → 6KB · JSON 1,310,720 → 1.3MB — MB 소수 첫째 자리 동점)을 보낸다.
 #    단계마다 응답 상태·changed·review 값·새 이력 줄(id H{version}·actor·kind·target·change·reason)을 보고 GET 으로 다시
 #    읽어 같은지 확인한다(오류 단계는 다시 읽은 review 가 그대로인지 = 쓰기 없음). 마지막에 이력 id H1…Hn 연속,
-#    at 이 줄어들지 않음, 저장 줄 수 = 쓴 동작 수 = version, 분석 created_at·updated_at 이 처음 조회와 같음(분석 시각·
-#    걸린 시간 불변). 출력은 단계 이름·통과/실패·개수만 — 기대와 다른 이력 줄·검토 값도 필드 이름과 '계약과 다름'만
+#    at 이 줄어들지 않음, 저장 줄 수 = 쓴 동작 수 = version, 분석 created_at·updated_at·started_at 이 처음 조회와 같음(분석 시각·
+#    걸린 시간 불변 — 동작 응답마다도), 검토사항 해결 기록이 마지막 해결 값 그대로. 출력은 단계 이름·통과/실패·개수만 — 기대와 다른 이력 줄·검토 값도 필드 이름과 '계약과 다름'만
 #    (받은 값·기대 값은 출력하지 않는다 — 서버가 잘못해 원문 값을 담아도 터미널에 나오지 않게).
 #    기대 문구는 계약(데모 코어와 같은 전이·문구)을 그대로 적은 것이다.
 #    기대값도 계약대로 따로 만든다(백엔드 함수를 쓰지 않음): 표시 이름·위험등급은 JavaScript trim() 공백 집합(_js_trim —
@@ -188,6 +204,38 @@ TEXT_FINDING_MEMO = "api_e2e 항목 메모"
 TEXT_MEMO = "api_e2e 검토 메모"
 TEXT_COMPLETE = "api_e2e 검토 완료"
 TEXT_REOPEN = "api_e2e 다시 열기"
+TEXT_ITEM_RESOLVE = "api_e2e 검토사항 해결"
+TEXT_ITEM_RESOLVE_AGAIN = "api_e2e 검토사항 다시 해결"
+
+# 검토사항 계약(review-items BRIEF §5.2·§5.3·§5.5·§5.6). 백엔드 imask_backend.items·reviews 를 쓰지 않고 따로 적는다.
+ITEM_KEYS = ("id", "number", "type", "document_index", "page", "finding_id", "title", "desc", "next", "evidence")
+ITEM_EVIDENCE_KEYS = ("label", "page", "finding_ids", "finding_id")
+ITEM_TYPES = {  # 화면 src/display/rules.ts RTYPE 의 키 → 라벨(이력 target '{번호} {라벨}')
+    "unreadable": "판독 불가",
+    "cutoff": "페이지 잘림",
+    "mismatch": "값 불일치",
+    "weaklink": "연결 근거 부족",
+    "nolocation": "위치 확인 필요",
+    "failed": "분석 실패",
+    "missing": "필수 항목 없음",
+    "lowconf": "인식 확인 필요",
+    "other": "기타 서류",
+}
+REVIEW_ITEM_KEYS = {"resolved", "note", "resolved_at", "resolved_by"}
+ITEM_MAX_EVIDENCE = 20  # 검토사항 하나의 근거 수(lowconf 는 앞 20쪽)
+ITEM_MAX_NAME = 40  # 글에 넣는 표시 이름(코드 포인트) — 넘으면 앞 39자 + '…'
+ITEM_MAX_NUMS = 5  # lowconf 설명의 표시 번호 수
+ITEM_NOLOCATION = ("원문 위치가 없는 탐지 항목", "{num} {name} — 원문 좌표가 없어 강조할 수 없습니다.", "원본에서 직접 찾아 확인해 주세요.")
+ITEM_LOWCONF = ("인식 신뢰도가 낮은 항목 {n}건", "{nums}의 값이 틀렸을 수 있습니다.", "원본과 값을 비교해 확인해 주세요.")
+ITEM_OTHER = (
+    "기타 서류로 분류된 문서",
+    "워크플로우가 대출 서류 5종에 해당하지 않는 기타 서류로 분류했습니다.",
+    "원본에 개인정보가 있는지 직접 확인해 주세요.",
+)
+ITEM_OPEN_LABEL = "{p}쪽 열기"
+ITEM_VALUES_LABEL = "{p}쪽 값 보기"
+MSG_ITEM_NOT_FOUND = "검토사항을 찾을 수 없습니다."
+MSG_ITEM_STATE_CHANGED = "검토사항 상태가 바뀌었습니다. 새로 고친 뒤 다시 시도해 주세요."
 
 # 내보내기 기록 계약(log_export — live-report BRIEF §5.6·§5.8 백엔드 문구). 백엔드 함수를 쓰지 않고 따로 적는다.
 EXPORT_KIND = "export"
@@ -397,6 +445,21 @@ def _is_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+REVIEW_STATUSES = ("needed", "done")  # review.status 계약 값(출력해도 되는 받은 글자)
+
+
+def _shown(value: Any, allowed: tuple[str, ...] = ()) -> str:
+    """받은 값을 문제 줄에 적을 때 — None·bool·정수(bool 아님)·허용 목록의 글자만 repr 로, 그 밖은 '<타입 이름>'(값은 넣지 않는다)."""
+    if value is None or isinstance(value, bool) or _is_int(value) or (isinstance(value, str) and value in allowed):
+        return repr(value)
+    return f"<{type(value).__name__}>"
+
+
+def _plain(value: Any, allowed: tuple[str, ...] = ()) -> str:
+    """_shown 과 같되 허용 글자는 따옴표 없이(요약 줄용)."""
+    return value if isinstance(value, str) and value in allowed else _shown(value, allowed)
+
+
 def _box_ok(box: Any) -> bool:
     if not isinstance(box, list) or len(box) != 4:
         return False
@@ -551,6 +614,244 @@ def _print_view(result: Mapping[str, Any]) -> bool:
     return docs_ok and counts_ok and overall_ok and not problems
 
 
+# --- 검토사항(result.items) 확인 — review-items BRIEF §5.3 ---------------------------------------
+# 기대값은 계약대로 응답의 documents·findings 에서 따로 만든다(백엔드 imask_backend.items 를 쓰지 않음). 검증 checks 는 응답에
+# 없으므로 missing(규칙·verdict) 항목은 계산할 수 없다 — 보이는 서류의 validation 이 모두 green(또는 null)일 때만 missing
+# 0개를 기대하고, 그 밖이면 '새 모양'으로 실패를 알린다(숫자를 느슨하게 하지 않는다).
+
+
+def _visible_docs(documents: Any) -> list[Mapping[str, Any]]:
+    """보이는 서류(화면 readDocSources 와 같은 기준) — index 가 bool 아닌 정수 ≥ 0, page_start·page_end 가 bool 아닌 정수 ≥ 1.
+    index 순, 같은 index 는 처음 것."""
+    found: dict[int, Mapping[str, Any]] = {}
+    for doc in documents if isinstance(documents, list) else []:
+        if not isinstance(doc, Mapping):
+            continue
+        index, start, end = doc.get("index"), doc.get("page_start"), doc.get("page_end")
+        if _is_int(index) and index >= 0 and _is_int(start) and start >= 1 and _is_int(end) and end >= 1 and index not in found:
+            found[index] = doc
+    return [found[index] for index in sorted(found)]
+
+
+def _clip_name(text: str) -> str:
+    """글에 넣는 표시 이름: 40 코드 포인트를 넘으면 앞 39자 + '…', 그 뒤 NUL·짝 없는 서로게이트 → U+FFFD."""
+    short = text if len(text) <= ITEM_MAX_NAME else text[: ITEM_MAX_NAME - 1] + "…"
+    return "".join(REPLACEMENT_CHAR if char == "\x00" or 0xD800 <= ord(char) <= 0xDFFF else char for char in short)
+
+
+def _validation_green(value: Any) -> bool:
+    """검증 결과가 없거나(null·빈 글) green(앞뒤 공백·대소문자 무시)인지."""
+    return value is None or (isinstance(value, str) and _js_trim(value).strip().lower() in ("", "green"))
+
+
+def _item_want(
+    item_id: str, kind: str, index: int, page: int, finding_id: str | None, text: tuple[str, str, str], evidence: list[dict[str, Any]]
+) -> dict[str, Any]:
+    title, desc, next_step = text
+    return {
+        "id": item_id,
+        "number": "",
+        "type": kind,
+        "document_index": index,
+        "page": page,
+        "finding_id": finding_id,
+        "title": title,
+        "desc": desc,
+        "next": next_step,
+        "evidence": evidence[:ITEM_MAX_EVIDENCE],
+    }
+
+
+def _expected_items(result: Mapping[str, Any]) -> tuple[list[dict[str, Any]] | None, str]:
+    """계약대로 따로 계산한 result.items 기대값(서류 순서 → nolocation·lowconf·other → 재료 안 순서). 계산할 수 없으면 (None, 이유)."""
+    visible = _visible_docs(result.get("documents"))
+    not_green = sum(1 for doc in visible if not _validation_green(doc.get("validation")))
+    if not_green:
+        return None, f"새 모양 — 검증 결과가 green 이 아닌 서류 {not_green}개(checks 를 볼 수 없어 missing 항목을 계산할 수 없음)"
+    spans: dict[int, tuple[int, int, int]] = {}  # index → (서류 순번, page_start, 화면 쪽 범위 끝)
+    for number, doc in enumerate(visible, 1):
+        start = doc["page_start"]
+        spans[doc["index"]] = (number, start, max(start, doc["page_end"]))
+    rows: dict[int, list[dict[str, Any]]] = {index: [] for index in spans}
+    findings = result.get("findings")
+    for finding in findings if isinstance(findings, list) else []:
+        if not isinstance(finding, Mapping):
+            continue
+        index = finding.get("document_index")
+        if not _is_int(index) or index not in spans:
+            continue
+        number, start, end = spans[index]
+        page, boxes, label, field, raw_id = (finding.get(k) for k in ("page", "boxes", "label", "field", "id"))
+        in_range = _is_int(page) and start <= page <= end
+        name = (_js_trim(label) if isinstance(label, str) else "") or (_js_trim(field) if isinstance(field, str) else "")
+        rows[index].append(
+            {
+                "id": raw_id if isinstance(raw_id, str) else None,
+                "num": f"D{number}-{len(rows[index]) + 1:02d}",
+                "name": name or UNNAMED_FINDING,
+                "page": page if in_range else start,  # 파일 쪽(상자와 무관)
+                "located": in_range and isinstance(boxes, list) and len(boxes) > 0,
+                "low": isinstance(finding.get("confidence"), str) and finding["confidence"] == "low",
+            }
+        )
+    items: list[dict[str, Any]] = []
+    for doc in visible:
+        index = doc["index"]
+        _number, start, _end = spans[index]
+        first_page = {"label": ITEM_OPEN_LABEL.format(p=1), "page": start, "finding_ids": [], "finding_id": None}
+        for f in rows[index]:  # nolocation — 위치 없는 항목마다
+            if f["located"] or f["id"] is None:
+                continue
+            title, desc, next_step = ITEM_NOLOCATION
+            evidence = [{"label": ITEM_OPEN_LABEL.format(p=f["page"] - start + 1), "page": f["page"], "finding_ids": [f["id"]], "finding_id": f["id"]}]
+            text = (title, desc.format(num=f["num"], name=_clip_name(f["name"])), next_step)
+            items.append(_item_want(f"nolocation:{f['id']}", "nolocation", index, f["page"], f["id"], text, evidence))
+        low = [f for f in rows[index] if f["low"]]
+        if low:  # lowconf — 서류마다 하나, 근거는 위치 있는 low 항목을 파일 쪽별로(쪽 오름차순 앞 20쪽)
+            count = len(low)
+            nums = ", ".join(f["num"] for f in low[:ITEM_MAX_NUMS]) + (f" 외 {count - ITEM_MAX_NUMS}건" if count > ITEM_MAX_NUMS else "")
+            pages: dict[int, list[str]] = {}
+            for f in low:
+                if f["located"] and f["id"] is not None:
+                    pages.setdefault(f["page"], []).append(f["id"])
+            evidence = [
+                {"label": ITEM_VALUES_LABEL.format(p=p - start + 1), "page": p, "finding_ids": pages[p], "finding_id": None}
+                for p in sorted(pages)[:ITEM_MAX_EVIDENCE]
+            ]
+            title, desc, next_step = ITEM_LOWCONF
+            text = (title.format(n=count), desc.format(nums=nums), next_step)
+            items.append(_item_want(f"lowconf:{index}", "lowconf", index, evidence[0]["page"] if evidence else start, None, text, evidence))
+        if isinstance(doc.get("kind"), str) and doc["kind"] == "other":
+            items.append(_item_want(f"other:{index}", "other", index, start, None, ITEM_OTHER, [first_page]))
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in items:  # 같은 계약 id 는 처음 것만
+        if item["id"] not in seen:
+            seen.add(item["id"])
+            out.append(item)
+    for number, item in enumerate(out, 1):
+        item["number"] = f"R-{number:02d}"
+    return out, ""
+
+
+def _items_shape_problems(items: Any, result: Mapping[str, Any]) -> list[str]:
+    """result.items 의 계약 모양(값은 출력하지 않고 'items[n].키' 위치만): 키·순서·타입, R-nn 1부터 연속, id 겹치지 않음,
+    document_index 가 보이는 서류, page·근거 page 가 그 서류 화면 쪽 범위 안, finding_id·finding_ids 가 그 서류의 탐지 항목."""
+    if not isinstance(items, list):
+        return ["result.items 가 목록이 아님"]
+    spans = {d["index"]: (d["page_start"], max(d["page_start"], d["page_end"])) for d in _visible_docs(result.get("documents"))}
+    own: dict[int, set[str]] = {index: set() for index in spans}
+    findings = result.get("findings")
+    for f in findings if isinstance(findings, list) else []:
+        index = f.get("document_index") if isinstance(f, Mapping) else None
+        if _is_int(index) and index in own and isinstance(f.get("id"), str):
+            own[index].add(f["id"])
+    problems: list[str] = []
+    for n, item in enumerate(items):
+        where = f"items[{n}]"
+        if not isinstance(item, Mapping) or list(item) != list(ITEM_KEYS):
+            problems.append(f"{where}: 키·순서가 계약과 다름")
+            continue
+        index = item["document_index"]
+        visible = _is_int(index) and index in spans
+        span, mine = (spans[index], own[index]) if visible else ((0, -1), set())
+        kind, finding_id = item["type"], item["finding_id"]
+        checks = [
+            (isinstance(item["id"], str) and item["id"] != "", "id"),
+            (isinstance(item["number"], str), "number"),
+            (isinstance(kind, str) and kind in ITEM_TYPES, "type"),
+            (visible, "document_index(보이는 서류)"),
+            (_is_int(item["page"]) and span[0] <= item["page"] <= span[1], "page(서류 쪽 범위)"),
+            (finding_id is None or (isinstance(finding_id, str) and finding_id in mine), "finding_id(그 서류의 탐지 항목)"),
+            ((kind == "nolocation") == isinstance(finding_id, str), "finding_id(nolocation 만 있음)"),
+            (all(isinstance(item[k], str) and item[k] != "" for k in ("title", "desc", "next")), "title·desc·next"),
+            (isinstance(item["evidence"], list) and len(item["evidence"]) <= ITEM_MAX_EVIDENCE, "evidence(목록·20개 이하)"),
+        ]
+        problems += [f"{where}.{name}" for passed, name in checks if not passed]
+        for m, ev in enumerate(item["evidence"] if isinstance(item["evidence"], list) else []):
+            at = f"{where}.evidence[{m}]"
+            if not isinstance(ev, Mapping) or list(ev) != list(ITEM_EVIDENCE_KEYS):
+                problems.append(f"{at}: 키·순서가 계약과 다름")
+                continue
+            ids = ev["finding_ids"]
+            ev_checks = [
+                (isinstance(ev["label"], str) and ev["label"] != "", "label"),
+                (_is_int(ev["page"]) and span[0] <= ev["page"] <= span[1], "page(서류 쪽 범위)"),
+                (isinstance(ids, list) and all(isinstance(i, str) and i in mine for i in ids), "finding_ids(그 서류의 탐지 항목)"),
+                (ev["finding_id"] is None or (isinstance(ev["finding_id"], str) and ev["finding_id"] in mine), "finding_id"),
+            ]
+            problems += [f"{at}.{name}" for passed, name in ev_checks if not passed]
+    numbers = [item.get("number") if isinstance(item, Mapping) else None for item in items]
+    if numbers != [f"R-{n:02d}" for n in range(1, len(items) + 1)]:
+        problems.append("number 가 R-01 부터 이어지지 않음")
+    ids = [item.get("id") for item in items if isinstance(item, Mapping) and isinstance(item.get("id"), str)]
+    if len(set(ids)) != len(ids):
+        problems.append("id 가 겹침")
+    return problems
+
+
+def _items_compare(got: list[Any], want: list[dict[str, Any]]) -> list[str]:
+    """받은 result.items 와 따로 계산한 기대값을 비교 — 다른 자리만('items[n].키' — 값은 출력하지 않는다)."""
+    problems = [f"개수 {len(got)}(기대 {len(want)})"] if len(got) != len(want) else []
+    for n, (item, expected) in enumerate(zip(got, want, strict=False)):
+        if not isinstance(item, Mapping):
+            problems.append(f"items[{n}]: 객체가 아님")
+            continue
+        problems += [f"items[{n}].{key}: 기대값과 다름" for key in ITEM_KEYS if key != "evidence" and item.get(key) != expected[key]]
+        evidence = item.get("evidence")
+        if not isinstance(evidence, list) or len(evidence) != len(expected["evidence"]):
+            problems.append(f"items[{n}].evidence: 개수가 기대와 다름")
+            continue
+        for m, (ev, want_ev) in enumerate(zip(evidence, expected["evidence"], strict=True)):
+            problems += [
+                f"items[{n}].evidence[{m}].{key}: 기대값과 다름"
+                for key in ITEM_EVIDENCE_KEYS
+                if not isinstance(ev, Mapping) or ev.get(key) != want_ev[key]
+            ]
+    return problems
+
+
+def _kinds(items: Any) -> dict[str, int]:
+    """종류별 개수(계약 밖 종류는 '계약 밖' — 응답 글자를 그대로 출력하지 않는다)."""
+    counts: Counter[str] = Counter()
+    for item in items if isinstance(items, list) else []:
+        kind = item.get("type") if isinstance(item, Mapping) else None
+        counts[kind if isinstance(kind, str) and kind in ITEM_TYPES else "계약 밖"] += 1
+    return dict(counts)
+
+
+def _print_items(result: Mapping[str, Any]) -> bool:
+    """result.items — 계약 모양 + 따로 계산한 기대값과 같음. 출력은 개수·종류 분포·문제 위치만(글·id 는 출력하지 않는다)."""
+    items = result.get("items")
+    got = items if isinstance(items, list) else []
+    shape = _items_shape_problems(items, result)
+    evidence = sum(len(i["evidence"]) for i in got if isinstance(i, Mapping) and isinstance(i.get("evidence"), list))
+    _say("검토사항(result.items):")
+    _say(f"  {len(got)}개 · 종류 {_kinds(got)} · 근거 {evidence}개")
+    _say(f"  계약 모양(키·순서·타입·R-nn 연속·id 중복 없음·서류·쪽·탐지 항목 참조): {'맞음' if not shape else f'문제 {len(shape)}개'}")
+    for problem in shape[:10]:
+        _say(f"    - {_short(problem)}")
+    want, reason = _expected_items(result)
+    if want is None:
+        _say(f"  따로 계산한 기대값: 계산할 수 없음 — {reason}: 불일치")
+        return False
+    differs = _items_compare(got, want)
+    _say(
+        f"  따로 계산한 기대값(documents·findings → nolocation·lowconf·other, 검증 모두 green·null → missing 0): "
+        f"{len(want)}개 · 종류 {_kinds(want)}: {_mark(not differs)}"
+    )
+    for problem in differs[:10]:
+        _say(f"    - {_short(problem)}")
+    return not shape and not differs
+
+
+def _result_items(row: Any) -> list[Mapping[str, Any]]:
+    """조회 응답의 result.items(객체인 항목만 — 모양 판정은 _items_shape_problems)."""
+    result = row.get("result") if isinstance(row, Mapping) else None
+    items = result.get("items") if isinstance(result, Mapping) else None
+    return [i for i in items if isinstance(i, Mapping)] if isinstance(items, list) else []
+
+
 def _verify_done(run: Run, analysis_id: str) -> bool:
     """done 분석을 다시 읽어(기본·?include=stages) 요약·화면용 결과·응답 크기를 확인한다. done 조회는 Upstage 를 부르지 않는다."""
     plain, row = _get(run, analysis_id)
@@ -563,6 +864,7 @@ def _verify_done(run: Run, analysis_id: str) -> bool:
     result = row.get("result") if isinstance(row.get("result"), Mapping) else {}
     ok = _print_summary(result)
     ok = _print_view(result) and ok
+    ok = _print_items(result) and ok
 
     staged, staged_row = _get(run, analysis_id, {"include": "stages"})
     staged_result = staged_row.get("result") if isinstance(staged_row, Mapping) else None
@@ -769,7 +1071,7 @@ def _line_problems(line: Any, want: Mapping[str, Any], where: str) -> list[str]:
 
 
 def _review_shape_problems(row: Mapping[str, Any], targets: list[dict[str, str]]) -> list[str]:
-    """review 블록의 모양(값은 보지 않음): 키·status·findings·history S1·S2·version."""
+    """review 블록의 모양(값은 보지 않음): 키·status·findings·items·history S1·S2·version."""
     review = row.get("review")
     if not isinstance(review, Mapping):
         return ["review 가 객체가 아님(검토 기록을 읽지 못함)"]
@@ -777,7 +1079,7 @@ def _review_shape_problems(row: Mapping[str, Any], targets: list[dict[str, str]]
         return [f"review 키가 계약과 다름 {sorted(set(review) ^ REVIEW_KEYS)}"]
     problems: list[str] = []
     if review["status"] not in ("needed", "done"):
-        problems.append(f"status {review['status']!r}")
+        problems.append(f"status {_shown(review['status'], REVIEW_STATUSES)}")
     version = review["version"]
     if not (_is_int(version) and version >= 0):
         problems.append("version 이 0 이상 정수가 아님")
@@ -786,10 +1088,25 @@ def _review_shape_problems(row: Mapping[str, Any], targets: list[dict[str, str]]
     if not isinstance(findings, Mapping):
         problems.append("findings 가 객체가 아님")
     else:
-        problems += [f"findings: 검토 가능 항목이 아닌 id {str(k)[:40]}" for k in findings if k not in ids][:3]
-        problems += [
-            f"findings {str(k)[:40]}: 키가 계약과 다름" for k, v in findings.items() if not (isinstance(v, Mapping) and set(v) == REVIEW_FINDING_KEYS)
-        ][:3]
+        # 받은 키(id)는 출력하지 않는다 — 개수만(V-T3-1 M1 과 같은 기준)
+        strangers = sum(1 for k in findings if k not in ids)
+        if strangers:
+            problems.append(f"findings: 검토 가능 항목이 아닌 id {strangers}개")
+        bad_values = sum(1 for v in findings.values() if not (isinstance(v, Mapping) and set(v) == REVIEW_FINDING_KEYS))
+        if bad_values:
+            problems.append(f"findings: 키가 계약과 다른 값 {bad_values}개")
+    # 검토사항 해결 기록(review-items §5.5): 지금 결과의 검토사항 id 만, 값은 정규화한 4키(id·처리 내용은 출력하지 않는다)
+    items = review["items"]
+    item_ids = {i["id"] for i in _result_items(row) if isinstance(i.get("id"), str)}
+    if not isinstance(items, Mapping):
+        problems.append("items 가 객체가 아님")
+    else:
+        strangers = sum(1 for k in items if k not in item_ids)
+        if strangers:
+            problems.append(f"items: 지금 결과의 검토사항이 아닌 id {strangers}개")
+        bad = sum(1 for v in items.values() if not _review_item_ok(v))
+        if bad:
+            problems.append(f"items: 값 모양(resolved·note·resolved_at·resolved_by)이 계약과 다른 것 {bad}개")
     history = review["history"]
     if not isinstance(history, list) or len(history) < 2:
         problems.append("history 에 S1·S2 두 줄이 없음")
@@ -804,13 +1121,35 @@ def _review_shape_problems(row: Mapping[str, Any], targets: list[dict[str, str]]
     return problems
 
 
+def _review_item_ok(value: Any) -> bool:
+    """review.items 값 하나가 정규화한 모양인지: 정확히 4키, resolved bool · note str · resolved_at str|null · resolved_by str."""
+    return (
+        isinstance(value, Mapping)
+        and set(value) == REVIEW_ITEM_KEYS
+        and isinstance(value["resolved"], bool)
+        and isinstance(value["note"], str)
+        and (value["resolved_at"] is None or isinstance(value["resolved_at"], str))
+        and isinstance(value["resolved_by"], str)
+    )
+
+
 def _first_review_problems(row: Mapping[str, Any], targets: list[dict[str, str]]) -> list[str]:
-    """새 분석의 처음 review: needed·빈 값·findings {}·S1·S2 만·version 0."""
+    """새 분석의 처음 review: needed·빈 값·findings {}·items {}·S1·S2 만·version 0."""
     problems = _review_shape_problems(row, targets)
     review = row.get("review")
     if problems or not isinstance(review, Mapping):
         return problems
-    want = {"status": "needed", "memo": "", "memo_at": None, "reviewer": "", "reviewed_at": None, "completion_note": "", "findings": {}, "version": 0}
+    want = {
+        "status": "needed",
+        "memo": "",
+        "memo_at": None,
+        "reviewer": "",
+        "reviewed_at": None,
+        "completion_note": "",
+        "findings": {},
+        "items": {},
+        "version": 0,
+    }
     problems += [f"{key}: 계약과 다름" for key, value in want.items() if review.get(key) != value]
     if len(review["history"]) != 2:
         problems.append(f"history {len(review['history'])}줄(기대 S1·S2 2줄)")
@@ -924,7 +1263,7 @@ class _ReviewFlow:
             problems.append("응답의 upstage_status·poll_error 가 null 이 아님")
         if isinstance(analysis.get("result"), Mapping) and "stages" in analysis["result"]:
             problems.append("응답 result 에 stages 가 있음")
-        for key in ("created_at", "updated_at"):
+        for key in ("created_at", "updated_at", "started_at"):  # 분석 행은 쓰지 않는다(분석 시각·걸린 시간 불변)
             if analysis.get(key) != self.first.get(key):
                 problems.append(f"분석 {key} 가 바뀜")
         changed = data["changed"]
@@ -933,15 +1272,15 @@ class _ReviewFlow:
             self.writes += 1
         if line is None:
             if changed is not False:
-                problems.append(f"changed {changed!r}(기대 false)")
+                problems.append(f"changed {_shown(changed)}(기대 false)")
             if review != before:
                 problems.append("바뀐 것이 없는데 review 가 바뀜")
         else:
             version = before["version"] + 1
             if changed is not True:
-                problems.append(f"changed {changed!r}(기대 true)")
+                problems.append(f"changed {_shown(changed)}(기대 true)")
             if review.get("version") != version:
-                problems.append(f"version {review.get('version')!r}(기대 {version})")
+                problems.append(f"version {_shown(review.get('version'))}(기대 {version})")
             if len(history) != len(old) + 1 or history[:-1] != old:
                 problems.append(f"이력 {len(history)}줄(기대 앞 {len(old)}줄 그대로 + 1줄)")
             else:
@@ -956,7 +1295,7 @@ class _ReviewFlow:
         _, reread = self._reread(analysis)
         problems += reread
         self.review = review  # 실패해도 서버의 지금 값을 기준으로 다음 단계를 본다
-        note = f"이력 {len(history)}줄 · version {review.get('version')}" + ("" if changed else " · changed false")
+        note = f"이력 {len(history)}줄 · version {_shown(review.get('version'))}" + ("" if changed else " · changed false")
         return self.report(name, problems, note)
 
     def refuse(self, name: str, body: Mapping[str, Any], status: int, detail: str) -> bool:
@@ -990,6 +1329,129 @@ class _ReviewFlow:
         return []
 
 
+# --- 검토사항 해결·다시 열기(review-items BRIEF §5.6) --------------------------------------------------
+# 기대 문구·값은 계약(데모 코어 resolveItem·reopenItem 과 같은 전이·문구)을 그대로 적는다(백엔드 함수를 쓰지 않음).
+
+
+def _item_target(item: Any, position: int) -> dict[str, str] | None:
+    """검토사항 하나(목록의 position 번째, 1부터) → 동작 대상(계약 id·화면 번호·이력 target '{번호} {종류 라벨}').
+
+    출력·기대 이력에 쓰는 번호는 이 스크립트가 만든 순번 R-{position:02d} 이고, 받은 number 가 그것과 **같을 때만** 대상으로
+    삼는다 — 받은 문자열은 출력에 넣지 않는다(V-T3-1 M1). id 는 본문(item_id)에만 쓰고 출력하지 않는다. 모양이 틀리면 None."""
+    if not isinstance(item, Mapping):
+        return None
+    local = f"R-{position:02d}"
+    item_id, number, kind = item.get("id"), item.get("number"), item.get("type")
+    if not (isinstance(item_id, str) and item_id and number == local and isinstance(kind, str) and kind in ITEM_TYPES):
+        return None
+    return {"id": item_id, "num": local, "target": f"{local} {ITEM_TYPES[kind]}"}
+
+
+def _item_checks(x: Mapping[str, str]) -> tuple[Callable[..., list[str]], Callable[[Mapping[str, Any], Mapping[str, Any]], list[str]]]:
+    """검토사항 x 의 응답 review 저장 값 확인(value)과 '다른 것은 그대로' 확인(kept — 다른 검토사항·탐지 항목·메모 등)."""
+
+    def value(review: Mapping[str, Any], **want: Any) -> list[str]:
+        items = review.get("items") if isinstance(review.get("items"), Mapping) else {}
+        saved = items.get(x["id"])
+        if not _review_item_ok(saved):
+            return [f"{x['num']}: review.items 저장 값 모양이 다름"]
+        return [f"{x['num']} {key}: 계약과 다름" for key, expected in want.items() if saved.get(key) != expected]
+
+    def kept(review: Mapping[str, Any], before: Mapping[str, Any]) -> list[str]:
+        problems = [f"review {key} 가 바뀜" for key in sorted(REVIEW_KEYS - {"items", "history", "version"}) if review.get(key) != before.get(key)]
+        now = review.get("items") if isinstance(review.get("items"), Mapping) else {}
+        old = before.get("items") if isinstance(before.get("items"), Mapping) else {}
+        if {k: v for k, v in now.items() if k != x["id"]} != {k: v for k, v in old.items() if k != x["id"]}:
+            problems.append("다른 검토사항의 저장 값이 바뀜")
+        return problems
+
+    return value, kept
+
+
+def _history_at(review: Mapping[str, Any]) -> Any:
+    history = review.get("history")
+    return history[-1].get("at") if isinstance(history, list) and history and isinstance(history[-1], Mapping) else None
+
+
+def _check_item_actions(flow: _ReviewFlow, result: Any) -> dict[str, str] | None:
+    """첫 검토사항(R-01)으로 해결 → 다시 해결 409 → 다시 열기 → 다시 열기 409 → 다시 해결, 없는 id 404, 400 두 가지.
+    끝에 해결된 검토사항(대상)을 돌려준다.
+
+    동작을 보내기 **전에** result.items 전체가 계약 모양인지(done 확인과 같은 _items_shape_problems — 키·순서·타입·R-nn 1부터
+    연속·id 중복 없음·서류·쪽·참조) 본다. 하나라도 틀리면 값 없는 실패 위치(items[n].필드)만 적고 검토사항 동작을 보내지 않는다
+    (None — 받은 번호·id·글을 단계 이름·문제 줄에 넣지 않게, V-T3-1 M1). 모양은 맞고 done 기대값만 다른 결과(검증 실패 서류 등)는
+    그대로 확인한다. 검토사항이 0개면 건너뛰고 None."""
+    view = result if isinstance(result, Mapping) else {}
+    raw = view.get("items")
+    shape = _items_shape_problems(raw, view)
+    if shape:
+        flow.report("검토사항 모양 — 계약과 달라 해결·다시 열기를 보내지 않음", shape, f"문제 {len(shape)}개")
+        return None
+    items: list[Mapping[str, Any]] = list(raw)  # 모양 검사를 지나 모두 객체
+    if not items:
+        _say("  검토사항 해결·다시 열기 확인 건너뜀(검토사항 0개)")
+        return None
+    x = _item_target(items[0], 1)
+    if x is None:  # 모양 검사를 지났으면 생기지 않는다
+        flow.report("검토사항 해결·다시 열기 — 첫 검토사항", ["items[0]: id·number·type 이 계약과 다름"])
+        return None
+    value, kept = _item_checks(x)
+    resolve = {"type": "resolve_item", "item_id": x["id"], "note": TEXT_ITEM_RESOLVE}
+    reopen = {"type": "reopen_item", "item_id": x["id"]}
+
+    flow.write(
+        f"resolve_item({x['num']})",
+        resolve,
+        ("resolve", x["target"], "미해결 → 해결", TEXT_ITEM_RESOLVE),
+        lambda r, b: value(r, resolved=True, note=TEXT_ITEM_RESOLVE, resolved_at=_history_at(r), resolved_by=REVIEW_ACTOR) + kept(r, b),
+    )
+    flow.refuse(f"resolve_item 다시({x['num']}) → 409 검토사항 상태 바뀜", resolve, 409, MSG_ITEM_STATE_CHANGED)
+
+    def reopened(review: Mapping[str, Any], before: Mapping[str, Any]) -> list[str]:
+        # 다시 열기는 resolved 만 false — 처리 내용·해결 시각·처리자는 남는다(데모 reopenItem 과 같다)
+        old = (before.get("items") or {}).get(x["id"]) if isinstance(before.get("items"), Mapping) else None
+        old_at = old.get("resolved_at") if isinstance(old, Mapping) else None
+        problems = value(review, resolved=False, note=TEXT_ITEM_RESOLVE, resolved_at=old_at, resolved_by=REVIEW_ACTOR)
+        now = (review.get("items") or {}).get(x["id"]) if isinstance(review.get("items"), Mapping) else None
+        if not isinstance(now, Mapping) or _when(now.get("resolved_at")) is None:
+            problems.append(f"{x['num']} resolved_at 이 남지 않음")
+        return problems + kept(review, before)
+
+    flow.write(f"reopen_item({x['num']})", reopen, ("reopenItem", x["target"], "해결 → 미해결", ""), reopened)
+    flow.refuse(f"reopen_item 다시({x['num']}) → 409 검토사항 상태 바뀜", reopen, 409, MSG_ITEM_STATE_CHANGED)
+    flow.write(
+        f"resolve_item 다시 해결({x['num']} · 새 처리 내용)",
+        {**resolve, "note": TEXT_ITEM_RESOLVE_AGAIN},
+        ("resolve", x["target"], "미해결 → 해결", TEXT_ITEM_RESOLVE_AGAIN),
+        lambda r, b: value(r, resolved=True, note=TEXT_ITEM_RESOLVE_AGAIN, resolved_at=_history_at(r), resolved_by=REVIEW_ACTOR)
+        + kept(r, b),
+    )
+    ids = {i.get("id") for i in items if isinstance(i.get("id"), str)}
+    unknown = f"{REVIEW_ACTOR}:없는 검토사항"
+    while unknown in ids:
+        unknown += "_"
+    flow.refuse("없는 item_id → 404", {"type": "resolve_item", "item_id": unknown, "note": ""}, 404, MSG_ITEM_NOT_FOUND)
+    flow.refuse(f"reopen_item 에 note → 400({x['num']})", {**reopen, "note": ""}, 400, MSG_REVIEW_BAD_REQUEST)
+    flow.refuse(f"resolve_item 501자 처리 내용 → 400({x['num']})", {**resolve, "note": "가" * 501}, 400, MSG_REVIEW_TEXT_TOO_LONG)
+    return x
+
+
+def _check_locked_items(flow: _ReviewFlow, items: list[Mapping[str, Any]], resolved: Mapping[str, str] | None) -> None:
+    """검토 완료(잠김) 동안 resolve_item·reopen_item → 409 잠김. 해결하지 않은 다른 검토사항이 있으면 그것을 해결하려 한다
+    (상태 409 와 섞이지 않게), 다시 열기는 해결한 검토사항으로."""
+    if resolved is None:
+        return
+    targets = (_item_target(item, n) for n, item in enumerate(items, 1) if n > 1)
+    other = next((t for t in targets if t is not None and t["id"] != resolved["id"]), None) or resolved
+    flow.refuse(
+        f"잠김 — resolve_item({other['num']}) → 409",
+        {"type": "resolve_item", "item_id": other["id"], "note": TEXT_ITEM_RESOLVE},
+        409,
+        MSG_REVIEW_LOCKED,
+    )
+    flow.refuse(f"잠김 — reopen_item({resolved['num']}) → 409", {"type": "reopen_item", "item_id": resolved["id"]}, 409, MSG_REVIEW_LOCKED)
+
+
 def _check_reviews(run: Run, analysis_id: str) -> bool:
     """새로 만든 분석(done)에 검토 동작을 차례로 보내 확인한다. 기존 분석에는 부르지 않는다(_check_review_shape 만)."""
     _say(f"검토 동작 확인(이번 실행이 만든 분석에만 씀 · actor {REVIEW_ACTOR}):")
@@ -1001,8 +1463,10 @@ def _check_reviews(run: Run, analysis_id: str) -> bool:
     problems = _first_review_problems(first, targets)
     if len({t["id"] for t in targets}) < 3:
         problems.append(f"검토 가능 항목이 3개보다 적음({len(targets)})")
+    items = _result_items(first)  # 서버가 계산한 검토사항(모양·기대값은 done 확인이 본다)
     flow = _ReviewFlow(run, analysis_id, first)
-    if not flow.report("처음 조회 — needed·version 0·findings {}·S1·S2", problems, f"검토 가능 항목 {len(targets)}"):
+    note = f"검토 가능 항목 {len(targets)} · 검토사항 {len(items)}"
+    if not flow.report("처음 조회 — needed·version 0·findings {}·items {}·S1·S2", problems, note):
         _say("검토 동작 확인: 처음 조회가 기대와 달라 동작을 보내지 않습니다")
         return False
     a, b, c = targets[0], targets[1], targets[2]
@@ -1106,16 +1570,14 @@ def _check_reviews(run: Run, analysis_id: str) -> bool:
         memo_check,
     )
 
+    # 검토사항 해결·다시 열기(review-items §5.6) — 끝에 첫 검토사항 하나가 해결된 상태(검토사항 0개면 건너뜀,
+    # result.items 모양이 계약과 다르면 값 없는 실패 위치만 적고 보내지 않음)
+    resolved = _check_item_actions(flow, first.get("result"))
+
     findings_now = flow.review.get("findings") if isinstance(flow.review.get("findings"), Mapping) else {}
     left = sum(1 for t in targets if ((findings_now.get(t["id"]) or {}).get("status") or "open") == "open")
-    # 미해결 검토사항(review-items §5.6 — 이 흐름은 검토사항을 해결하지 않으므로 result.items 중 review.items 가 해결이 아닌 것)
-    result_items = first["result"].get("items") if isinstance(first.get("result"), Mapping) else None
-    items_now = flow.review.get("items") if isinstance(flow.review.get("items"), Mapping) else {}
-    open_items = sum(
-        1
-        for i in (result_items if isinstance(result_items, list) else [])
-        if isinstance(i, Mapping) and not (isinstance(i.get("id"), str) and (items_now.get(i["id"]) or {}).get("resolved") is True)
-    )
+    # 미해결 검토사항(review-items §5.6) = 검토사항 수 − 이 흐름이 해결한 1개(서버 값이 아니라 이 흐름이 보낸 동작으로 센다)
+    open_items = len(items) - (1 if resolved is not None else 0)
     rest_parts = ([f"미확인 탐지 {left}건"] if left else []) + ([f"미해결 검토사항 {open_items}건"] if open_items else [])
     rest = f" (남은 항목: {', '.join(rest_parts)})" if rest_parts else ""
 
@@ -1130,7 +1592,7 @@ def _check_reviews(run: Run, analysis_id: str) -> bool:
         return problems
 
     flow.write(
-        f"complete_review(남은 미확인 {left}건)",
+        f"complete_review(남은 미확인 {left}건 · 미해결 검토사항 {open_items}건)",
         {"type": "complete_review", "note": TEXT_COMPLETE},
         ("complete", ANALYSIS_TARGET, f"검토 필요 → 검토 완료{rest}", TEXT_COMPLETE),
         complete_check,
@@ -1142,6 +1604,7 @@ def _check_reviews(run: Run, analysis_id: str) -> bool:
         MSG_REVIEW_LOCKED,
     )
     flow.refuse("이미 완료 — complete_review → 409", {"type": "complete_review", "note": ""}, 409, MSG_REVIEW_ALREADY_DONE)
+    _check_locked_items(flow, items, resolved)  # 잠긴 채 resolve_item·reopen_item → 409 잠김
 
     # 내보내기 기록(log_export) — 검토 완료로 잠긴 상태에서도 된다. 이력 한 줄 + version 만, review 의 다른 값은 그대로.
     names = {fmt: _export_name(first, fmt) for fmt in EXPORT_SUFFIXES}
@@ -1155,7 +1618,7 @@ def _check_reviews(run: Run, analysis_id: str) -> bool:
             # 잠김과 무관: 이력·version 말고는 바뀌지 않는다(검토 상태 done·항목 값·메모·검토자·완료 시각)
             problems = [f"review {key} 가 바뀜" for key in sorted(REVIEW_KEYS - {"history", "version"}) if review.get(key) != before.get(key)]
             if review.get("status") != "done":
-                problems.append(f"status {review.get('status')!r}(기대 done — 잠긴 상태 그대로)")
+                problems.append(f"status {_shown(review.get('status'), REVIEW_STATUSES)}(기대 done — 잠긴 상태 그대로)")
             return problems
 
         for fmt, size, state in (("csv", EXPORT_CSV_SIZE, "handed"), ("json", EXPORT_JSON_SIZE, "saved")):
@@ -1180,9 +1643,12 @@ def _check_reviews(run: Run, analysis_id: str) -> bool:
             MSG_REVIEW_BAD_REQUEST,
         )
 
-    def reopen_check(review: Mapping[str, Any], _before: Mapping[str, Any]) -> list[str]:
+    def reopen_check(review: Mapping[str, Any], before: Mapping[str, Any]) -> list[str]:
         want = {"status": "needed", "reviewed_at": None, "reviewer": REVIEW_ACTOR, "completion_note": TEXT_COMPLETE, "memo": TEXT_MEMO}
-        return [f"{key}: 계약과 다름" for key, value in want.items() if review.get(key) != value]
+        problems = [f"{key}: 계약과 다름" for key, value in want.items() if review.get(key) != value]
+        if review.get("items") != before.get("items"):  # 다시 열기는 검토사항 해결 기록을 바꾸지 않는다
+            problems.append("review items 가 바뀜")
+        return problems
 
     flow.write(
         "reopen_review(reviewer·completion_note 남음, reviewed_at null)",
@@ -1214,16 +1680,25 @@ def _check_reviews(run: Run, analysis_id: str) -> bool:
         elif any(later < earlier for earlier, later in zip(times, times[1:], strict=False)):
             problems.append("이력 at 이 줄어드는 곳이 있음")
         if not (len(stored) == flow.expected_writes == flow.writes == version):
-            problems.append(f"저장 이력 {len(stored)}줄 · 쓴 동작 {flow.writes} · 기대 {flow.expected_writes} · version {version}")
-        for key in ("created_at", "updated_at"):
+            problems.append(f"저장 이력 {len(stored)}줄 · 쓴 동작 {flow.writes} · 기대 {flow.expected_writes} · version {_shown(version)}")
+        for key in ("created_at", "updated_at", "started_at"):
             if last.get(key) != first.get(key):
                 problems.append(f"분석 {key} 가 처음 조회와 다름")
         if review.get("status") != "needed":
-            problems.append(f"status {review.get('status')!r}(기대 needed)")
+            problems.append(f"status {_shown(review.get('status'), REVIEW_STATUSES)}(기대 needed)")
+        # 검토사항 해결 기록: 해결한 그 검토사항 하나만, 마지막 해결 값(다시 해결한 처리 내용) 그대로
+        saved_items = review.get("items") if isinstance(review.get("items"), Mapping) else None
+        want_ids = {resolved["id"]} if resolved is not None else set()
+        if saved_items is None or set(saved_items) != want_ids:
+            problems.append(f"review items 의 검토사항 수가 {len(saved_items) if saved_items is not None else '?'}개(기대 {len(want_ids)}개)")
+        elif resolved is not None:
+            value = saved_items[resolved["id"]]
+            if not (_review_item_ok(value) and value["resolved"] is True and value["note"] == TEXT_ITEM_RESOLVE_AGAIN and value["resolved_by"] == REVIEW_ACTOR):
+                problems.append(f"{resolved['num']}: 마지막 해결 값(해결 · 다시 해결한 처리 내용 · 처리자)이 아님")
     flow.report(
-        "마지막 — 이력 H1…Hn 연속·시간 순서·줄 수 = 쓴 동작 수·분석 created_at·updated_at 그대로",
+        "마지막 — 이력 H1…Hn 연속·시간 순서·줄 수 = 쓴 동작 수·분석 created_at·updated_at·started_at 그대로·검토사항 해결 기록",
         problems,
-        f"이력 {len(history)}줄(S1·S2 포함) · 쓴 동작 {flow.writes} · version {version}",
+        f"이력 {len(history)}줄(S1·S2 포함) · 쓴 동작 {flow.writes} · version {_shown(version)}",
     )
     ok = flow.failed == 0
     _say(f"검토 동작 확인: {flow.steps - flow.failed}/{flow.steps} 통과 · 쓴 동작 {flow.writes}건 — {'기대대로' if ok else '기대와 다름'}")
@@ -1231,7 +1706,7 @@ def _check_reviews(run: Run, analysis_id: str) -> bool:
 
 
 def _check_review_shape(run: Run, analysis_id: str) -> bool:
-    """--analysis-id: 기존 분석은 **읽기만** — review 블록 모양(status·findings·history S1·S2·version)만 본다(POST 없음)."""
+    """--analysis-id: 기존 분석은 **읽기만** — review 블록 모양(status·findings·items·history S1·S2·version)만 본다(POST 없음)."""
     response, row = _get(run, analysis_id)
     if response.status_code != 200 or not isinstance(row, Mapping):
         run.log(f"검토 기록 모양: 조회 실패 HTTP {response.status_code}")
@@ -1241,10 +1716,12 @@ def _check_review_shape(run: Run, analysis_id: str) -> bool:
     review = row.get("review") if isinstance(row.get("review"), Mapping) else {}
     history = review.get("history") if isinstance(review.get("history"), list) else []
     findings = review.get("findings") if isinstance(review.get("findings"), Mapping) else {}
-    default = review.get("status") == "needed" and findings == {} and len(history) == 2 and review.get("version") == 0
+    items = review.get("items") if isinstance(review.get("items"), Mapping) else {}
+    default = review.get("status") == "needed" and findings == {} and items == {} and len(history) == 2 and review.get("version") == 0
     _say(
-        f"검토 기록 모양(읽기만, 동작 보내지 않음): status={review.get('status')} · findings {len(findings)}개 · "
-        f"이력 {len(history)}줄(S1·S2 포함) · version {review.get('version')} · 기본값(검토 행 없음) {default}: "
+        f"검토 기록 모양(읽기만, 동작 보내지 않음): status={_plain(review.get('status'), REVIEW_STATUSES)} · findings {len(findings)}개 · "
+        f"검토사항 해결 기록 {len(items)}개 · "
+        f"이력 {len(history)}줄(S1·S2 포함) · version {_shown(review.get('version'))} · 기본값(검토 행 없음) {default}: "
         f"{'맞음' if not problems else f'문제 {len(problems)}개'}"
     )
     for problem in problems[:6]:
@@ -1546,7 +2023,7 @@ def _check_retry_history(
     checks.report(
         f"검토 이력 — [S1, 다시 분석 {len(retries)}줄(사유 = 앞 실패 이유), S2] · at 이 줄지 않음",
         problems,
-        f"이력 {len(history)}줄 · version {review.get('version')}",
+        f"이력 {len(history)}줄 · version {_shown(review.get('version'))}",
     )
     if not act:
         _say("  검토 동작 하나 뒤 이력 순서 확인 건너뜀(--no-review)")
@@ -1818,7 +2295,7 @@ def _flow_retry(
     ok = done
     if done:
         # 고정 기대값(done 확인)이 어긋나도 아래 새 확인은 따로 돌린다(섞이지 않게)
-        ok = run.verdict("done 확인(요약·화면용 결과 고정 기대값·응답 크기)", _verify_done(run, analysis_id))
+        ok = run.verdict("done 확인(요약·화면용 결과 고정 기대값·검토사항·응답 크기)", _verify_done(run, analysis_id))
         ok = run.verdict("원본 파일", _check_file(run, analysis_id, content)) and ok
         _check_retry_history(run, checks, analysis_id, reasons, marks, act=not args.no_review)
     retry_ok = run.verdict("다시 분석", checks.summary("다시 분석 확인"), new=True)
@@ -1945,7 +2422,7 @@ def _flow(run: Run, args: argparse.Namespace) -> int:
     ok = row["status"] == args.expect
     if row["status"] == "done":
         # 끝난 분석을 다시 읽어 확인한다(done 조회는 Upstage 를 부르지 않는다)
-        ok = run.verdict("done 확인(요약·화면용 결과 고정 기대값·응답 크기)", _verify_done(run, analysis_id)) and ok
+        ok = run.verdict("done 확인(요약·화면용 결과 고정 기대값·검토사항·응답 크기)", _verify_done(run, analysis_id)) and ok
         ok = run.verdict("원본 파일", _check_file(run, analysis_id, content)) and ok
         if args.no_review:
             _say("검토 동작 확인 건너뜀(--no-review)")

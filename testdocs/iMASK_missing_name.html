@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>개인 여신거래 신청서 (합성 — 신청인 성명 빈칸)</title>
+<!--
+  iMASK 필수 항목 검증 실패 확인용 합성 서류(1쪽, A4).
+  신청인 성명 칸만 비워 두었다. 나머지 값은 모두 지어낸 가상 값이다(실제 개인정보 아님 — example.com·예시로·가상은행 등).
+  PDF 는 Chrome 으로 인쇄해 만든다: page.pdf({ format: 'A4', printBackground: true }) → testdocs/iMASK_missing_name.pdf
+-->
+<style>
+  @page { size: A4; margin: 14mm 14mm 12mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; color: #111; font-size: 10.5pt; }
+  .top { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #1f3a68; padding-bottom: 6px; }
+  .bank { font-size: 11pt; font-weight: 700; color: #1f3a68; }
+  .docno { font-size: 9pt; color: #444; }
+  h1 { text-align: center; font-size: 19pt; letter-spacing: 6px; margin: 14px 0 4px; }
+  .sub { text-align: center; font-size: 9pt; color: #444; margin-bottom: 12px; }
+  h2 { font-size: 11pt; margin: 12px 0 4px; padding: 3px 6px; background: #e8eef7; border-left: 4px solid #1f3a68; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { border: 1px solid #555; padding: 6px 7px; vertical-align: middle; }
+  th { width: 21%; background: #f3f5f8; font-weight: 600; text-align: left; white-space: nowrap; }
+  td.blank { height: 26px; }
+  .note { font-size: 8.5pt; color: #333; margin: 6px 0 0; line-height: 1.5; }
+  .agree td { font-size: 9pt; }
+  .box { display: inline-block; width: 11px; height: 11px; border: 1px solid #333; margin-right: 4px; vertical-align: -1px; text-align: center; line-height: 10px; font-size: 9pt; }
+  .sign { margin-top: 14px; display: flex; justify-content: space-between; align-items: flex-end; }
+  .sign .date { font-size: 10.5pt; }
+  .sign .who { font-size: 10.5pt; }
+  .sign .line { display: inline-block; width: 120px; border-bottom: 1px solid #333; margin: 0 6px; }
+  .foot { margin-top: 14px; border-top: 1px solid #999; padding-top: 5px; font-size: 8pt; color: #555; display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+  <div class="top">
+    <div class="bank">가상은행 여신지원부</div>
+    <div class="docno">문서번호 LA-2026-0000 · 접수 지점 예시지점</div>
+  </div>
+
+  <h1>개인 여신거래 신청서</h1>
+  <div class="sub">아래 내용을 확인하고 대출을 신청합니다.</div>
+
+  <h2>1. 신청인 정보</h2>
+  <table>
+    <tr><th>성명</th><td class="blank"></td><th>생년월일</th><td>1990년 01월 01일</td></tr>
+    <tr><th>주민등록번호</th><td>900101-1000000</td><th>휴대전화</th><td>010-0000-0000</td></tr>
+    <tr><th>이메일</th><td colspan="3">applicant.sample@example.com</td></tr>
+    <tr><th>자택 주소</th><td colspan="3">서울특별시 중구 예시로 100, 가상아파트 101동 1001호</td></tr>
+  </table>
+
+  <h2>2. 직장 및 소득 정보</h2>
+  <table>
+    <tr><th>직장명</th><td>(주)가상테크</td><th>부서·직위</th><td>개발팀 · 대리</td></tr>
+    <tr><th>직장 주소</th><td colspan="3">서울특별시 강남구 예시대로 200, 가상빌딩 5층</td></tr>
+    <tr><th>연 소득</th><td>48,000,000원</td><th>입사일</th><td>2018년 03월 02일</td></tr>
+  </table>
+
+  <h2>3. 대출 신청 내용</h2>
+  <table>
+    <tr><th>대출 상품</th><td>가상 직장인 신용대출</td><th>신청 금액</th><td>30,000,000원</td></tr>
+    <tr><th>대출 기간</th><td>36개월</td><th>상환 방식</th><td>원리금 균등분할상환</td></tr>
+    <tr><th>자금 용도</th><td>생활 자금</td><th>희망 실행일</th><td>2026년 11월 20일</td></tr>
+    <tr><th>상환 계좌</th><td colspan="3">가상은행 000-0000-000000</td></tr>
+  </table>
+
+  <h2>4. 확인 및 동의</h2>
+  <table class="agree">
+    <tr><td><span class="box">✓</span>개인(신용)정보 수집·이용에 동의합니다.</td></tr>
+    <tr><td><span class="box">✓</span>개인(신용)정보 조회에 동의합니다.</td></tr>
+    <tr><td><span class="box">✓</span>신청서에 적은 내용이 사실임을 확인합니다.</td></tr>
+  </table>
+  <p class="note">※ 대출 심사 결과에 따라 신청 금액·기간이 달라질 수 있습니다. 심사에 필요한 서류는 접수 지점에서 따로 안내합니다.</p>
+
+  <div class="sign">
+    <div class="date">2026년 11월 04일</div>
+    <div class="who">신청인<span class="line"></span>(서명 또는 인)</div>
+  </div>
+
+  <div class="foot">
+    <span>가상은행 · 개인 여신거래 신청서 (1/1)</span>
+    <span>시험용 합성 서류 · 모든 값은 가상입니다</span>
+  </div>
+</body>
+</html>

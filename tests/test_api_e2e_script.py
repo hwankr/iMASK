@@ -6,7 +6,13 @@
 #  done 확인(T1 findings-api): 화면용 결과(documents·findings·overall)·응답 크기·원본 파일(sha256) 확인,
 #  --analysis-id(만들기·시작 없이 조회만), 계약 위반·원본 불일치·stages 섞임 → 종료 코드 1, 원문 값·서명 URL 미출력.
 #  done 응답은 손으로 지은 가짜 결과(fake_findings)를 FakeStore 에 넣고 실제 조회 로직(analysis_read_out)으로 만든 것이다.
-#  검토 동작 확인(review-actions): POST 를 실제 review_action_out 으로 처리해 — 흐름 전체 통과(단계 25·쓰기 15·analyses 불변),
+#  검토사항(review-items T3): done 확인의 result.items — 스크립트가 따로 계산한 기대값이 백엔드 build_items 와 여러 모양에서 같음,
+#  계약과 다른 items(키·순서·번호·id·쪽·참조·글·개수·종류)·green 아닌 검증(새 모양) → 종료 코드 1(출력은 위치·키 이름만),
+#  해결·다시 열기 흐름(본문·이력 H12~H15·해결 기록·잠긴 채 409 둘), 계약과 다른 응답 21가지 → 종료 코드 1, 검토사항 0개면 건너뜀,
+#  검증 실패 결과(missing 1개)도 검토 동작 통과, 읽기만 하는 확인의 review.items 모양.
+#  수정 1회차(V-T3-1 M1): 검토 동작을 켠 기본 흐름에서 items 모양이 틀리면(번호·id 타입·종류·빈 제목·쪽) 검토사항 POST 0개·
+#  받은 값 미출력, 모양은 맞고 값만 다르면(제목·설명·id) 흐름은 그대로 · 받은 값 미출력, review 블록 status·version·findings 키 미출력.
+#  검토 동작 확인(review-actions): POST 를 실제 review_action_out 으로 처리해 — 흐름 전체 통과(단계 35·쓰기 18·analyses 불변),
 #  예상과 다른 응답(409 자리에 200·이력 문구 다름·changed 다름) → 종료 코드 1, --no-review → review-actions 요청 없음,
 #  --analysis-id → 읽기만(review-actions 요청 없음 · 모양 확인), review null → 종료 코드 1.
 #  내보내기 기록(log_export, live-report T3): 잠긴 상태에서 CSV·JSON 두 번(본문 6키·이 분석의 이름·그럴듯한 크기, 이력 줄 H13·H14
@@ -56,18 +62,21 @@ DONE_RESULT = stored_result()  # format·job·summary·stages·response(가짜 �
 CREATED_AT = "2026-11-03T06:41:36.66673+00:00"  # done 분석의 시각(검토 동작 시각 = 지금보다 앞)
 UPDATED_AT = "2026-11-03T06:42:20.213505+00:00"
 REVIEW_PATH = f"/api/py/analyses/{ANALYSIS_ID}/review-actions"
-REVIEW_STEPS = 25  # 처음 조회 1 + 동작 23(쓰기 15 · changed false 1 · 거절 7) + 마지막 확인 1
-REVIEW_WRITES = 15  # 검토 동작 13 + 내보내기 기록 2(log_export CSV·JSON — 잠긴 상태에서)
-REVIEW_POSTS = 23  # 보내는 review-actions POST 수
-REVIEW_OK_POSTS = 16  # 그중 200(쓰기 15 + changed false 1)
+REVIEW_STEPS = 35  # 처음 조회 1 + 동작 33(쓰기 18 · changed false 1 · 거절 14) + 마지막 확인 1
+REVIEW_WRITES = 18  # 검토 동작 13 + 검토사항 해결·다시 열기·다시 해결 3 + 내보내기 기록 2(log_export CSV·JSON — 잠긴 상태에서)
+REVIEW_POSTS = 33  # 보내는 review-actions POST 수
+REVIEW_OK_POSTS = 19  # 그중 200(쓰기 18 + changed false 1)
 # 내보내기 기록(log_export) 기대값 — 계약대로 손으로 적은 값(ANALYSIS_ID 의 영숫자 앞 4자 '0000', CREATED_AT 06:41 UTC = 서울 11-03)
 EXPORT_CODE = "DG-20261103-0000"
 EXPORT_CSV = f"iMASK_{EXPORT_CODE}_검토결과_탐지항목.csv"
 EXPORT_JSON = f"iMASK_{EXPORT_CODE}_검토결과.json"
 EXPORT_WRONG = "iMASK_DG-20261104-0000_검토결과_탐지항목.csv"  # 하루 다른 날짜(이 분석의 이름이 아님)
-EXPORT_POSTS = (17, 18, 19, 20)  # log_export POST 순번(CSV · JSON · 이름 아님 400 · size 0 400) — 잠김 409 둘 뒤, 다시 열기 앞
+EXPORT_POSTS = (27, 28, 29, 30)  # log_export POST 순번(CSV · JSON · 이름 아님 400 · size 0 400) — 잠김 409 넷 뒤, 다시 열기 앞
 MSG_NOT_FOUND = "분석 건을 찾을 수 없습니다."
 REMOVED = "정리: 이번 실행이 만든 분석을 지웠습니다(DELETE 204 · 다시 읽어 404)"  # 끝 정리 — 204 뒤 다시 읽어 없음 확인
+# 검토사항 해결·다시 열기(review-items §5.6) — 검토 메모 뒤 · 검토 완료 앞에 보내는 8개(쓰기 3 · 409 둘 · 404 · 400 둘)
+ITEM_POST_TYPES = ["resolve_item", "resolve_item", "reopen_item", "reopen_item", "resolve_item", "resolve_item", "reopen_item", "resolve_item"]
+ITEM_POSTS = range(14, 22)  # 그 POST 순번(1부터)
 
 
 def load_script() -> Any:
@@ -779,7 +788,7 @@ def test_review_flow_passes_against_real_review_logic(script: Any, capsys: Any) 
     assert "[실패]" not in out
     assert f"검토 동작 확인: {REVIEW_STEPS}/{REVIEW_STEPS} 통과 · 쓴 동작 {REVIEW_WRITES}건 — 기대대로" in out
     assert "결과: 기대대로" in out
-    # 순서대로 보낸 동작(BRIEF §5.5 의 9종 + 내보내기 기록 log_export + 거절 확인)
+    # 순서대로 보낸 동작(BRIEF §5.5 의 9종 + 검토사항 해결·다시 열기 + 내보내기 기록 log_export + 거절 확인)
     assert _review_types(api) == [
         "set_status",
         "set_status",
@@ -794,9 +803,12 @@ def test_review_flow_passes_against_real_review_logic(script: Any, capsys: Any) 
         "save_finding_memo",
         "save_finding_memo",
         "save_memo",
+        *ITEM_POST_TYPES,
         "complete_review",
         "set_status",
         "complete_review",
+        "resolve_item",
+        "reopen_item",
         "log_export",
         "log_export",
         "log_export",
@@ -815,7 +827,7 @@ def test_review_flow_passes_against_real_review_logic(script: Any, capsys: Any) 
         ("csv", 6127, "handed", EXPORT_WRONG),
         ("csv", 0, "handed", EXPORT_CSV),
     ]
-    # 저장된 검토 행: 쓰기 15번 = version 15 = 이력 15줄, 다시 연 상태
+    # 저장된 검토 행: 쓰기 18번 = version 18 = 이력 18줄, 다시 연 상태
     saved = api.store.reviews[ANALYSIS_ID]
     assert saved["version"] == REVIEW_WRITES and len(saved["history"]) == REVIEW_WRITES
     assert [line["kind"] for line in saved["history"]] == [
@@ -830,15 +842,18 @@ def test_review_flow_passes_against_real_review_logic(script: Any, capsys: Any) 
         "fmemo",
         "fmemo",
         "memo",
+        "resolve",
+        "reopenItem",
+        "resolve",
         "complete",
         "export",
         "export",
         "reopen",
     ]
-    # 내보내기 줄 두 개(H13·H14) — 계약 문구(데모 logExport 와 같음), 크기 표기 = 화면 fmtSize(1,310,720 B → 1.3MB 동점 올림)
-    assert [{k: line[k] for k in ("id", "actor", "kind", "target", "change", "reason")} for line in saved["history"][12:14]] == [
-        {"id": "H13", "actor": "api_e2e", "kind": "export", "target": EXPORT_CSV, "change": "CSV · 6KB · 다운로드 요청", "reason": "민감한 값 마스킹"},
-        {"id": "H14", "actor": "api_e2e", "kind": "export", "target": EXPORT_JSON, "change": "JSON · 1.3MB · 저장 완료", "reason": "민감한 값 마스킹"},
+    # 내보내기 줄 두 개(H16·H17) — 계약 문구(데모 logExport 와 같음), 크기 표기 = 화면 fmtSize(1,310,720 B → 1.3MB 동점 올림)
+    assert [{k: line[k] for k in ("id", "actor", "kind", "target", "change", "reason")} for line in saved["history"][15:17]] == [
+        {"id": "H16", "actor": "api_e2e", "kind": "export", "target": EXPORT_CSV, "change": "CSV · 6KB · 다운로드 요청", "reason": "민감한 값 마스킹"},
+        {"id": "H17", "actor": "api_e2e", "kind": "export", "target": EXPORT_JSON, "change": "JSON · 1.3MB · 저장 완료", "reason": "민감한 값 마스킹"},
     ]
     assert saved["status"] == "needed" and saved["reviewer"] == "api_e2e" and saved["reviewed_at"] is None
     assert "log_export CSV·handed(잠긴 상태 · 6,127 B → 6KB)" in out and "log_export JSON·saved(잠긴 상태 · 1,310,720 B → 1.3MB)" in out
@@ -873,8 +888,8 @@ def _changed_true_without_write(api: FakeApi, body: dict[str, Any], n: int) -> h
 
 
 def _wrong_409_detail(api: FakeApi, body: dict[str, Any], n: int) -> httpx.Response | None:
-    # 잠김 409 자리(15번째 POST)에 다른 409 문구
-    if n == 15:
+    # 잠김 409 자리(23번째 POST — 검토 완료 뒤 set_status)에 다른 409 문구
+    if n == 23:
         return httpx.Response(409, json={"detail": "탐지 항목 상태가 바뀌었습니다. 새로 고친 뒤 다시 시도해 주세요."})
     return None
 
@@ -917,7 +932,7 @@ def test_analysis_id_mode_reads_review_shape_only(script: Any, capsys: Any) -> N
     assert api.store.reviews == {}
     out = capsys.readouterr().out
     assert (
-        "검토 기록 모양(읽기만, 동작 보내지 않음): status=needed · findings 0개 · 이력 2줄(S1·S2 포함) · version 0"
+        "검토 기록 모양(읽기만, 동작 보내지 않음): status=needed · findings 0개 · 검토사항 해결 기록 0개 · 이력 2줄(S1·S2 포함) · version 0"
         " · 기본값(검토 행 없음) True: 맞음"
     ) in out
     assert "결과: 기대대로 (기존 분석 확인)" in out
@@ -933,7 +948,7 @@ def test_analysis_id_mode_accepts_reviewed_analysis(script: Any, capsys: Any) ->
     assert _review_requests(api) == []
     assert api.store.reviews[ANALYSIS_ID]["version"] == 1
     out = capsys.readouterr().out
-    assert "status=needed · findings 1개 · 이력 3줄(S1·S2 포함) · version 1 · 기본값(검토 행 없음) False: 맞음" in out
+    assert "status=needed · findings 1개 · 검토사항 해결 기록 0개 · 이력 3줄(S1·S2 포함) · version 1 · 기본값(검토 행 없음) False: 맞음" in out
 
 
 def test_analysis_id_mode_no_review_skips_shape(script: Any, capsys: Any) -> None:
@@ -1156,16 +1171,17 @@ def test_mismatch_output_has_no_values(script: Any, capsys: Any) -> None:
 
 
 def test_export_steps_are_numbered_after_lock_checks(script: Any, capsys: Any) -> None:
-    # 단계 번호: 잠김 409(16)·이미 완료 409(17) 다음 18~21 이 내보내기 기록, 22 가 다시 열기
+    # 단계 번호: 잠김 409(24)·이미 완료 409(25)·잠긴 검토사항 409 둘(26·27) 다음 28~31 이 내보내기 기록, 32 가 다시 열기
     api = FakeApi(poll_mode="done")
     assert _run(script, api, _done_upstage(), ["--keep"]) == 0
     out = capsys.readouterr().out
-    assert "[통과] 17. 이미 완료 — complete_review → 409" in out
-    assert "[통과] 18. log_export CSV·handed(잠긴 상태 · 6,127 B → 6KB) — 이력 15줄 · version 13" in out
-    assert "[통과] 19. log_export JSON·saved(잠긴 상태 · 1,310,720 B → 1.3MB) — 이력 16줄 · version 14" in out
-    assert "[통과] 20. log_export 이 분석의 이름이 아님(서울 날짜 하루 다름) → 400 — HTTP 400 · 쓰기 없음" in out
-    assert "[통과] 21. log_export size 0 → 400 — HTTP 400 · 쓰기 없음" in out
-    assert "[통과] 22. reopen_review" in out
+    assert "[통과] 25. 이미 완료 — complete_review → 409" in out
+    assert "[통과] 27. 잠김 — reopen_item(R-01) → 409 — HTTP 409 · 쓰기 없음" in out
+    assert "[통과] 28. log_export CSV·handed(잠긴 상태 · 6,127 B → 6KB) — 이력 18줄 · version 16" in out
+    assert "[통과] 29. log_export JSON·saved(잠긴 상태 · 1,310,720 B → 1.3MB) — 이력 19줄 · version 17" in out
+    assert "[통과] 30. log_export 이 분석의 이름이 아님(서울 날짜 하루 다름) → 400 — HTTP 400 · 쓰기 없음" in out
+    assert "[통과] 31. log_export size 0 → 400 — HTTP 400 · 쓰기 없음" in out
+    assert "[통과] 32. reopen_review" in out
     assert f"[통과] {REVIEW_STEPS:02d}. 마지막 —" in out
     # 저장 행: 내보내기 줄 at 이 검토 완료 줄 at 보다 앞서지 않는다
     history = api.store.reviews[ANALYSIS_ID]["history"]
@@ -1240,7 +1256,7 @@ def test_unreadable_created_at_fails_the_export_step(script: Any, capsys: Any) -
     api.read_done = read_done  # type: ignore[method-assign]
     assert _run(script, api, _done_upstage(), []) == 1
     out = capsys.readouterr().out
-    assert "[실패] 18. log_export — 이 분석의 파일 이름" in out
+    assert "[실패] 28. log_export — 이 분석의 파일 이름" in out
     assert "log_export" not in _review_types(api)
 
 
@@ -1587,7 +1603,7 @@ def test_list_contract_problems_fail_separately(script: Any, capsys: Any, overri
     assert message in out
     assert out.split("목록 확인(완료 분석):", 1)[1].split("\n", 1)[0].endswith(": 실패")
     # 고정 기대값·검토 동작 확인은 그대로 통과 — 새 확인만 따로 실패로 보인다
-    assert "  done 확인(요약·화면용 결과 고정 기대값·응답 크기): 통과" in out
+    assert "  done 확인(요약·화면용 결과 고정 기대값·검토사항·응답 크기): 통과" in out
     assert "  검토 동작: 통과" in out
     assert "  [새] 목록: 실패" in out
     assert "새 확인(목록·다시 분석·삭제): " in out and "— 기대와 다름" in out
@@ -1843,7 +1859,7 @@ def test_retry_flow_through_real_app_passes_and_deletes(script: Any, monkeypatch
     assert "목록 확인(실패 분석): " in out and "이 분석 status=failed review=none risk_level=None 문서 1개: 통과" in out
     assert "목록 확인(다시 분석한 완료 분석): " in out and "이 분석 status=done review=needed risk_level=상 문서 1개: 통과" in out
     assert "새 확인(목록·다시 분석·삭제): 4/4 통과 — 기대대로" in out
-    assert "  done 확인(요약·화면용 결과 고정 기대값·응답 크기): 통과" in out
+    assert "  done 확인(요약·화면용 결과 고정 기대값·검토사항·응답 크기): 통과" in out
     assert ctx.store.analyses == {} and ctx.store.objects == {} and ctx.store.reviews == {}  # 지움(원본·검토 행 포함)
 
 
@@ -1866,7 +1882,7 @@ def test_retry_flow_judges_fixed_expectations_separately(script: Any, monkeypatc
     code, ctx, _ = _app_run(script, monkeypatch, ["--retry-flow"])
     out = capsys.readouterr().out
     assert code == 1
-    assert "  done 확인(요약·화면용 결과 고정 기대값·응답 크기): 실패" in out
+    assert "  done 확인(요약·화면용 결과 고정 기대값·검토사항·응답 크기): 실패" in out
     assert "  [새] 다시 분석: 통과" in out and "  [새] 삭제: 통과" in out
     assert "새 확인(목록·다시 분석·삭제): 4/4 통과 — 기대대로" in out
     assert ctx.store.analyses == {}
@@ -2240,3 +2256,616 @@ def test_observe_keeps_valid_file_ids_from_malformed_documents(script: Any) -> N
         assert script._documents_problems({"documents": []}) == []
     finally:
         run.http.close()
+
+
+# --- 검토사항(review-items T3): done 확인의 result.items · 해결·다시 열기 흐름 ------------------------------------
+# done 확인: 스크립트가 documents·findings 로 따로 계산한 기대값(_expected_items)이 백엔드 build_items 와 여러 모양에서 같고,
+# 계약과 다른 items(키·순서·번호·id·쪽·참조·글·개수·종류)·green 아닌 검증(새 모양)은 실패 — 출력에는 위치·키 이름만.
+# 검토 동작: 첫 검토사항 해결 → 다시 해결 409 → 다시 열기 → 다시 열기 409 → 다시 해결 → 없는 id 404 → 400 둘 → 완료 문구의
+# 미해결 검토사항 수 → 잠긴 채 409 둘. 계약과 다른 응답이면 실패, 검토사항 0개면 건너뜀, 검증 실패 결과(missing 1개)도 통과.
+
+ITEM_TEXT = "api_e2e 검토사항 해결"
+ITEM_TEXT_AGAIN = "api_e2e 검토사항 다시 해결"
+SENTINEL = "원문센티널-ITEM-5Z"
+
+
+def _item_view(*docs: dict[str, Any], findings: list[dict[str, Any]]) -> dict[str, Any]:
+    return {"documents": list(docs), "findings": findings}
+
+
+def _tricky_item_views() -> list[dict[str, Any]]:
+    """스크립트 기대값 ↔ 백엔드 build_items 비교용 화면 결과(검증 green·null 만 — missing 은 checks 가 있어야 하므로)."""
+    from fake_items import BOX, vdoc, vfinding
+
+    many_low = [vfinding(0, f"low{n}", confidence="low", page=1 + n % 3) for n in range(8)]  # 8건 → '외 3건'
+    spread = [vfinding(1, f"p{n}", confidence="low", page=10 + n) for n in range(25)]  # 25쪽 → 근거 앞 20쪽
+    nul, sur = chr(0), chr(0xD800)
+    odd = [
+        vfinding(2, "long", page=None, boxes=[], label="가" * 100),  # 위치 없음 · 이름 40자 자르기
+        vfinding(2, "nul", page=40, boxes=[], label="a" + nul + "b"),  # 범위 안 쪽 · 상자 없음 · NUL
+        vfinding(2, "sur", page=99, boxes=BOX, label="x" + sur),  # 범위 밖 쪽 → 서류 첫 쪽 · 위치 없음 · 서로게이트
+        vfinding(2, "ws", label=chr(0x3000) + " " + chr(0xFEFF)),  # label 이 JS 공백뿐 → field
+        vfinding(2, "", label="", fid="2:"),  # 이름 없음
+        vfinding(2, "lowloc", confidence="low", page=41),  # low · 위치 있음(41쪽)
+        vfinding(2, "lownoloc", confidence="low", page=None, boxes=[]),  # low · 위치 없음(n 에만)
+        vfinding(2, "bool", page=True, boxes=BOX),  # bool 쪽 → 위치 없음
+    ]
+    return [
+        _item_view(vdoc(0, 1, 3), vdoc(1, 10, 40), vdoc(2, 40, 41), vdoc(3, 42, 42, kind="other"), findings=[*many_low, *spread, *odd]),
+        _item_view(
+            vdoc(5, 7, 6, validation="Green "),  # page_end < page_start → [7, 7]
+            {**vdoc(4), "page_start": None},  # 보이지 않는 서류
+            vdoc(1, 2, 2, kind="other", validation=None),
+            vdoc(1, 3, 3),  # 같은 index 두 번 → 처음 것
+            {**vdoc(0), "index": True},  # bool index → 보이지 않음
+            findings=[vfinding(5, "a", page=7, confidence="low"), vfinding(4, "b", confidence="low"), vfinding(1, "c", page=None, boxes=[])],
+        ),
+        _item_view(findings=[]),
+    ]
+
+
+def test_expected_items_agree_with_the_backend_on_many_shapes(script: Any) -> None:
+    # 계약을 따로 구현한 두 쪽(스크립트 _expected_items · 백엔드 build_items)이 같은 값을 낸다(스크립트는 백엔드를 import 하지 않는다)
+    from fake_items import merged_result
+
+    from imask_backend.findings import build_view
+    from imask_backend.items import build_items
+
+    views = [build_view(stored_result()), build_view(merged_result()), *_tricky_item_views()]
+    for n, view in enumerate(views):
+        want, reason = script._expected_items(view)
+        assert want is not None, (n, reason)
+        backend = build_items(view["documents"], view["findings"])
+        assert json.dumps(want, ensure_ascii=True) == json.dumps(backend, ensure_ascii=True), n  # 키 순서까지
+        assert script._items_shape_problems(backend, view) == [], n
+        assert script._items_compare(backend, want) == [], n
+    tricky = script._expected_items(views[2])[0]
+    assert tricky is not None
+    lows = [i for i in tricky if i["type"] == "lowconf"]
+    assert lows[0]["desc"].endswith(" 외 3건의 값이 틀렸을 수 있습니다.") and len(lows[1]["evidence"]) == 20
+
+
+@pytest.mark.parametrize(
+    ("validation", "green"),
+    [(None, True), ("", True), ("green", True), (" Green ", True), ("GREEN" + chr(0x3000), True), ("red", False), ("yellow", False), (1, False)],
+)
+def test_validation_green(script: Any, validation: Any, green: bool) -> None:
+    assert script._validation_green(validation) is green
+
+
+def test_done_items_check_passes_and_prints_counts_only(script: Any, capsys: Any) -> None:
+    api = FakeApi(poll_mode="done")
+    assert _run(script, api, _done_upstage(), ["--no-review", "--keep"]) == 0
+    out = capsys.readouterr().out
+    assert "검토사항(result.items):\n  6개 · 종류 {'lowconf': 4, 'nolocation': 1, 'other': 1} · 근거 6개" in out
+    assert "  계약 모양(키·순서·타입·R-nn 연속·id 중복 없음·서류·쪽·탐지 항목 참조): 맞음" in out
+    assert "nolocation·lowconf·other, 검증 모두 green·null → missing 0): 6개 · 종류 {'lowconf': 4, 'nolocation': 1, 'other': 1}: 일치" in out
+    assert "  done 확인(요약·화면용 결과 고정 기대값·검토사항·응답 크기): 통과" in out
+    # 검토사항 글·id 는 출력하지 않는다(개수·종류만)
+    for item in api.read_done()["result"]["items"]:
+        assert item["title"] not in out and item["desc"] not in out and item["id"] not in out
+    _assert_no_values(out)
+
+
+def _drop_items(result: dict[str, Any], _include: bool) -> None:
+    del result["items"]
+
+
+def _swap_keys(result: dict[str, Any], _include: bool) -> None:
+    first = result["items"][0]
+    first["page"] = first.pop("page")  # page 를 끝으로(키 순서가 계약과 다름)
+
+
+def _number_gap(result: dict[str, Any], _include: bool) -> None:
+    result["items"][1]["number"] = "R-03"
+
+
+def _duplicate_item_id(result: dict[str, Any], _include: bool) -> None:
+    result["items"][1]["id"] = result["items"][0]["id"]
+
+
+def _evidence_page_out(result: dict[str, Any], _include: bool) -> None:
+    result["items"][0]["evidence"][0]["page"] = 99
+
+
+def _title_sentinel(result: dict[str, Any], _include: bool) -> None:
+    result["items"][0]["title"] = SENTINEL
+
+
+def _extra_item(result: dict[str, Any], _include: bool) -> None:
+    extra = copy.deepcopy(result["items"][-1])
+    extra.update(id="other:9", number="R-07")
+    result["items"].append(extra)
+
+
+def _missing_item(result: dict[str, Any], _include: bool) -> None:
+    items = result["items"]
+    del items[0]
+    for n, item in enumerate(items, 1):
+        item["number"] = f"R-{n:02d}"
+
+
+def _unknown_type(result: dict[str, Any], _include: bool) -> None:
+    result["items"][0]["type"] = "riskhigh"
+
+
+def _foreign_finding(result: dict[str, Any], _include: bool) -> None:
+    result["items"][0]["evidence"][0]["finding_ids"].append("4:card_number")  # 다른 서류의 탐지 항목
+
+
+def _nolocation_without_finding(result: dict[str, Any], _include: bool) -> None:
+    (item,) = [i for i in result["items"] if i["type"] == "nolocation"]
+    item["finding_id"] = None
+
+
+def _red_validation(result: dict[str, Any], _include: bool) -> None:
+    result["documents"][1]["validation"] = "red"
+
+
+def _wrong_nums(result: dict[str, Any], _include: bool) -> None:
+    result["items"][0]["desc"] = result["items"][0]["desc"].replace("D1-", "D2-")
+
+
+@pytest.mark.parametrize(
+    ("tamper", "messages"),
+    [
+        (_drop_items, ["result.items 가 목록이 아님", "개수 0(기대 6)"]),
+        (_swap_keys, ["items[0]: 키·순서가 계약과 다름"]),
+        (_number_gap, ["number 가 R-01 부터 이어지지 않음", "items[1].number: 기대값과 다름"]),
+        (_duplicate_item_id, ["id 가 겹침", "items[1].id: 기대값과 다름"]),
+        (_evidence_page_out, ["items[0].evidence[0].page(서류 쪽 범위)", "items[0].evidence[0].page: 기대값과 다름"]),
+        (_title_sentinel, ["items[0].title: 기대값과 다름"]),
+        (_extra_item, ["개수 7(기대 6)", "종류 {'lowconf': 4, 'nolocation': 1, 'other': 2}"]),
+        (_missing_item, ["개수 5(기대 6)", "items[0].id: 기대값과 다름"]),
+        (_unknown_type, ["items[0].type", "'계약 밖': 1"]),
+        (_foreign_finding, ["items[0].evidence[0].finding_ids(그 서류의 탐지 항목)"]),
+        (_nolocation_without_finding, ["finding_id(nolocation 만 있음)", ".finding_id: 기대값과 다름"]),
+        (_wrong_nums, ["items[0].desc: 기대값과 다름"]),
+        (_red_validation, ["계산할 수 없음 — 새 모양 — 검증 결과가 green 이 아닌 서류 1개"]),
+    ],
+    ids=[
+        "no_items",
+        "key_order",
+        "number_gap",
+        "duplicate_id",
+        "evidence_page",
+        "title",
+        "extra",
+        "missing",
+        "unknown_type",
+        "foreign_finding",
+        "nolocation_finding_id",
+        "nums",
+        "red_validation_new_shape",
+    ],
+)
+def test_done_items_problems_fail(script: Any, capsys: Any, tamper: Any, messages: list[str]) -> None:
+    api = FakeApi(poll_mode="done", tamper=tamper)
+    assert _run(script, api, _done_upstage(), ["--no-review", "--keep"]) == 1
+    out = capsys.readouterr().out
+    for message in messages:
+        assert message in out, message
+    assert "  done 확인(요약·화면용 결과 고정 기대값·검토사항·응답 크기): 실패" in out
+    assert "결과: 기대와 다름" in out
+    assert SENTINEL not in out and "riskhigh" not in out  # 받은 값은 출력하지 않는다
+    _assert_no_values(out)
+
+
+def test_analysis_id_mode_checks_items_without_writing(script: Any, capsys: Any) -> None:
+    # 읽기만 하는 확인에서도 result.items 를 본다(쓰기 없음)
+    api = FakeApi(poll_mode="done", tamper=_number_gap)
+    assert _run(script, api, FakeUpstageServer(), ["--analysis-id", ANALYSIS_ID]) == 1
+    assert [r for r in api.requests if r.method != "GET"] == []
+    assert "number 가 R-01 부터 이어지지 않음" in capsys.readouterr().out
+
+
+def test_item_actions_store_the_contract_values(script: Any, capsys: Any) -> None:
+    api = FakeApi(poll_mode="done")
+    assert _run(script, api, _done_upstage(), ["--keep"]) == 0
+    out = capsys.readouterr().out
+    assert "[실패]" not in out
+    items = api.read_done()["result"]["items"]
+    assert (items[0]["id"], items[0]["number"], items[0]["type"]) == ("lowconf:0", "R-01", "lowconf")
+    # 보낸 본문(정확한 필드) — 해결·다시 해결 409·다시 열기·다시 열기 409·다시 해결·없는 id·note 붙은 다시 열기·501자
+    bodies = [api.review_posts[n - 1] for n in ITEM_POSTS]
+    assert [body["type"] for body in bodies] == ITEM_POST_TYPES
+    resolve = {"type": "resolve_item", "actor": "api_e2e", "item_id": "lowconf:0"}
+    reopen = {"type": "reopen_item", "actor": "api_e2e", "item_id": "lowconf:0"}
+    assert bodies[0] == bodies[1] == {**resolve, "note": ITEM_TEXT}
+    assert bodies[2] == bodies[3] == reopen
+    assert bodies[4] == {**resolve, "note": ITEM_TEXT_AGAIN}
+    assert bodies[5]["item_id"] not in {i["id"] for i in items} and bodies[5]["type"] == "resolve_item"
+    assert bodies[6] == {**reopen, "note": ""} and bodies[7] == {**resolve, "note": "가" * 501}
+    # 잠긴 채 보낸 두 동작: 해결하지 않은 다른 검토사항(R-02) 해결 · 해결한 R-01 다시 열기
+    assert api.review_posts[24:26] == [
+        {"type": "resolve_item", "actor": "api_e2e", "item_id": "nolocation:2:income_info", "note": ITEM_TEXT},
+        reopen,
+    ]
+    # 저장된 이력(H12~H15)·해결 기록
+    saved = api.store.reviews[ANALYSIS_ID]
+    lines = [{k: line[k] for k in ("id", "kind", "target", "change", "reason")} for line in saved["history"][11:15]]
+    assert lines == [
+        {"id": "H12", "kind": "resolve", "target": "R-01 인식 확인 필요", "change": "미해결 → 해결", "reason": ITEM_TEXT},
+        {"id": "H13", "kind": "reopenItem", "target": "R-01 인식 확인 필요", "change": "해결 → 미해결", "reason": ""},
+        {"id": "H14", "kind": "resolve", "target": "R-01 인식 확인 필요", "change": "미해결 → 해결", "reason": ITEM_TEXT_AGAIN},
+        {
+            "id": "H15",
+            "kind": "complete",
+            "target": "분석 건",
+            "change": "검토 필요 → 검토 완료 (남은 항목: 미확인 탐지 26건, 미해결 검토사항 5건)",
+            "reason": "api_e2e 검토 완료",
+        },
+    ]
+    assert saved["items"] == {
+        "lowconf:0": {"resolved": True, "note": ITEM_TEXT_AGAIN, "resolved_at": saved["history"][13]["at"], "resolved_by": "api_e2e"}
+    }
+    assert "[통과] 15. resolve_item(R-01) — 이력 14줄 · version 12" in out
+    assert "[통과] 22. resolve_item 501자 처리 내용 → 400(R-01) — HTTP 400 · 쓰기 없음" in out
+    assert "[통과] 23. complete_review(남은 미확인 26건 · 미해결 검토사항 5건)" in out
+    assert ITEM_TEXT not in out  # 처리 내용(합성 문구)도 출력하지 않는다
+    row = api.store.analyses[ANALYSIS_ID]
+    assert (row["created_at"], row["updated_at"]) == (CREATED_AT, UPDATED_AT) and "update_analysis" not in api.store.calls
+
+
+def _handled(api: FakeApi, body: dict[str, Any]) -> None:
+    """그 본문을 실제 검토 로직으로 처리한다(저장은 정상)."""
+    review_action_out(api.store, ANALYSIS_ID, parse_action(json.dumps(body, ensure_ascii=True).encode()))
+
+
+Change = Callable[[FakeApi, dict[str, Any]], "dict[str, Any] | None"]
+
+
+def _after_post(n_post: int, change: Change) -> Callable[[FakeApi, dict[str, Any], int], httpx.Response | None]:
+    """n번째 POST 를 정상 처리한 뒤 change(api, 응답) 로 저장 행이나 응답을 바꾼다(None 이면 바뀐 저장 행으로 다시 만든 응답)."""
+
+    def override(api: FakeApi, body: dict[str, Any], n: int) -> httpx.Response | None:
+        if n != n_post:
+            return None
+        _handled(api, body)
+        replaced = change(api, {"analysis": api.read_done(), "changed": True})
+        return _json_response(200, replaced if replaced is not None else {"analysis": api.read_done(), "changed": True})
+
+    return override
+
+
+def _answer(n_post: int, status: int, detail: str | None = None) -> Callable[[FakeApi, dict[str, Any], int], httpx.Response | None]:
+    """n번째 POST 에 쓰기 없이 status 로 답한다(200 이면 지금 분석 · changed false)."""
+
+    def override(api: FakeApi, body: dict[str, Any], n: int) -> httpx.Response | None:
+        if n != n_post:
+            return None
+        if status == 200:
+            return _json_response(200, {"analysis": api.read_done(), "changed": False})
+        return httpx.Response(status, json={"detail": detail})
+
+    return override
+
+
+def _saved_item(**values: Any) -> Change:
+    def change(api: FakeApi, _out: dict[str, Any]) -> None:
+        api.store.reviews[ANALYSIS_ID]["items"]["lowconf:0"].update(values)
+
+    return change
+
+
+def _last_line(key: str, value: str) -> Change:
+    def change(api: FakeApi, _out: dict[str, Any]) -> None:
+        api.store.reviews[ANALYSIS_ID]["history"][-1][key] = value
+
+    return change
+
+
+def _review_row(**values: Any) -> Change:
+    def change(api: FakeApi, _out: dict[str, Any]) -> None:
+        api.store.reviews[ANALYSIS_ID].update(values)
+
+    return change
+
+
+def _other_item_written(api: FakeApi, _out: dict[str, Any]) -> None:
+    api.store.reviews[ANALYSIS_ID]["items"]["other:5"] = {"resolved": True, "note": "", "resolved_at": None, "resolved_by": ""}
+
+
+def _started_at_in_response(_api: FakeApi, out: dict[str, Any]) -> dict[str, Any]:
+    out["analysis"]["started_at"] = "2026-11-03T06:41:40+00:00"
+    return out
+
+
+STATE_409 = "검토사항 상태가 바뀌었습니다. 새로 고친 뒤 다시 시도해 주세요."
+
+
+@pytest.mark.parametrize(
+    ("override", "message"),
+    [
+        (_after_post(14, _saved_item(resolved_at="2026-11-03T00:00:00+00:00")), "R-01 resolved_at: 계약과 다름"),
+        (_after_post(14, _saved_item(resolved_by="다른 처리자")), "R-01 resolved_by: 계약과 다름"),
+        (_after_post(14, _last_line("target", "lowconf:0 인식 확인 필요")), "새 이력 target: 계약과 다름"),
+        (_after_post(14, _last_line("kind", "confirm")), "새 이력 kind: 계약과 다름"),
+        (_answer(15, 200), "HTTP 200"),
+        (_answer(15, 409, "검토를 완료한 분석은 바꿀 수 없습니다."), f"(기대 409 {STATE_409})"),
+        (_after_post(16, _saved_item(note="")), "R-01 note: 계약과 다름"),
+        (_after_post(16, _saved_item(resolved_at=None)), "R-01 resolved_at 이 남지 않음"),
+        (_after_post(16, _last_line("change", "해결 → 미확인")), "새 이력 change: 계약과 다름"),
+        (_after_post(16, _last_line("reason", ITEM_TEXT)), "새 이력 reason: 계약과 다름"),
+        (_answer(17, 200), "HTTP 200"),
+        (_after_post(18, _saved_item(note=ITEM_TEXT)), "R-01 note: 계약과 다름"),
+        (_answer(19, 409, STATE_409), "(기대 404 검토사항을 찾을 수 없습니다.)"),
+        (_answer(20, 200), "HTTP 200"),
+        (_answer(21, 400, "메모·사유에 쓸 수 없는 문자가 있습니다."), "(기대 400 메모·사유는 500자 이하로 적어 주세요.)"),
+        (_after_post(22, _last_line("change", "검토 필요 → 검토 완료 (남은 항목: 미확인 탐지 26건)")), "새 이력 change: 계약과 다름"),
+        (_answer(25, 409, STATE_409), "(기대 409 검토를 완료한 분석은 바꿀 수 없습니다.)"),
+        (_answer(26, 200), "HTTP 200"),
+        (_after_post(31, _review_row(items={})), "review items 가 바뀜"),
+        (_after_post(14, _other_item_written), "다른 검토사항의 저장 값이 바뀜"),
+        (_after_post(14, _started_at_in_response), "분석 started_at 가 바뀜"),
+    ],
+    ids=[
+        "resolve_time_not_history_time",
+        "resolve_actor",
+        "resolve_target_uses_id",
+        "resolve_kind",
+        "second_resolve_accepted",
+        "second_resolve_wrong_409",
+        "reopen_clears_note",
+        "reopen_clears_time",
+        "reopen_change_text",
+        "reopen_reason",
+        "second_reopen_accepted",
+        "resolve_again_keeps_old_note",
+        "unknown_id_409",
+        "reopen_with_note_accepted",
+        "long_note_wrong_400",
+        "complete_without_open_items",
+        "locked_resolve_wrong_409",
+        "locked_reopen_accepted",
+        "reopen_review_wipes_items",
+        "other_item_changed",
+        "started_at_changed",
+    ],
+)
+def test_unexpected_item_responses_fail(script: Any, capsys: Any, override: Any, message: str) -> None:
+    api = FakeApi(poll_mode="done", review_override=override)
+    assert _run(script, api, _done_upstage(), []) == 1
+    out = capsys.readouterr().out
+    assert message in out, out[-2500:]
+    assert "검토 동작 확인: " in out and "— 기대와 다름" in out
+    assert "결과: 기대와 다름" in out
+    assert ITEM_TEXT not in out and "다른 처리자" not in out
+
+
+def _api_with_result(result: dict[str, Any]) -> FakeApi:
+    api = FakeApi(poll_mode="done")
+    api.store.analyses[ANALYSIS_ID]["result"] = result
+    return api
+
+
+def test_zero_items_skips_the_item_actions(script: Any, capsys: Any) -> None:
+    # 모두 신뢰도 high · 위치 있음 · 기타 서류 없음 → 검토사항 0개: 해결·다시 열기·잠긴 채 검토사항 동작을 보내지 않는다
+    from fake_items import Spec, bundle_result, merged_specs
+
+    specs = [Spec(s.code, s.pages, {k: (v, p, "high") for k, (v, p, _c) in s.fields.items()}) for s in merged_specs() if s.validate]
+    api = _api_with_result(bundle_result(specs))
+    assert api.read_done()["result"]["items"] == []
+    _run(script, api, _done_upstage(), ["--keep"])  # done 고정 기대값(알려진 모양)은 다르다 — 검토 동작 확인만 본다
+    out = capsys.readouterr().out
+    assert "  검토사항 해결·다시 열기 확인 건너뜀(검토사항 0개)" in out
+    assert "검토 동작 확인: 25/25 통과 · 쓴 동작 15건 — 기대대로" in out
+    assert not {"resolve_item", "reopen_item"} & set(_review_types(api))
+    assert "0개 · 종류 {} · 근거 0개" in out and "0개 · 종류 {}: 일치" in out
+    (complete,) = [line for line in api.store.reviews[ANALYSIS_ID]["history"] if line["kind"] == "complete"]
+    assert "미해결 검토사항" not in complete["change"]
+
+
+def test_failed_validation_result_resolves_the_missing_item(script: Any, capsys: Any) -> None:
+    # 검증 실패 결과(서류 1 신청인 성명 규칙 실패 · verdict red) — done 확인은 '새 모양'으로 실패를 알리고(missing 을 계산할 수 없음),
+    # 검토 동작은 그 missing 검토사항 하나로 그대로 통과한다(완료 문구에 미해결 검토사항 없음)
+    from fake_items import failing_result
+
+    api = _api_with_result(failing_result())
+    (item,) = api.read_done()["result"]["items"]
+    assert (item["id"], item["type"], item["title"]) == ("missing:1:applicant_name_detected", "missing", "신청인 성명이 없습니다")
+    assert _run(script, api, _done_upstage(), ["--keep"]) == 1
+    out = capsys.readouterr().out
+    assert "계산할 수 없음 — 새 모양 — 검증 결과가 green 이 아닌 서류 1개" in out
+    assert f"검토 동작 확인: {REVIEW_STEPS}/{REVIEW_STEPS} 통과 · 쓴 동작 {REVIEW_WRITES}건 — 기대대로" in out
+    saved = api.store.reviews[ANALYSIS_ID]
+    assert {line["target"] for line in saved["history"] if line["kind"] in ("resolve", "reopenItem")} == {"R-01 필수 항목 없음"}
+    (complete,) = [line for line in saved["history"] if line["kind"] == "complete"]
+    assert "미해결 검토사항" not in complete["change"]
+    assert "[통과] 26. 잠김 — resolve_item(R-01) → 409" in out  # 다른 검토사항이 없으면 해결한 것으로
+
+
+def _review_read(api: FakeApi, mutate: Callable[[dict[str, Any]], None]) -> None:
+    real = api.read_done
+
+    def read_done(include: bool = False) -> dict[str, Any]:
+        body = real(include)
+        if isinstance(body.get("review"), dict):
+            mutate(body["review"])
+        return body
+
+    api.read_done = read_done  # type: ignore[method-assign]
+
+
+def _items_not_object(review: dict[str, Any]) -> None:
+    review["items"] = []
+
+
+def _stranger_item(review: dict[str, Any]) -> None:
+    review["items"]["x:1"] = {"resolved": True, "note": "", "resolved_at": None, "resolved_by": ""}
+
+
+def _resolved_text(review: dict[str, Any]) -> None:
+    review["items"]["lowconf:0"] = {"resolved": "true", "note": "", "resolved_at": None, "resolved_by": ""}
+
+
+def _item_missing_keys(review: dict[str, Any]) -> None:
+    review["items"]["lowconf:0"] = {"resolved": True}
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (_items_not_object, "items 가 객체가 아님"),
+        (_stranger_item, "지금 결과의 검토사항이 아닌 id 1개"),
+        (_resolved_text, "값 모양"),
+        (_item_missing_keys, "값 모양"),
+    ],
+    ids=["not_object", "stranger_id", "resolved_text", "missing_keys"],
+)
+def test_review_items_shape_problems_fail_read_only(script: Any, capsys: Any, mutate: Any, message: str) -> None:
+    api = FakeApi(poll_mode="done")
+    _review_read(api, mutate)
+    assert _run(script, api, FakeUpstageServer(), ["--analysis-id", ANALYSIS_ID]) == 1
+    out = capsys.readouterr().out
+    assert message in out and "x:1" not in out
+    assert _review_requests(api) == []
+
+
+def test_read_only_mode_accepts_a_resolved_item(script: Any, capsys: Any) -> None:
+    api = FakeApi(poll_mode="done")
+    _handled(api, {"type": "resolve_item", "actor": "검토자", "item_id": "other:5", "note": "합성 처리 내용"})
+    assert _run(script, api, FakeUpstageServer(), ["--analysis-id", ANALYSIS_ID]) == 0
+    out = capsys.readouterr().out
+    assert "findings 0개 · 검토사항 해결 기록 1개 · 이력 3줄(S1·S2 포함) · version 1 · 기본값(검토 행 없음) False: 맞음" in out
+    assert _review_requests(api) == []
+
+
+def test_first_read_needs_empty_review_items(script: Any, capsys: Any) -> None:
+    # 새 분석의 처음 조회는 review.items {} — 이미 해결 기록이 있으면 처음 조회 실패로 동작을 보내지 않는다
+    api = FakeApi(poll_mode="done")
+    _handled(api, {"type": "resolve_item", "actor": "검토자", "item_id": "other:5", "note": ""})
+    assert _run(script, api, _done_upstage(), []) == 1
+    out = capsys.readouterr().out
+    assert "[실패] 01. 처음 조회" in out and "items: 계약과 다름" in out
+    assert api.review_posts == []
+
+
+# --- 수정 1회차(V-T3-1 M1): 검토 동작을 켠 기본 흐름에서도 받은 표시 번호·id·글을 출력하지 않는다 ------------------------
+# 검토사항 동작을 보내기 전에 result.items 전체의 계약 모양을 먼저 본다 — 틀리면 값 없는 실패 위치만 적고 검토사항 POST 0개.
+# 모양은 맞고 done 기대값만 다르면(글·id 가 다름) 검토 흐름은 그대로 돌되, 출력의 번호는 스크립트가 만든 순번이다.
+
+ITEM_ACTIONS = ("resolve_item", "reopen_item")
+
+
+def _item_posts(api: FakeApi) -> list[dict[str, Any]]:
+    return [body for body in api.review_posts if body.get("type") in ITEM_ACTIONS]
+
+
+def _set_item(n: int, key: str, value: Any) -> Callable[[dict[str, Any], bool], None]:
+    def tamper(result: dict[str, Any], _include: bool) -> None:
+        result["items"][n][key] = value
+
+    return tamper
+
+
+SHAPE_BREAKS = [
+    ("number_sentinel", _set_item(0, "number", SENTINEL), ["number 가 R-01 부터 이어지지 않음"]),
+    ("second_number_sentinel", _set_item(1, "number", SENTINEL), ["number 가 R-01 부터 이어지지 않음"]),
+    ("id_wrong_type", _set_item(1, "id", {"x": SENTINEL}), ["items[1].id"]),
+    ("type_sentinel", _set_item(0, "type", SENTINEL), ["items[0].type"]),
+    ("empty_title", _set_item(0, "title", ""), ["items[0].title·desc·next"]),
+    ("page_text", _set_item(0, "page", SENTINEL), ["items[0].page(서류 쪽 범위)"]),
+]
+
+
+@pytest.mark.parametrize(("tamper", "messages"), [c[1:] for c in SHAPE_BREAKS], ids=[c[0] for c in SHAPE_BREAKS])
+def test_bad_item_shape_sends_no_item_actions_and_prints_no_received_value(script: Any, capsys: Any, tamper: Any, messages: list[str]) -> None:
+    api = FakeApi(poll_mode="done", tamper=tamper)
+    assert _run(script, api, _done_upstage(), []) == 1  # 검토 동작 켬(기본)
+    out = capsys.readouterr().out
+    assert SENTINEL not in out
+    assert _item_posts(api) == []
+    assert "[실패]" in out and "검토사항 모양 — 계약과 달라 해결·다시 열기를 보내지 않음" in out
+    for message in messages:
+        assert message in out, message
+    assert "검토 동작 확인: " in out and "— 기대와 다름" in out and "결과: 기대와 다름" in out
+    _assert_no_values(out)
+
+
+@pytest.mark.parametrize(("key", "value"), [("title", SENTINEL), ("desc", SENTINEL), ("id", SENTINEL)], ids=["title", "desc", "id"])
+def test_good_shape_with_wrong_values_keeps_the_flow_without_printing_them(script: Any, capsys: Any, key: str, value: Any) -> None:
+    # 모양은 맞고 값만 다르면(검증 실패 서류처럼 done 기대값만 다른 경우와 같은 흐름) 검토사항 동작은 그대로 보내고,
+    # 출력에는 받은 글·id 가 없다(번호는 스크립트 순번 R-01). id 가 다르면 서버가 404 로 거절하는 것이 실패로 남는다.
+    api = FakeApi(poll_mode="done", tamper=_set_item(0, key, value))
+    assert _run(script, api, _done_upstage(), []) == 1
+    out = capsys.readouterr().out
+    assert SENTINEL not in out
+    assert f"items[0].{key}: 기대값과 다름" in out
+    assert "검토사항 모양 — 계약과 달라" not in out
+    assert len(_item_posts(api)) == 10
+    assert "resolve_item(R-01)" in out
+    if key == "id":
+        assert _item_posts(api)[0]["item_id"] == SENTINEL  # 본문에는 받은 계약 id 그대로(출력에는 없음)
+        assert "HTTP 404 검토사항을 찾을 수 없습니다.(기대 200" in out
+
+
+def test_item_target_uses_the_local_number_only_when_it_matches(script: Any) -> None:
+    item = {"id": "lowconf:0", "number": "R-02", "type": "lowconf"}
+    assert script._item_target(item, 2) == {"id": "lowconf:0", "num": "R-02", "target": "R-02 인식 확인 필요"}
+    assert script._item_target(item, 1) is None  # 받은 번호가 순번과 다르면 대상이 아니다
+    for bad in ({**item, "number": SENTINEL}, {**item, "number": 2}, {**item, "id": 7}, {**item, "id": ""}, {**item, "type": SENTINEL}, "x", None):
+        assert script._item_target(bad, 2) is None
+
+
+def test_shown_renders_received_values_without_text(script: Any) -> None:
+    assert script._shown(True) == "True" and script._shown(None) == "None" and script._shown(3) == "3"
+    assert script._shown(SENTINEL) == "<str>" and script._shown({"a": 1}) == "<dict>" and script._shown(1.5) == "<float>"
+    assert script._shown("done", script.REVIEW_STATUSES) == "'done'" and script._shown("done") == "<str>"
+    assert script._plain("needed", script.REVIEW_STATUSES) == "needed" and script._plain(SENTINEL, script.REVIEW_STATUSES) == "<str>"
+
+
+def test_readme_result_example_is_a_consistent_response(script: Any) -> None:
+    # 수정 1회차(V-T3-1 m1): README 'API 응답의 result' 의 JSON 을 그대로 읽어 — 스크립트의 items 모양 검사·따로 계산한 기대값,
+    # 백엔드 build_items, 공통 계약 검사(view_contract.assert_view)를 모두 지난다(예시의 items 가 같은 응답의 findings 를 가리킴)
+    import re
+
+    from view_contract import assert_view
+
+    from imask_backend.items import build_items
+
+    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    section = text.split("### API 응답의 `result`", 1)[1]
+    match = re.search(r"```json\n(.*?)\n```", section, re.DOTALL)
+    assert match, "README 에 result 예시 JSON 이 없다"
+    example = json.loads(match.group(1))
+    assert script._items_shape_problems(example["items"], example) == []
+    want, reason = script._expected_items(example)
+    assert want is not None, reason
+    assert script._items_compare(example["items"], want) == []
+    assert json.dumps(build_items(example["documents"], example["findings"]), ensure_ascii=False) == json.dumps(example["items"], ensure_ascii=False)
+    assert_view({key: example[key] for key in ("documents", "findings", "overall", "items")})
+    assert [i["type"] for i in example["items"]] == ["lowconf"]
+
+
+def _status_sentinel(review: dict[str, Any]) -> None:
+    review["status"] = SENTINEL
+
+
+def _findings_key_sentinel(review: dict[str, Any]) -> None:
+    review["findings"][SENTINEL] = {"status": SENTINEL}
+
+
+def _version_sentinel(review: dict[str, Any]) -> None:
+    review["version"] = SENTINEL
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (_status_sentinel, "status <str>"),
+        (_findings_key_sentinel, "findings: 검토 가능 항목이 아닌 id 1개"),
+        (_version_sentinel, "version 이 0 이상 정수가 아님"),
+    ],
+    ids=["status", "findings_key", "version"],
+)
+def test_review_block_values_are_not_printed(script: Any, capsys: Any, mutate: Any, message: str) -> None:
+    # 읽기만 하는 확인 · 기본 흐름의 처음 조회 모두 review 블록의 받은 글자를 출력하지 않는다
+    for args in (["--analysis-id", ANALYSIS_ID], []):
+        api = FakeApi(poll_mode="done")
+        _review_read(api, mutate)
+        assert _run(script, api, _done_upstage(), args) == 1
+        out = capsys.readouterr().out
+        assert SENTINEL not in out, args
+        assert message in out, args
+        assert api.review_posts == []

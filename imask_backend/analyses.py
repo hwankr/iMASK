@@ -31,7 +31,8 @@
 #  그 밖의 조회 오류(401·403·429·5xx·연결)는 상태를 바꾸지 않고 다음 조회에서 다시 시도한다.
 #
 #  응답 모양(analysis_out): result 에서 원본(response)과 단계별 결과(stages)를 빼고, 화면이 바로 쓰는
-#  documents·findings·overall(imask_backend.findings.build_view — 조회할 때 계산, 저장 형식은 그대로)을 더한다.
+#  documents·findings·overall·items(imask_backend.findings.build_view — 조회할 때 계산, 저장 형식은 그대로. items =
+#  검토사항, imask_backend.items — 저장된 result 에 같은 이름 키가 있어도 계산한 값이 이긴다)을 더한다.
 #  stages 는 include_stages(조회의 ?include=stages)일 때만 넣는다. 넣을 stages 는 response_stages() 한 경계를
 #  지난다 — 만들다 예외(파싱 RecursionError 포함)가 나거나 반복문으로 잰 중첩 깊이가 MAX_STAGES_DEPTH(64, 실제는
 #  10 안쪽 — 응답 직렬화기 한도 약 97 보다 충분히 낮게)를 넘으면 값 없는 경고 후 stages: [] (조회가 500 이 되지 않게).
@@ -205,10 +206,11 @@ def response_stages(result: Mapping[str, Any]) -> list[Any]:
 def result_out(
     result: Mapping[str, Any], *, include_stages: bool = False, view: Mapping[str, Any] | None = None
 ) -> dict[str, Any]:
-    """저장된 result → 응답의 result. 원본(response)·stages 를 빼고 documents·findings·overall 을 더한다.
+    """저장된 result → 응답의 result. 원본(response)·stages 를 빼고 documents·findings·overall·items(검토사항)를 더한다.
 
-    format·job·summary 등 나머지 키는 그대로. include_stages 면 stages(response_stages — 저장된 것, 없으면 response 에서
-    parse_stages, 너무 깊거나 만들지 못하면 []). view 를 주면(같은 result 로 이미 계산한 build_view) 다시 계산하지 않는다.
+    format·job·summary 등 나머지 키는 그대로(저장된 result 에 같은 이름 키가 있으면 계산한 값이 덮어쓴다).
+    include_stages 면 stages(response_stages — 저장된 것, 없으면 response 에서 parse_stages, 너무 깊거나 만들지 못하면 []).
+    view 를 주면(같은 result 로 이미 계산한 build_view) 다시 계산하지 않는다.
     """
     out = {key: value for key, value in result.items() if key not in ("response", "stages")}
     out.update(view if view is not None else build_view(result))
@@ -226,7 +228,8 @@ def analysis_out(
     review: Mapping[str, Any] | None = None,
     view: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """analyses 행 → AnalysisOut. agent_id 는 빼고, result 는 result_out(원본·stages 없이 화면용 값).
+    """analyses 행 → AnalysisOut. agent_id 는 빼고, result 는 result_out(원본·stages 없이 화면용 값 —
+    documents·findings·overall·items).
 
     started_at(마지막으로 시작한 시각, 없으면 null)은 늘 있는 키.
 

@@ -1,7 +1,8 @@
 # ==========================================================================
 #  results.py 테스트 — 손으로 만든 작은 가짜 응답(tests/fake_responses.py)으로
 #  parse_stages · summarize 를 확인한다. 권장_조치·검토_안내 분기, 기타_서류_안내,
-#  JSON 이 아닌 텍스트, 빈 output, 모양이 다른 항목.
+#  JSON 이 아닌 텍스트, 빈 output, 모양이 다른 항목. 최종 흐름의 새 이름(추출 노드 넷·서류_대조·묶음_검증)과
+#  step_type 규칙(실제 응답 고정 자료는 tests/test_final_flow.py).
 # ==========================================================================
 
 from __future__ import annotations
@@ -9,13 +10,18 @@ from __future__ import annotations
 import json
 
 import pytest
-from fake_responses import build_response, content, item
+from fake_responses import build_response, classify_entry, content, extract_item, item
 
 from imask_backend.results import (
+    STAGE_BUNDLE_CHECK,
     STAGE_CLASSIFY,
     STAGE_EXTRACT,
+    STAGE_KEYS,
+    STAGE_MATCH,
+    STAGE_MERGE,
     STAGE_PARSE,
     STAGE_REVIEW,
+    STAGE_VALIDATE,
     parse_stages,
     stage_key,
     stages_for,
@@ -116,10 +122,130 @@ def test_stage_found_by_name_not_position():
         ("Instruct - 다른_단계", "instruct", None),
         ("민감정보_추출_v2", None, None),
         (None, None, None),
+        # 최종 흐름(final_imask_workflow)의 새 이름
+        ("Information Extract - 추출_신청서", "information-extract", "민감정보_추출"),
+        ("Information Extract - 추출_확인서", "information-extract", "민감정보_추출"),
+        ("Information Extract - 추출_증빙", "information-extract", "민감정보_추출"),
+        ("Information Extract - 추출_위임장", "information-extract", "민감정보_추출"),
+        ("Match - 서류_대조", "match", "서류_대조"),
+        ("Validate - 묶음_검증", "validate", "묶음_검증"),
+        ("Validate - 필수항목_검증", "validate", "필수항목_검증"),
     ],
 )
 def test_stage_key(name, step_type, expected):
     assert stage_key(name, step_type) == expected
+
+
+# --- 최종 흐름: 새 이름과 step_type 규칙 ------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("name", "step_type", "expected"),
+    [
+        # information-extract 는 이름과 상관없이 민감정보_추출
+        ("Information Extract - 아무_이름", "information-extract", STAGE_EXTRACT),
+        ("Instruct - 위험도_판정", "information-extract", STAGE_EXTRACT),
+        (None, "information-extract", STAGE_EXTRACT),
+        (123, "information-extract", STAGE_EXTRACT),
+        # 이름으로 찾음(step_type 이 없거나 달라도)
+        ("Match - 서류_대조", None, STAGE_MATCH),
+        ("서류_대조", None, STAGE_MATCH),
+        ("Validate - 묶음_검증", None, STAGE_BUNDLE_CHECK),
+        ("묶음_검증", "instruct", STAGE_BUNDLE_CHECK),
+        ("Validate - 필수항목_검증", None, STAGE_VALIDATE),
+        # 이름으로 못 찾으면 step_type
+        ("Match - 다른_대조", "match", STAGE_MATCH),
+        ("Validate - 다른_검증", "validate", STAGE_VALIDATE),
+        (None, "validate", STAGE_VALIDATE),
+        ("병합-2", "merge", STAGE_MERGE),
+        # instruct 는 이름으로만, 모르는 step_type 은 None
+        ("Instruct - 다른_안내", "instruct", None),
+        ("Something - 새_단계", "new-type", None),
+        ("Match - 다른_대조", None, None),
+        ("Validate - 다른_검증", ["validate"], None),
+    ],
+)
+def test_stage_key_final_flow_rules(name, step_type, expected):
+    assert stage_key(name, step_type) == expected
+
+
+def test_new_stage_names_are_canonical_keys():
+    assert STAGE_MATCH == "서류_대조" and STAGE_BUNDLE_CHECK == "묶음_검증"
+    assert {STAGE_MATCH, STAGE_BUNDLE_CHECK} <= set(STAGE_KEYS)
+    assert len(set(STAGE_KEYS)) == len(STAGE_KEYS)
+
+
+def _final_flow_like_response() -> dict:
+    """작은 최종 흐름 꼴: 추출 노드 넷(추출_증빙 두 번) + 병합 + 서류_대조 + 묶음_검증 + 판정."""
+    codes = ("loan_application", "consent_form", "income_proof", "power_of_attorney", "debt_transaction")
+    nodes = ("추출_신청서", "추출_확인서", "추출_증빙", "추출_위임장", "추출_증빙")
+    output = [
+        item("step_1_parse", "document-parse", content({"api": "2.0", "elements": []})),
+        item("step_2_classify", "document-classify", *(classify_entry(c, p) for p, c in enumerate(codes, 1))),
+    ]
+    for page, node in enumerate(nodes, 1):
+        extract = extract_item(page)
+        extract["model"] = f"Information Extract - {node}"
+        output.append(extract)
+    output += [
+        item("병합-1", "merge", content({"count": 5}, {"previous_step_name": "x"})),
+        item("Match - 서류_대조", "match", content({"applicant_name": "가짜값"}, {"page_ranges": [[1, 1]], "targets": []})),
+        item(
+            "Validate - 묶음_검증",
+            "validate",
+            content("green", {"verdict": "green", "checks": [], "page_ranges": [[1, 1], [2, 2], [3, 3], [4, 4], [5, 5]]}),
+        ),
+        item("Instruct - 위험도_판정", "instruct", content("risk_level: 상\n상", {"enum": "상"}, raw_text=True)),
+        item("Instruct - 권장_조치", "instruct", content("## 가짜 조치", {"citations": []}, raw_text=True)),
+    ]
+    return {"id": "resp_fake", "status": "completed", "output": output}
+
+
+def test_final_flow_stages_get_canonical_keys():
+    stages = parse_stages(_final_flow_like_response())
+    keys = {s["name"]: s["key"] for s in stages}
+    assert keys["Information Extract - 추출_신청서"] == STAGE_EXTRACT
+    assert keys["Information Extract - 추출_증빙"] == STAGE_EXTRACT
+    assert keys["Match - 서류_대조"] == STAGE_MATCH
+    assert keys["Validate - 묶음_검증"] == STAGE_BUNDLE_CHECK
+    # 같은 노드가 두 번 나와도 모두 추출 단계
+    assert len(stages_for(stages, STAGE_EXTRACT)) == 5
+    assert stages_for(stages, STAGE_VALIDATE) == []
+
+
+def test_summarize_counts_every_extract_node_and_keeps_its_keys():
+    response = _final_flow_like_response()
+    summary = summarize(response)
+    assert summary["document_count"] == 5
+    assert summary["extracted_document_count"] == 5
+    assert summary["risk_level"] == "상"
+    assert summary["final_stage"] == "권장_조치"
+    assert summary["stage_counts"]["Information Extract - 추출_증빙"] == 2
+    # 요약 키는 늘지 않는다(scripts/api_e2e.py 가 결과 모양을 비교한다)
+    assert set(summary) == {
+        "stage_names",
+        "stage_counts",
+        "document_count",
+        "document_types",
+        "extracted_document_count",
+        "risk_level",
+        "final_stage",
+        "other_document_count",
+    }
+
+
+def test_stored_key_of_new_stage_is_kept():
+    # 저장된 stages 의 key 가 새 정규 이름이면 그대로 쓴다(다시 계산하지 않음)
+    stored = [{"name": "이름이 바뀐 단계", "key": STAGE_BUNDLE_CHECK, "status": "completed", "data": "green"}]
+    assert stages_for(stored, STAGE_BUNDLE_CHECK) == stored
+
+
+def test_failed_extract_nodes_are_not_counted():
+    response = _final_flow_like_response()
+    for entry in response["output"]:
+        if entry["step_type"] == "information-extract":
+            entry["status"] = "failed"
+    assert summarize(response)["extracted_document_count"] is None
 
 
 def test_text_that_is_not_json_stays_string():

@@ -17,6 +17,16 @@
 #    "Instruct - 기타_서류_안내" (검토_안내 는 위험도 '검토 필요' 일 때만 나온다)
 #  Studio 노드 이름 앞에 노드 종류("Instruct - " 등)가 붙어 오므로 " - <이름>" 꼴도 같은 단계로 본다.
 #  서류-인식·서류-분류는 이름이 step_1_parse·step_2_classify 로 오므로 그 이름과 step_type 으로도 찾는다.
+#
+#  최종 흐름(final_imask_workflow, 설정 "1" — final-flow/evidence/T0/final-shapes.md)의 새 이름:
+#    "Information Extract - 추출_신청서"·"…추출_확인서"·"…추출_증빙"·"…추출_위임장" · "Match - 서류_대조" ·
+#    "Validate - 묶음_검증" (그 밖은 예전과 같은 이름)
+#  - step_type information-extract 는 **이름과 상관없이** 민감정보_추출 로 본다(추출 노드가 여럿이고 한 노드가
+#    여러 번 나올 수 있다 — 서류와는 예전처럼 쪽 범위로 잇는다).
+#  - 서류_대조(Match)·묶음_검증(Validate, 묶음 하나의 판정 — 서류별 필수항목_검증 과 다르다)은 새 정규 이름.
+#  - 이름으로 못 찾을 때 step_type 으로: document-parse·document-classify·match(서류_대조)·validate(필수항목_검증)·
+#    merge(병합-1). instruct 는 여럿이라 이름으로만 찾는다.
+#  - summarize 의 키는 그대로다(scripts/api_e2e.py 가 결과 모양을 비교한다).
 # ==========================================================================
 
 from __future__ import annotations
@@ -36,6 +46,9 @@ STAGE_RISK = "위험도_판정"
 STAGE_ACTION = "권장_조치"
 STAGE_REVIEW = "검토_안내"
 STAGE_OTHER = "기타_서류_안내"
+# 최종 흐름에만 있는 단계
+STAGE_MATCH = "서류_대조"
+STAGE_BUNDLE_CHECK = "묶음_검증"
 
 STAGE_KEYS = (
     STAGE_PARSE,
@@ -47,6 +60,8 @@ STAGE_KEYS = (
     STAGE_ACTION,
     STAGE_REVIEW,
     STAGE_OTHER,
+    STAGE_MATCH,
+    STAGE_BUNDLE_CHECK,
 )
 
 # 정규 이름과 다르게 오는 실제 이름(output[].model)
@@ -55,10 +70,18 @@ _STAGE_ALIASES = {
     "step_2_classify": STAGE_CLASSIFY,
 }
 
-# 이름으로 못 찾을 때 쓰는 step_type(종류가 하나뿐인 단계만 — instruct 는 여럿이라 쓰지 않는다)
+# 이름과 상관없이 정규 이름을 정하는 step_type(추출 노드는 이름이 여럿 — 추출_신청서·…·민감정보_추출)
+_STEP_TYPE_FIRST = {
+    "information-extract": STAGE_EXTRACT,
+}
+
+# 이름으로 못 찾을 때 쓰는 step_type(instruct 는 여럿이라 쓰지 않는다. validate 는 서류별 검증으로 본다)
 _STEP_TYPE_STAGES = {
     "document-parse": STAGE_PARSE,
     "document-classify": STAGE_CLASSIFY,
+    "match": STAGE_MATCH,
+    "validate": STAGE_VALIDATE,
+    "merge": STAGE_MERGE,
 }
 
 # 마지막 단계 후보(위험도 상·중·하 → 권장_조치, 검토 필요 → 검토_안내)
@@ -76,7 +99,13 @@ def _loads(value: Any) -> Any:
 
 
 def stage_key(name: Any, step_type: Any = None) -> str | None:
-    """output[].model(과 step_type)을 정규 단계 이름으로. 모르는 단계는 None."""
+    """output[].model(과 step_type)을 정규 단계 이름으로. 모르는 단계는 None.
+
+    순서: 1. information-extract 는 이름과 상관없이 민감정보_추출 2. 이름(정규 이름·별칭·" - <정규 이름>")
+    3. 그 밖의 step_type(_STEP_TYPE_STAGES).
+    """
+    if isinstance(step_type, str) and step_type in _STEP_TYPE_FIRST:
+        return _STEP_TYPE_FIRST[step_type]
     if isinstance(name, str):
         if name in STAGE_KEYS:
             return name
@@ -215,7 +244,7 @@ def summarize(response_or_stages: Any) -> dict[str, Any]:
     (stage_names·stage_counts 는 상태와 상관없이 전체 output 을 그대로 센다):
       document_count           서류-분류 content[] 중 분류 코드를 읽을 수 있는 항목 수(서류마다 하나)
       document_types           그 항목들의 additional_values.document_type._value (없으면 text)
-      extracted_document_count 민감정보_추출 output 항목 중 data 가 JSON 객체인 수(서류마다 하나)
+      extracted_document_count 민감정보_추출(추출 노드 모두) output 항목 중 data 가 JSON 객체인 수(서류마다 하나)
       risk_level               위험도_판정 additional_values.enum
       final_stage              권장_조치·검토_안내 중 나온 단계의 정규 이름
       other_document_count     기타_서류_안내 output 항목 중 본문(text)이 있는 수

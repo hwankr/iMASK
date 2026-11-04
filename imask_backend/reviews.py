@@ -15,6 +15,9 @@
 #    분석 행과 결과는 검토 동작으로 바뀌지 않으므로 다시 읽지 않는다. analyses 행은 절대 쓰지 않는다(updated_at 트리거).
 #    Upstage 는 부르지 않는다. 오류 순서: 404 분석 → 409 검토할 수 없음 → 404 항목 → 409 잠김 → 409 상태 불일치
 #    → (바뀐 것 없음 → 200 changed false) → 409 이력 1000줄 → 409 경쟁 패배. 저장소 오류는 StoreError(api 가 502).
+#    검토 행 쓰기가 저장소 오류(삭제로 FK 위반 등)거나 모두 경쟁에 졌으면 분석 행을 다시 읽어 정말 없으면 404
+#    (shared-analyses BRIEF §5.6 — 그 사이 지워짐), 있거나 다시 읽지 못하면 지금처럼 502·409.
+#    version 조건부 쓰기(_write_review)는 다시 분석의 이력 한 줄(append_history_line — 다른 열은 그대로)도 같이 쓴다.
 #    이 경로의 로그·StoreError 문구에는 값(메모·분석 id·항목 id·바깥 오류 원문)을 넣지 않는다 — 검토 행 저장소 오류는
 #    SupabaseStore._review_error 가 동작 이름 + 예외 종류 + 영숫자 오류 코드만 남긴다(BRIEF §5.3).
 #  - 저장 형식: findings jsonb 의 키 = 계약 id 의 storage_key(json.dumps(id, ensure_ascii=True)[1:-1] — ASCII 만).
@@ -24,7 +27,8 @@
 #    한 동작의 시각(항목 updated_at·memo_at·reviewed_at·이력 at)은 같은 값 = 지금(UTC), 단 마지막 이력보다 앞서지 않게.
 #  - 조회용 review 블록(review_block·read_review): 검토할 수 있는 분석에만(그 밖은 null — 검토 행을 읽지도 않음).
 #    검토 행을 읽지 못하면 값 없는 경고 후 null(상세 화면이 깨지지 않게). 행이 없으면 기본값(needed·빈 값·version 0).
-#    history 맨 앞에는 조회할 때 만드는 S1(분석 요청)·S2(최초 AI 결과) 두 줄.
+#    history = [S1(분석 요청)] + [저장된 줄 중 kind 'retry'(다시 분석 요청, 저장 순서)] + [S2(최초 AI 결과)] + [그 밖 저장된 줄].
+#    S1·S2 는 조회할 때 만든다. 다시 분석은 failed 일 때만(= 완료 전), 검토 동작은 완료 뒤에만 생기므로 이 순서가 시간 순서다.
 #  - 저장 키 충돌(서로 다른 id 가 같은 저장 키): json.loads 로 만든 문자열에서는 생기지 않는다(인접한 짝 없는 상위·하위
 #    서로게이트가 나올 수 없음). 그래도 생기면 뒤의 항목은 저장하지 않고(동작 404) 기본값으로만 센다 — 값이 섞이지 않게.
 # ==========================================================================
@@ -39,7 +43,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from .analyses import DONE, ApiError, _load, _parse_time, _uuid_or_404, analysis_out
+from .analyses import DONE, MSG_NOT_FOUND, ApiError, _load, _parse_time, _uuid_or_404, analysis_out
 from .fields import CATS, EXPOSURES, SUBJECTS
 from .findings import build_view
 from .store import Store, StoreError
@@ -231,10 +235,15 @@ def _is_surrogate(char: str) -> bool:
     return "\ud800" <= char <= "\udfff"
 
 
+def safe_line_text(text: str, limit: int) -> str:
+    """이력 글(바깥에서 온 값): 서로게이트·NUL → U+FFFD, limit 코드 포인트를 넘으면 앞 limit-1 자 + '…'."""
+    cleaned = "".join(REPLACEMENT if char == "\x00" or _is_surrogate(char) else char for char in text)
+    return cleaned if len(cleaned) <= limit else cleaned[: limit - 1] + ELLIPSIS
+
+
 def safe_target(text: str) -> str:
     """이력 target: 서로게이트·NUL → U+FFFD, MAX_TARGET 코드 포인트를 넘으면 앞 199자 + '…'."""
-    cleaned = "".join(REPLACEMENT if char == "\x00" or _is_surrogate(char) else char for char in text)
-    return cleaned if len(cleaned) <= MAX_TARGET else cleaned[: MAX_TARGET - 1] + ELLIPSIS
+    return safe_line_text(text, MAX_TARGET)
 
 
 # --- 요청 본문 -----------------------------------------------------------------------------
@@ -533,6 +542,9 @@ def review_block(row: Mapping[str, Any], scope: ReviewScope, raw: Mapping[str, A
         if target.writable and isinstance(state.findings.get(target.key), Mapping):
             findings[target.id] = finding_state(target, state.findings)
     stored_lines = [line for line in (history_line(item) for item in state.history) if line is not None]
+    first, ai = _system_lines(row, scope)
+    retries = [line for line in stored_lines if line["kind"] == "retry"]
+    others = [line for line in stored_lines if line["kind"] != "retry"]
     return {
         "status": state.status,
         "memo": _text(source.get("memo")),
@@ -541,7 +553,7 @@ def review_block(row: Mapping[str, Any], scope: ReviewScope, raw: Mapping[str, A
         "reviewed_at": _time_or_none(source.get("reviewed_at")),
         "completion_note": _text(source.get("completion_note")),
         "findings": findings,
-        "history": [*_system_lines(row, scope), *stored_lines],
+        "history": [first, *retries, ai, *others],
         "version": state.version,
     }
 
@@ -760,6 +772,30 @@ def _compute(
 # --- 동작 적용 -------------------------------------------------------------------------------
 
 
+def _write_review(
+    store: Store, analysis_id: str, state: _State, columns: Mapping[str, Any], line: Mapping[str, str]
+) -> dict[str, Any] | None:
+    """검토 행 하나를 version 조건부로 쓴다 — columns + 이력 한 줄(id = H{새 version}) → 쓴 행, 경쟁에 지면 None.
+
+    행이 없으면 insert … on conflict do nothing(기본값 + version 1), 있으면 update … where version = 읽은 값.
+    저장소 오류는 StoreError(값 없는 문구 — SupabaseStore._review_error).
+    """
+    version = state.version + 1
+    entry = {"id": f"H{version}", **{name: line[name] for name in HISTORY_KEYS if name != "id"}}
+    values = {**columns, "history": [*state.history, entry], "version": version}
+    if state.exists:
+        return store.update_review(analysis_id, values, expect_version=state.version)
+    return store.insert_review({"analysis_id": analysis_id, **review_defaults(), **values})
+
+
+def _analysis_gone(store: Store, analysis_id: str) -> bool:
+    """분석 행이 정말 없는지(다시 읽어 None). 다시 읽기 저장소 오류면 False — 원래 오류(502·409)를 그대로 낸다."""
+    try:
+        return store.get_analysis(analysis_id) is None
+    except StoreError:
+        return False
+
+
 def apply_review_action(
     store: Store, analysis_id: str, action: ReviewAction, *, now: datetime | Callable[[], datetime] | None = None
 ) -> ActionOutcome:
@@ -782,9 +818,7 @@ def apply_review_action(
             return ActionOutcome(row=row, view=view, review=review_block(row, scope, raw), changed=False)
         if len(state.history) >= MAX_HISTORY:
             raise ApiError(409, MSG_HISTORY_FULL)
-        version = state.version + 1
         line = {
-            "id": f"H{version}",
             "at": at,
             "actor": action.actor,
             "kind": planned.kind,
@@ -792,15 +826,59 @@ def apply_review_action(
             "change": planned.change,
             "reason": planned.reason,
         }
-        values = {**planned.columns, "history": [*state.history, line], "version": version}
-        if state.exists:
-            written = store.update_review(analysis_id, values, expect_version=state.version)
-        else:
-            written = store.insert_review({"analysis_id": analysis_id, **review_defaults(), **values})
+        try:
+            written = _write_review(store, analysis_id, state, planned.columns, line)
+        except StoreError:
+            # 그 사이 분석이 지워졌으면(FK 위반 등) 404 — 아니면 지금처럼 502
+            if _analysis_gone(store, analysis_id):
+                raise ApiError(404, MSG_NOT_FOUND) from None
+            raise
         if written is not None:
             return ActionOutcome(row=row, view=view, review=review_block(row, scope, written), changed=True)
         logger.info("검토 행 쓰기가 다른 요청과 겹쳐 다시 읽습니다")
+    if _analysis_gone(store, analysis_id):
+        raise ApiError(404, MSG_NOT_FOUND)
     raise ApiError(409, MSG_CONFLICT)
+
+
+class HistoryFull(Exception):
+    """저장된 이력이 MAX_HISTORY 줄이라 더 쓰지 않았다(append_history_line)."""
+
+
+def append_history_line(
+    store: Store,
+    analysis_id: str,
+    *,
+    actor: str,
+    kind: str,
+    target: str,
+    change: str,
+    reason: str,
+    now: datetime | None = None,
+) -> dict[str, Any] | None:
+    """검토 행에 이력 한 줄만 더한다(다른 열은 그대로) — 검토 동작과 같은 version 조건부 쓰기, MAX_ATTEMPTS 번.
+
+    줄의 at 은 지금(UTC), 저장된 마지막(모양이 맞는) 이력보다 앞서지 않게. target·reason 은 부르는 쪽이 안전화한다.
+    → 쓴 행. 모두 경쟁에 지면 None. 이력이 MAX_HISTORY 줄이면 HistoryFull. 저장소 오류·틀린 version 은 StoreError.
+    """
+    moment = now or datetime.now(UTC)
+    for _attempt in range(MAX_ATTEMPTS):
+        state = _state(store.get_review(analysis_id), for_write=True)
+        if len(state.history) >= MAX_HISTORY:
+            raise HistoryFull()
+        line = {
+            "at": _action_time(state.history, moment),
+            "actor": actor,
+            "kind": kind,
+            "target": target,
+            "change": change,
+            "reason": reason,
+        }
+        written = _write_review(store, analysis_id, state, {}, line)
+        if written is not None:
+            return written
+        logger.info("검토 행 쓰기가 다른 요청과 겹쳐 다시 읽습니다")
+    return None
 
 
 def review_action_out(

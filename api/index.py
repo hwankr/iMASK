@@ -5,17 +5,26 @@
 #
 #  경로(모두 /api/py 아래. Next rewrites 가 /api/py/:path* 를 이 함수로 보낸다):
 #    GET  /api/py/health                   설정이 있는지만(값은 넣지 않음)
+#    GET  /api/py/analyses                 공유 목록(imask_backend.manage) → 200 {"analyses": [...]}. ?limit=1~200(없으면 100,
+#                                          정확히 한 번·숫자 1~3자리가 아니면 400 — 직접 본다). 질의 한 번, Upstage 를 부르지 않고
+#                                          (의존성도 받지 않음) 쓰지 않는다.
 #    POST /api/py/analyses                 분석 건 + 서명 업로드 URL 만들기 → 201
 #    POST /api/py/analyses/{id}/start      Upstage 작업 시작(완료를 기다리지 않음) → 200
 #    GET  /api/py/analyses/{id}            조회. running 이면 Upstage 상태를 한 번 확인 → 200
 #                                          result 는 documents·findings·overall(?include=stages 면 stages 도),
 #                                          review 는 검토 블록(검토할 수 있는 분석만, 검토 행을 읽지 못하면 null)
+#    DELETE /api/py/analyses/{id}          원본 파일·문서 행·검토 기록과 함께 지우기 → 204(본문 없음, 요청 본문은 무시).
+#                                          Storage 원본(지운 것 확인) → 행 → Upstage 파일(최선, 단계별 시간 제한 클라이언트 —
+#                                          get_upstage_cleanup: 연결 5초·읽기·쓰기·풀 10초, 전체 마감은 아님)
 #    GET  /api/py/analyses/{id}/file       원본 파일 서명 다운로드 URL(10분) → 200, Cache-Control: no-store
 #    POST /api/py/analyses/{id}/review-actions
 #                                          검토 동작 하나 저장(imask_backend.reviews) → 200 {"analysis", "changed"}
 #                                          본문은 직접 읽는다: 65,536 바이트를 넘으면 그 자리에서 413(Content-Length 없이도),
 #                                          JSON·필드 검사 400. Upstage 를 부르지 않는다(의존성도 받지 않음).
-#  분석 건·원본 파일 응답은 _json_out 한 곳을 지난다 — 짝 없는 서로게이트가 있을 때만 ASCII escape JSON(이름·값 원문
+#    POST /api/py/analyses/{id}/retry      실패한 분석을 같은 원본으로 진짜 다시 분석(imask_backend.manage) → 200 AnalysisOut.
+#                                          본문 {"actor"} 를 검토 동작과 같은 경계로 읽는다(413 → 400 → 404 → 409 → 500).
+#  AnalysisOut 에는 started_at(마지막으로 시작한 시각, 문자열 또는 null) 키가 늘 있다.
+#  분석 건·목록·원본 파일·다시 분석 응답은 _json_out 한 곳을 지난다 — 짝 없는 서로게이트가 있을 때만 ASCII escape JSON(이름·값 원문
 #  그대로), 없으면 정상 경로 그대로(바이트 불변). 상태 코드·헤더는 같다.
 #  접근 코드(X-Demo-Code)는 받지 않는다(2026-11-03 없앰 — 팀만 아는 주소, 대회용 API). 오류 본문은 늘 {"detail": "<짧은 한국어 문장>"}.
 #  설정은 요청 때 읽는다(get_settings 캐시) — 환경변수가 빠져도 import 는 실패하지 않는다.
@@ -57,6 +66,7 @@ from imask_backend.analyses import (  # noqa: E402
     start_analysis,
 )
 from imask_backend.config import ConfigError  # noqa: E402
+from imask_backend.manage import delete_analysis, list_out, parse_limit, parse_retry_body, retry_out  # noqa: E402
 from imask_backend.redaction import redact  # noqa: E402
 from imask_backend.reviews import (  # noqa: E402
     MAX_BODY_BYTES,
@@ -68,7 +78,7 @@ from imask_backend.reviews import (  # noqa: E402
 from imask_backend.settings import Settings, get_settings  # noqa: E402
 from imask_backend.store import Store, StoreError, cached_store  # noqa: E402
 from imask_backend.textsafe import escaped_json_bytes, has_unpaired_surrogates  # noqa: E402
-from imask_backend.upstage import UpstageClient  # noqa: E402
+from imask_backend.upstage import CLEANUP_TIMEOUT, UpstageClient  # noqa: E402
 
 MSG_BAD_REQUEST = "요청 형식이 올바르지 않습니다."
 MSG_CONFIG_MISSING = "서버 설정이 빠졌습니다: {names}"
@@ -128,9 +138,33 @@ def get_upstage(settings: Annotated[Settings, Depends(get_settings)]) -> Iterato
             client.close()
 
 
+def get_upstage_cleanup(settings: Annotated[Settings, Depends(get_settings)]) -> Iterator[UpstageFactory]:
+    """삭제 뒤 Upstage 파일 지우기용 — get_upstage 와 같되 짧은 단계별 시간 제한(CLEANUP_TIMEOUT: 연결 5초·읽기·쓰기·풀 10초).
+
+    httpx 의 제한은 단계(연결·한 번의 읽기·쓰기)마다라 전체 마감이 아니다 — 바이트를 조금씩 흘리는 응답이면 더 길어질 수 있다.
+
+    지울 file id 가 없으면 팩토리를 부르지 않아 클라이언트를 만들지 않는다.
+    """
+    clients: list[UpstageClient] = []
+
+    def factory() -> UpstageClient:
+        if not clients:
+            clients.append(
+                UpstageClient.from_settings(settings.upstage(), extra_secrets=settings.secrets(), timeout=CLEANUP_TIMEOUT)
+            )
+        return clients[0]
+
+    try:
+        yield factory
+    finally:
+        for client in clients:
+            client.close()
+
+
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 StoreDep = Annotated[Store, Depends(get_store)]
 UpstageDep = Annotated[UpstageFactory, Depends(get_upstage)]
+UpstageCleanupDep = Annotated[UpstageFactory, Depends(get_upstage_cleanup)]
 
 
 def _settings_for(request: Request) -> Settings:
@@ -239,6 +273,13 @@ def health(settings: SettingsDep) -> dict[str, Any]:
 
 
 # 분석 건 경로는 _json_out 이 Response 를 돌려줄 수 있어 반환 타입을 Any 로 두고 응답 모양은 response_model 로 적는다
+@app.get("/api/py/analyses", response_model=dict[str, Any])
+def list_analyses(request: Request, store: StoreDep) -> Any:
+    # limit 은 FastAPI 의 int 변환에 맡기지 않는다(두 번·부호·공백·소수점·긴 숫자 → 400). 다른 질의 이름은 무시한다
+    limit = parse_limit(request.query_params.getlist("limit"))
+    return _json_out(list_out(store, limit))
+
+
 @app.post("/api/py/analyses", status_code=201, response_model=dict[str, Any])
 def create(body: CreateAnalysisIn, store: StoreDep) -> Any:
     row, upload = create_analysis(
@@ -276,6 +317,12 @@ def read(
             poll_error=polled.poll_error,
         )
     )
+
+
+@app.delete("/api/py/analyses/{analysis_id}", status_code=204, response_class=Response)
+def delete(analysis_id: str, store: StoreDep, cleanup: UpstageCleanupDep, settings: SettingsDep) -> Response:
+    delete_analysis(store, cleanup, settings, analysis_id)
+    return Response(status_code=204)
 
 
 @app.get("/api/py/analyses/{analysis_id}/file")
@@ -323,3 +370,11 @@ async def review_action(analysis_id: str, request: Request, store: StoreDep) -> 
     action = parse_action(await _read_body(request))
     # 저장소 호출은 블로킹이라 스레드 풀에서(조회 경로처럼)
     return _json_out(await run_in_threadpool(review_action_out, store, analysis_id, action))
+
+
+@app.post("/api/py/analyses/{analysis_id}/retry", response_model=dict[str, Any])
+async def retry(analysis_id: str, request: Request, store: StoreDep, upstage: UpstageDep, settings: SettingsDep) -> Any:
+    # 오류 순서: 413(본문 크기) → 400(본문) → 404·409·500(imask_backend.manage). Upstage 클라이언트는 시작할 때만 만든다
+    actor = parse_retry_body(await _read_body(request))
+    # 저장소·Upstage 호출은 블로킹이라 스레드 풀에서(검토 동작 경로처럼)
+    return _json_out(await run_in_threadpool(retry_out, store, upstage, settings, analysis_id, actor))

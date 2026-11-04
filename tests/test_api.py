@@ -50,6 +50,7 @@ ANALYSIS_KEYS = {
     "result",
     "created_at",
     "updated_at",
+    "started_at",  # 마지막으로 시작한 시각(shared-analyses BRIEF §5.1 — 문자열 또는 null)
     "documents",
     "upstage_status",
     "poll_error",
@@ -301,6 +302,7 @@ def test_create_insert_analysis_failure_is_502(ctx: Ctx) -> None:
 
 def test_start_uploads_creates_job_and_saves_ids(ctx: Ctx) -> None:
     analysis_id = ctx.store.put(filename="대출 서류.pdf", storage_name="document.pdf")
+    read_stamp = ctx.store.analyses[analysis_id]["updated_at"]
     response = ctx.start(analysis_id)
     assert response.status_code == 200
     body = response.json()
@@ -327,9 +329,12 @@ def test_start_uploads_creates_job_and_saves_ids(ctx: Ctx) -> None:
     assert stored["status"] == "running"
     assert stored["agent_id"] == FAKE_AGENT_ID  # DB 에는 저장한다(식별자)
     assert stored["upstage_job_id"] == "job_fake2"
-    # 선점(queued 조건) → job id 저장(running·job 없음 조건)
-    assert ctx.store.updates[0][2] == {"expect_status": "queued", "expect_no_job": False}
-    assert ctx.store.updates[1][2] == {"expect_status": "running", "expect_no_job": True}
+    # 선점(queued 조건) → job id 저장(running·job 없음 조건 + 이 실행 — updated_at = 선점이 돌려준 값, shared-analyses §5.6)
+    # 선점도 읽은 행에만(updated_at = 읽은 값 — shared-analyses §5.6 V-T1-3 v3-m1 ①)
+    assert ctx.store.updates[0][2] == {"expect_status": "queued", "expect_no_job": False, "expect_updated_at": read_stamp}
+    claim_stamp = ctx.store.update_stamps[0]
+    assert isinstance(claim_stamp, str)
+    assert ctx.store.updates[1][2] == {"expect_status": "running", "expect_no_job": True, "expect_updated_at": claim_stamp}
 
 
 def test_start_sends_png_and_jpeg(ctx: Ctx) -> None:
@@ -631,7 +636,8 @@ def test_get_completed_saves_result_and_deletes_file(ctx: Ctx, caplog: pytest.Lo
     assert "model" not in stored["result"]["response"]
     assert stored["result"]["response"]["output"]
     assert FAKE_AGENT_ID not in json.dumps(stored["result"], ensure_ascii=False)
-    assert ctx.store.updates[-1][2] == {"expect_status": "running", "expect_no_job": False}
+    # 결과 반영은 조회한 작업에만(shared-analyses §5.6 실행 구분)
+    assert ctx.store.updates[-1][2] == {"expect_status": "running", "expect_no_job": False, "expect_job_id": "job_up1"}
 
     # Upstage: last → all → 파일 삭제
     polls = [r.url.query.decode() for r in ctx.server.calls("GET", "response")]
@@ -804,11 +810,13 @@ def test_get_running_without_job_recent_is_unchanged(ctx: Ctx) -> None:
 
 def test_get_running_without_job_stale_fails_and_cleans_up(ctx: Ctx) -> None:
     ctx.server.files["file_orphan"] = ("document.pdf", b"")
-    analysis_id = ctx.store.put(status="running", updated_at=_ago(6), upstage_file_id="file_orphan")
+    read_stamp = _ago(6)
+    analysis_id = ctx.store.put(status="running", updated_at=read_stamp, upstage_file_id="file_orphan")
     body = ctx.get(analysis_id).json()
     assert body["status"] == "failed"
     assert body["error"] == "분석 시작이 끝나지 않았습니다. 새 분석으로 다시 올려 주세요."
-    assert ctx.store.updates[-1][2] == {"expect_status": "running", "expect_no_job": True}
+    # 만료 처리는 읽은 실행에만(updated_at = 읽은 값, shared-analyses §5.6 실행 구분)
+    assert ctx.store.updates[-1][2] == {"expect_status": "running", "expect_no_job": True, "expect_updated_at": read_stamp}
     assert ctx.server.calls("GET") == []
     assert ctx.server.deleted == ["file_orphan"]
 

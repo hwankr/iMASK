@@ -289,7 +289,8 @@ def test_404_after_grace_fails_and_deletes(env: Any) -> None:
     assert body["error"] == JOB_GONE
     assert body["poll_error"] is None
     assert store.analyses[analysis_id]["error"] == JOB_GONE
-    assert store.updates[-1][2] == {"expect_status": "running", "expect_no_job": False}
+    # 작업 없어짐 반영도 조회한 작업에만(shared-analyses §5.6 실행 구분)
+    assert store.updates[-1][2] == {"expect_status": "running", "expect_no_job": False, "expect_job_id": "job_up1"}
     assert server.deleted == ["file_up1"]
 
 

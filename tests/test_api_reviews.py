@@ -41,6 +41,7 @@ ANALYSIS_KEYS = {
     "result",
     "created_at",
     "updated_at",
+    "started_at",  # 마지막으로 시작한 시각(shared-analyses BRIEF §5.1 — 문자열 또는 null)
     "documents",
     "upstage_status",
     "poll_error",

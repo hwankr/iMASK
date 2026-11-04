@@ -37,6 +37,9 @@ SUCCESS_STATUS = "completed"
 
 # 연결 10초, 읽기·쓰기 60초
 DEFAULT_TIMEOUT = httpx.Timeout(60.0, connect=10.0)
+# 분석을 지운 뒤 Upstage 파일 지우기(최선) — 응답을 오래 붙잡지 않게 httpx **단계별** 제한: 연결 5초, 읽기·쓰기·풀 10초.
+# 전체 마감이 아니다(읽기마다 다시 잰다 — 바이트를 조금씩 흘리는 응답이면 더 길어질 수 있음, BRIEF §5.3 이 받아들임).
+CLEANUP_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 
 # 에이전트가 속한 Studio 프로젝트를 알리는 헤더(파일·작업이 그 프로젝트 안에 만들어진다)
 PROJECT_HEADER = "x-project-id"

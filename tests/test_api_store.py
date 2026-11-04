@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -68,7 +69,11 @@ def test_claim_is_conditional_patch(mocked: tuple[SupabaseStore, Recorder]) -> N
     assert req.url.path == "/rest/v1/analyses"
     params = dict(httpx.QueryParams(req.url.query))
     assert params == {"id": "eq.a1", "status": "eq.queued"}
-    assert json.loads(req.content) == {"status": "running"}
+    # shared-analyses BRIEF §5.1: 같은 조건부 갱신에 started_at(서버 시계 UTC ISO — 시각을 주지 않으면 지금)
+    body = json.loads(req.content)
+    assert body == {"status": "running", "started_at": body["started_at"]}
+    started = datetime.fromisoformat(body["started_at"])
+    assert started.utcoffset() == timedelta(0) and abs(datetime.now(UTC) - started) < timedelta(minutes=1)
     assert req.headers["apikey"] == FAKE_SUPABASE_KEY
     assert "return=representation" in req.headers.get("prefer", "")
 

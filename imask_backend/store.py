@@ -17,6 +17,24 @@
 #    {'signedURL', 'signedUrl'} 에 이미 절대 주소(Storage 기준 주소 + /object/sign/…?token=…)를 담아 준다.
 #    다른 버전·가짜가 상대 경로를 주면 Storage 기준 주소(client.storage_url)에 붙인다. 없는 객체는 None.
 #    서명 URL 은 로그에 남기지 않는다.
+#  - started_at(분석을 마지막으로 시작한 시각, shared-analyses BRIEF §5.1): ANALYSIS_COLUMNS 로 읽는다.
+#    claim_analysis 가 status='running' 과 같은 조건부 갱신에 started_at(서버 UTC ISO)을 넣는다. insert_analysis 는 넣지 않는다.
+#  - 공유 목록(list_analyses): LIST_SELECT 한 번(result 열 전체·agent_id·upstage_job_id·storage_path·upstage_file_id 없음 —
+#    위험등급·서류 수는 JSON 경로 값만), created_at desc, id desc, limit. analysis_reviews 는 1:1 이라 객체 또는 null.
+#  - 삭제: remove_objects(paths) = storage3 remove(DELETE /object/{bucket}, {"prefixes": paths}). Storage 는 권한을 통과해
+#    실제로 지운 객체 목록만 200 으로 돌려준다(supabase/storage deleteObjects) — 없는 경로도, 지우지 못한 경로도 목록에서
+#    빠질 뿐이다. 그래서 목록에 없는 경로(목록이 아니면 모든 경로)는 storage3 info(메타데이터만)로 하나씩 확인해 '없음'이
+#    확실할 때만(본문 statusCode 404 + not_found) 성공, 아직 있거나 확인 실패면 StoreError(행을 지우지 않게).
+#    remove 의 예외(StorageApiError·연결 오류)도 모두 StoreError — 404 꼴이라도 성공으로 보지 않는다.
+#    delete_analysis → 지운 행 수: DELETE ?id=eq.… + Prefer return=minimal,count=exact(PostgREST 는 204 + Content-Range
+#    */N 으로 지운 행 수를 알린다 — 지운 행의 result 를 돌려받지 않는다). 개수 헤더가 없으면 응답 행 수(없으면 0).
+#  - 새 경로의 오류(list_analyses·remove_objects·지우기 확인·delete_analysis — shared-analyses BRIEF §4)는 _quiet_error:
+#    고정 동작 이름 + 예외 종류 + 영숫자 짧은 코드 + HTTP 상태만(바깥 message·details·hint 는 가려서라도 넣지 않는다).
+#  - 실행 구분(§5.6): update_analysis 의 expect_job_id(upstage_job_id = 그 값)·expect_updated_at(updated_at = 읽은 문자열
+#    그대로) 조건 — 다시 분석으로 같은 분석이 여러 번 실행될 때 옛 실행의 요청이 새 실행을 덮어쓰지 않게.
+#    update_document 의 expect_file_id·expect_no_file(문서 upstage_file_id 비교 후 교환 — select=id 로 바뀐 행이 있었는지 돌려줌),
+#    delete_analysis 의 expect_updated_at(읽은 실행만 지우기, §5.3 3단계)도 같은 뜻이다(V-T1-2 R1·R2).
+#    claim_analysis 의 expect_updated_at(시작이 읽은 행일 때만 선점 — V-T1-3 v3-m1 ①)도 같다.
 # ==========================================================================
 
 from __future__ import annotations
@@ -24,7 +42,8 @@ from __future__ import annotations
 import logging
 import re
 import threading
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from .redaction import redact
@@ -33,8 +52,14 @@ from .settings import STORAGE_BUCKET, Settings
 logger = logging.getLogger("imask.store")
 
 # 응답에 쓰는 열만 고른다(agent_id·storage_path 는 DB 에만 — 업무 로직이 쓰므로 읽기는 한다)
-ANALYSIS_COLUMNS = "id,name,status,agent_id,upstage_job_id,result,error,created_at,updated_at"
+ANALYSIS_COLUMNS = "id,name,status,agent_id,upstage_job_id,result,error,created_at,updated_at,started_at"
 DOCUMENT_COLUMNS = "id,analysis_id,filename,storage_path,size_bytes,mime_type,upstage_file_id,created_at"
+# 공유 목록(BRIEF §5.2) — 질의 한 번. result 는 JSON 경로 두 값만(분석 하나의 result 는 150~320KB), 비밀·내부 열은 넣지 않는다
+LIST_SELECT = (
+    "id,name,status,error,created_at,updated_at,started_at,"
+    "risk_level:result->summary->>risk_level,document_count:result->summary->document_count,"
+    "documents(id,filename,size_bytes,mime_type,created_at),analysis_reviews(status)"
+)
 REVIEW_TABLE = "analysis_reviews"
 REVIEW_COLUMNS = (
     "analysis_id,status,memo,memo_at,reviewer,reviewed_at,completion_note,findings,history,version,created_at,updated_at"
@@ -42,6 +67,13 @@ REVIEW_COLUMNS = (
 MAX_ERROR_DETAIL = 300
 # 검토 행 오류 로그에 남겨도 되는 오류 코드(PostgREST PGRST205·Postgres SQLSTATE 23514 등 — 영숫자만, 16자까지)
 _ERROR_CODE = re.compile(r"[A-Za-z0-9]{1,16}")
+# 값 없는 오류에 남겨도 되는 HTTP 상태(세 자리 숫자만)
+_HTTP_STATUS = re.compile(r"[1-5][0-9]{2}")
+
+
+def utc_now_iso() -> str:
+    """지금(서버 시계, UTC) ISO 8601 — started_at 처럼 서버가 정하는 시각."""
+    return datetime.now(UTC).isoformat()
 
 
 class StoreError(Exception):
@@ -61,7 +93,17 @@ class Store(Protocol):
         self, analysis_id: str, *, filename: str, storage_path: str, size_bytes: int, mime_type: str
     ) -> dict[str, Any]: ...
 
-    def delete_analysis(self, analysis_id: str) -> None: ...
+    def delete_analysis(self, analysis_id: str, *, expect_updated_at: str | None = None) -> int:
+        """analyses 행을 지운다(documents·analysis_reviews 는 FK cascade) → 지운 행 수(없었거나 updated_at 이 다르면 0)."""
+        ...
+
+    def list_analyses(self, limit: int) -> list[dict[str, Any]]:
+        """공유 목록 행(LIST_SELECT 모양, created_at desc·id desc, limit 개까지)."""
+        ...
+
+    def remove_objects(self, paths: Sequence[str]) -> None:
+        """버킷 객체들을 지운다. 이미 없는 객체는 성공, 그 밖 실패는 StoreError. 빈 목록이면 부르지 않는다."""
+        ...
 
     def create_signed_upload_url(self, path: str) -> dict[str, str]:
         """{'signed_url', 'token', 'path'}"""
@@ -71,8 +113,11 @@ class Store(Protocol):
         """analyses 행 + 'documents'(그 분석의 문서 행 목록, 만든 순). 없으면 None."""
         ...
 
-    def claim_analysis(self, analysis_id: str) -> dict[str, Any] | None:
-        """queued → running 원자적 선점. 바뀐 행이 없으면 None."""
+    def claim_analysis(
+        self, analysis_id: str, *, started_at: str | None = None, expect_updated_at: str | None = None
+    ) -> dict[str, Any] | None:
+        """queued → running 원자적 선점(같은 갱신으로 started_at = 주어진 시각, 없으면 지금). expect_updated_at 이면
+        updated_at = 그 값(시작이 읽은 행)일 때만. 바뀐 행이 없으면 None."""
         ...
 
     def update_analysis(
@@ -82,11 +127,22 @@ class Store(Protocol):
         *,
         expect_status: str | None = None,
         expect_no_job: bool = False,
+        expect_job_id: str | None = None,
+        expect_updated_at: str | None = None,
     ) -> dict[str, Any] | None:
-        """조건(상태, upstage_job_id 가 null)을 붙인 갱신. 바뀐 행이 없으면 None."""
+        """조건(상태, upstage_job_id 가 null 또는 그 값, updated_at 이 읽은 값)을 붙인 갱신. 바뀐 행이 없으면 None."""
         ...
 
-    def update_document(self, document_id: str, values: Mapping[str, Any]) -> None: ...
+    def update_document(
+        self,
+        document_id: str,
+        values: Mapping[str, Any],
+        *,
+        expect_file_id: str | None = None,
+        expect_no_file: bool = False,
+    ) -> bool:
+        """문서 행 갱신(upstage_file_id 가 expect_file_id 이거나 null(expect_no_file)일 때만) → 바뀐 행이 있었는지."""
+        ...
 
     def download(self, path: str) -> bytes | None:
         """버킷에서 파일 내용. 파일이 없으면 None."""
@@ -115,6 +171,22 @@ def _first(data: Any) -> dict[str, Any] | None:
     if isinstance(data, list):
         return data[0] if data and isinstance(data[0], dict) else None
     return data if isinstance(data, dict) else None
+
+
+def _removed_names(result: Any) -> set[str]:
+    """storage3 remove 의 반환(지운 객체 목록)에서 이름들. 목록이 아니거나 이름이 없는 항목은 세지 않는다."""
+    if not isinstance(result, list):
+        return set()
+    return {item["name"] for item in result if isinstance(item, Mapping) and isinstance(item.get("name"), str)}
+
+
+def _is_missing_object(exc: BaseException) -> bool:
+    """storage3 StorageApiError 가 '객체 없음'이 확실한지 — Storage 의 NoSuchKey 는 본문 {statusCode "404",
+    error "not_found"(옛 이름 NoSuchKey)} 이다(supabase/storage internal/errors/codes.ts). 본문을 못 읽은 404·
+    버킷 없음('Bucket not found')·권한 오류는 확실하지 않다."""
+    status = str(getattr(exc, "status", "") or "")
+    code = getattr(exc, "code", None)
+    return status == "404" and code in ("not_found", "NoSuchKey")
 
 
 def _is_not_found(exc: BaseException) -> bool:
@@ -152,18 +224,32 @@ class SupabaseStore:
         return StoreError(text)
 
     @staticmethod
+    def _quiet_error(action: str, exc: BaseException, *, with_status: bool = True) -> StoreError:
+        """값 없는 오류(공용): 고정 동작 이름 + 예외 종류 + 영숫자만인 짧은 오류 코드 + HTTP 상태(세 자리 숫자, 있으면).
+
+        바깥 오류 원문(exc.message·details·hint·str(exc) — PostgREST·Postgres·Storage 문구, 요청 주소에는 이름·메모·
+        분석 id·경로가 섞일 수 있다)은 가려서라도 로그·StoreError 문구에 넣지 않는다. 원래 예외는 끊는다.
+        새 경로(목록·객체 지우기·지우기 확인·행 지우기, shared-analyses BRIEF §4)와 검토 행(_review_error)이 쓴다.
+        """
+        code = getattr(exc, "code", None)
+        text = f"{action}: {type(exc).__name__}"
+        if isinstance(code, str) and _ERROR_CODE.fullmatch(code):
+            text += f" ({code})"
+        if with_status:
+            status = str(getattr(exc, "status", "") or "")
+            if _HTTP_STATUS.fullmatch(status):
+                text += f" HTTP {status}"
+        logger.warning("%s", text)
+        return StoreError(text)
+
+    @staticmethod
     def _review_error(action: str, exc: BaseException) -> StoreError:
         """검토 행 오류(BRIEF §5.3): 값 없이 — 고정 동작 이름 + 예외 종류 + 영숫자만인 짧은 오류 코드(있으면).
 
         바깥 오류 원문(exc.message·str(exc) — PostgREST·Postgres 문구·요청 주소에는 메모·분석 id 가 섞일 수 있다)은
         로그에도 StoreError 문구에도 넣지 않는다. api 의 StoreError 처리기도 이 문구만 본다. 원래 예외는 끊는다.
         """
-        code = getattr(exc, "code", None)
-        text = f"{action}: {type(exc).__name__}"
-        if isinstance(code, str) and _ERROR_CODE.fullmatch(code):
-            text += f" ({code})"
-        logger.warning("%s", text)
-        return StoreError(text)
+        return SupabaseStore._quiet_error(action, exc, with_status=False)
 
     def _table(self, name: str) -> Any:
         return self._client.table(name)
@@ -202,12 +288,45 @@ class SupabaseStore:
             raise StoreError("문서 행 만들기: 응답에 행이 없습니다")
         return row
 
-    def delete_analysis(self, analysis_id: str) -> None:
-        # documents 는 외래 키 on delete cascade 로 함께 지워진다
+    def delete_analysis(self, analysis_id: str, *, expect_updated_at: str | None = None) -> int:
+        # documents·analysis_reviews 는 외래 키 on delete cascade 로 함께 지워진다.
+        # return=minimal + count=exact: PostgREST 는 204 + Content-Range */N(N = 지운 행 수) — 지운 행(result 포함)을 받지 않는다
+        # expect_updated_at(§5.3 3단계 — V-T1-2 R2): 읽은 실행만 지운다(updated_at = 읽은 문자열 그대로). 없으면 id 만.
+        from postgrest.types import CountMethod, ReturnMethod  # supabase 와 함께 쓸 때까지 미룬다
+
         try:
-            self._table("analyses").delete().eq("id", analysis_id).execute()
+            query = (
+                self._table("analyses")
+                .delete(returning=ReturnMethod.minimal, count=CountMethod.exact)
+                .eq("id", analysis_id)
+            )
+            if expect_updated_at is not None:
+                query = query.eq("updated_at", expect_updated_at)
+            response = query.execute()
         except Exception as exc:
-            raise self._error("분석 행 지우기", exc) from None
+            raise self._quiet_error("분석 행 지우기", exc) from None
+        count = getattr(response, "count", None)
+        if isinstance(count, int) and not isinstance(count, bool):
+            return count
+        data = getattr(response, "data", None)
+        return len(data) if isinstance(data, list) else 0
+
+    def list_analyses(self, limit: int) -> list[dict[str, Any]]:
+        try:
+            response = (
+                self._table("analyses")
+                .select(LIST_SELECT)
+                .order("created_at", desc=True)
+                .order("id", desc=True)
+                .limit(limit)
+                .execute()
+            )
+        except Exception as exc:
+            raise self._quiet_error("분석 목록 읽기", exc) from None
+        data = response.data
+        if not isinstance(data, list):
+            raise StoreError("분석 목록 읽기: 응답 모양이 다릅니다")
+        return data
 
     def get_analysis(self, analysis_id: str) -> dict[str, Any] | None:
         try:
@@ -228,8 +347,13 @@ class SupabaseStore:
         row["documents"] = sorted(docs, key=lambda d: (str(d.get("created_at") or ""), str(d.get("id") or "")))
         return row
 
-    def claim_analysis(self, analysis_id: str) -> dict[str, Any] | None:
-        return self.update_analysis(analysis_id, {"status": "running"}, expect_status="queued")
+    def claim_analysis(
+        self, analysis_id: str, *, started_at: str | None = None, expect_updated_at: str | None = None
+    ) -> dict[str, Any] | None:
+        # 상태와 시작 시각을 한 번의 조건부 갱신으로(진 요청은 started_at 도 바꾸지 못한다). expect_updated_at(V-T1-3 v3-m1 ①):
+        # 시작이 읽은 행의 updated_at 일 때만 — 오래 멈췄던 시작이 그 사이 새로 돈 queued 순환을 가로채지 않게
+        values = {"status": "running", "started_at": started_at or utc_now_iso()}
+        return self.update_analysis(analysis_id, values, expect_status="queued", expect_updated_at=expect_updated_at)
 
     def update_analysis(
         self,
@@ -238,23 +362,48 @@ class SupabaseStore:
         *,
         expect_status: str | None = None,
         expect_no_job: bool = False,
+        expect_job_id: str | None = None,
+        expect_updated_at: str | None = None,
     ) -> dict[str, Any] | None:
+        # expect_job_id·expect_updated_at(shared-analyses §5.6 실행 구분): eq 필터. updated_at 은 읽은 문자열 그대로
+        # 보낸다(PostgREST 가 timestamptz 로 바꿔 비교 — httpx 가 '+' 를 %2B 로 보낸다)
         try:
             query = self._table("analyses").update(dict(values)).eq("id", analysis_id)
             if expect_status is not None:
                 query = query.eq("status", expect_status)
             if expect_no_job:
                 query = query.is_("upstage_job_id", "null")
+            if expect_job_id is not None:
+                query = query.eq("upstage_job_id", expect_job_id)
+            if expect_updated_at is not None:
+                query = query.eq("updated_at", expect_updated_at)
             response = query.execute()
         except Exception as exc:
             raise self._error("분석 갱신", exc) from None
         return _first(response.data)
 
-    def update_document(self, document_id: str, values: Mapping[str, Any]) -> None:
+    def update_document(
+        self,
+        document_id: str,
+        values: Mapping[str, Any],
+        *,
+        expect_file_id: str | None = None,
+        expect_no_file: bool = False,
+    ) -> bool:
+        # 비교 후 교환(shared-analyses §5.6 — V-T1-2 R1): upstage_file_id 가 읽은 값(expect_file_id)이거나 null(expect_no_file)
+        # 일 때만. select=id + return=representation 으로 바뀐 행의 id 만 돌려받아 바뀐 행이 있었는지 센다(개수 헤더에
+        # 기대지 않는다). 기존 '문서 갱신' 오류 문구(_error)는 그대로.
         try:
-            self._table("documents").update(dict(values)).eq("id", document_id).execute()
+            query = self._table("documents").update(dict(values)).eq("id", document_id)
+            if expect_no_file:
+                query = query.is_("upstage_file_id", "null")
+            elif expect_file_id is not None:
+                query = query.eq("upstage_file_id", expect_file_id)
+            response = query.select("id").execute()
         except Exception as exc:
             raise self._error("문서 갱신", exc) from None
+        data = getattr(response, "data", None)
+        return isinstance(data, list) and any(isinstance(item, dict) for item in data)
 
     # --- 검토 행(analysis_reviews) ---------------------------------------------
 
@@ -309,6 +458,39 @@ class SupabaseStore:
         if not isinstance(signed_url, str) or not signed_url or not isinstance(token, str) or not token:
             raise StoreError("서명 업로드 URL 만들기: 응답에 URL·토큰이 없습니다")
         return {"signed_url": signed_url, "token": token, "path": path}
+
+    def remove_objects(self, paths: Sequence[str]) -> None:
+        # storage3 remove → DELETE /object/{bucket} {"prefixes": [...]}: 지운 객체 목록(200). Storage 는 prefixes 가 비면
+        # 400 이라 빈 목록이면 부르지 않는다. 돌려준 목록에 없는 경로는 '이미 없었음'으로 단정하지 않고 하나씩 확인한다
+        # (권한 등으로 일부만 지웠을 수 있다 — 원본이 남은 채 행이 지워지지 않게). 목록이 아니면 모든 경로를 확인한다.
+        action = "원본 파일 지우기"
+        targets = list(dict.fromkeys(p for p in paths if isinstance(p, str) and p))
+        if not targets:
+            return
+        try:
+            result = self._storage().remove(targets)
+        except Exception as exc:
+            raise self._quiet_error(action, exc) from None
+        removed = _removed_names(result)
+        for path in targets:
+            if path not in removed and not self._object_gone(path):
+                logger.warning("%s: 지우지 못한 객체가 남음", action)
+                raise StoreError(f"{action}: 지우지 못한 객체가 남음")
+
+    def _object_gone(self, path: str) -> bool:
+        """객체가 정말 없는지 — storage3 info(GET /object/info/{bucket}/{path}: 메타데이터만, 내용을 받지 않는다).
+
+        없음이 확실한 응답(본문 statusCode "404" + error not_found·NoSuchKey)이면 True, 있으면(200) False,
+        그 밖(권한·버킷 없음·본문 없는 404·연결 오류)은 확인 실패 StoreError. HEAD(exists)는 본문이 없어
+        400·404 를 모두 '없음'으로 보므로 쓰지 않는다.
+        """
+        try:
+            self._storage().info(path)
+        except Exception as exc:
+            if _is_missing_object(exc):
+                return True
+            raise self._quiet_error("원본 파일 지우기 확인", exc) from None
+        return False
 
     def download(self, path: str) -> bytes | None:
         try:

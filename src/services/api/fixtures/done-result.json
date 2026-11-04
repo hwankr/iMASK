@@ -51,14 +51,14 @@
     },
     {
       "id": "0:applicant_email", "document_index": 0, "field": "applicant_email", "category": "연락처·이메일", "label": "이메일 주소", "subject": "신청인",
-      "mapping_status": "ok", "value": "seoa.yoon@example.com", "masked": "se***@example.com", "exposure": "전체 노출",
+      "mapping_status": "ok", "value": "seoa.yoon@example.com", "masked": "se*******@example.com", "exposure": "전체 노출",
       "risk": "unrated", "risk_source": null, "risk_reason": null, "page": 1,
       "boxes": [[{ "x": 0.596, "y": 0.255 }, { "x": 0.808, "y": 0.254 }, { "x": 0.808, "y": 0.268 }, { "x": 0.596, "y": 0.269 }]],
       "confidence": "high"
     },
     {
       "id": "0:applicant_address", "document_index": 0, "field": "applicant_address", "category": "주소", "label": "자택 주소", "subject": "신청인",
-      "mapping_status": "ok", "value": "대구광역시 수성구 달구벌대로 2500, 101동 1001호", "masked": "대구광역시 수성구 ****", "exposure": "전체 노출",
+      "mapping_status": "ok", "value": "대구광역시 수성구 달구벌대로 2500, 101동 1001호", "masked": "대구광역시 수성구 ***** ****, **** *****", "exposure": "전체 노출",
       "risk": "unrated", "risk_source": null, "risk_reason": null, "page": 1,
       "boxes": [
         [{ "x": 0.237, "y": 0.282 }, { "x": 0.317, "y": 0.282 }, { "x": 0.317, "y": 0.295 }, { "x": 0.237, "y": 0.295 }],
@@ -72,7 +72,7 @@
     },
     {
       "id": "0:employer_info", "document_index": 0, "field": "employer_info", "category": "기타 개인정보", "label": "직장 정보", "subject": "신청인",
-      "mapping_status": "needs_review", "value": "직장명: (주)한빛테크; 부서: 개발팀; 직위: 대리; 입사일: 2019년 3월 4일", "masked": "직장명: (주)한빛테크; 부서: ***; 직위: **; 입사일: ****", "exposure": "전체 노출",
+      "mapping_status": "needs_review", "value": "직장명: (주)한빛테크; 부서: 개발팀; 직위: 대리; 입사일: 2019년 3월 4일", "masked": "직장명: (주)****; 부서: 개**; 직위: 대*; 입사일: 2**** 3* 4*", "exposure": "전체 노출",
       "risk": "unrated", "risk_source": null, "risk_reason": null, "page": 1,
       "boxes": [[{ "x": 0.236, "y": 0.31 }, { "x": 0.329, "y": 0.31 }, { "x": 0.329, "y": 0.324 }, { "x": 0.236, "y": 0.324 }]],
       "confidence": "low"
@@ -86,14 +86,14 @@
     },
     {
       "id": "0:income_info", "document_index": 0, "field": "income_info", "category": "소득·거래정보", "label": "연소득", "subject": "신청인",
-      "mapping_status": "ok", "value": "연소득: 48,000,000원", "masked": "연소득: **,***,***원", "exposure": "전체 노출",
+      "mapping_status": "ok", "value": "연소득: 48,000,000원", "masked": "연소득: 4*,***,****", "exposure": "전체 노출",
       "risk": "unrated", "risk_source": null, "risk_reason": null, "page": 1,
       "boxes": [[{ "x": 0.596, "y": 0.34 }, { "x": 0.7, "y": 0.339 }, { "x": 0.7, "y": 0.352 }, { "x": 0.596, "y": 0.353 }]],
       "confidence": "low"
     },
     {
       "id": "0:staff_contact", "document_index": 0, "field": "staff_contact", "category": "연락처·이메일", "label": "담당 직원 연락처", "subject": "기타 · 은행 직원",
-      "mapping_status": "unknown", "value": "한지성; 직원번호 D-2041; 053-000-1234; jisung.han@demobank.example", "masked": "한*성; 직원번호 ******; 053-***-1234; ji***@demobank.example", "exposure": "전체 노출",
+      "mapping_status": "unknown", "value": "한지성; 직원번호 D-2041; 053-000-1234; jisung.han@demobank.example", "masked": "한**; 직*** D-****; 053-***-1234; ji********@demobank.example", "exposure": "전체 노출",
       "risk": "unrated", "risk_source": null, "risk_reason": null, "page": 1,
       "boxes": [[{ "x": 0.47, "y": 0.584 }, { "x": 0.512, "y": 0.584 }, { "x": 0.512, "y": 0.595 }, { "x": 0.47, "y": 0.595 }]],
       "confidence": "low"
@@ -107,7 +107,7 @@
     },
     {
       "id": "1:applicant_birth_date", "document_index": 1, "field": "applicant_birth_date", "category": "생년월일", "label": "생년월일", "subject": "신청인",
-      "mapping_status": "ok", "value": "1990년 1월 1일", "masked": "1990년 **월 **일", "exposure": "전체 노출",
+      "mapping_status": "ok", "value": "1990년 1월 1일", "masked": "1990년 *월 *일", "exposure": "전체 노출",
       "risk": "unrated", "risk_source": null, "risk_reason": null, "page": 2,
       "boxes": [
         [{ "x": 0.813, "y": 0.465 }, { "x": 0.868, "y": 0.465 }, { "x": 0.868, "y": 0.477 }, { "x": 0.813, "y": 0.477 }],
@@ -125,7 +125,7 @@
     },
     {
       "id": "2:income_info", "document_index": 2, "field": "income_info", "category": "소득·거래정보", "label": "소득금액·결정세액", "subject": "신청인",
-      "mapping_status": "needs_review", "value": "소득금액: 48,000,000원; 결정세액: 2,150,000원", "masked": "소득금액: **,***,***원; 결정세액: *,***,***원", "exposure": "전체 노출",
+      "mapping_status": "needs_review", "value": "소득금액: 48,000,000원; 결정세액: 2,150,000원", "masked": "소득금액: 4*,***,****; 결정세액: 2,***,****", "exposure": "전체 노출",
       "risk": "unrated", "risk_source": null, "risk_reason": null, "page": null,
       "boxes": [],
       "confidence": "low"
@@ -146,7 +146,7 @@
     },
     {
       "id": "3:other_person_contact", "document_index": 3, "field": "other_person_contact", "category": "연락처·이메일", "label": "대리인 연락처·주소", "subject": "기타",
-      "mapping_status": "needs_review", "value": "010-3456-7890; 대구광역시 북구 대학로 80, 203호", "masked": "010-****-7890; 대구광역시 북구 ****", "exposure": "전체 노출",
+      "mapping_status": "needs_review", "value": "010-3456-7890; 대구광역시 북구 대학로 80, 203호", "masked": "010-****-7890; 대**** 북* 대** 8*, 2***", "exposure": "전체 노출",
       "risk": "unrated", "risk_source": null, "risk_reason": null, "page": 4,
       "boxes": [
         [{ "x": 0.237, "y": 0.336 }, { "x": 0.317, "y": 0.335 }, { "x": 0.317, "y": 0.348 }, { "x": 0.237, "y": 0.349 }],
@@ -176,7 +176,7 @@
     },
     {
       "id": "4:credit_negative_info", "document_index": 4, "field": "credit_negative_info", "category": "소득·거래정보", "label": "연체 정보", "subject": "신청인",
-      "mapping_status": "unknown", "value": "데모카드 카드론 연체 32일", "masked": "**** 카드론 연체 **일", "exposure": "전체 노출",
+      "mapping_status": "unknown", "value": "데모카드 카드론 연체 32일", "masked": "데*** 카** 연* 3**", "exposure": "전체 노출",
       "risk": "unrated", "risk_source": null, "risk_reason": null, "page": 5,
       "boxes": [],
       "confidence": null

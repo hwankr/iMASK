@@ -43,7 +43,7 @@ from shared_ctx import ANALYSIS_KEYS, Ctx, ctx, install  # noqa: F401
 from api.index import app
 from imask_backend.reviews import MAX_BODY_BYTES, review_scope, row_view
 
-REVIEW_KEYS = {"status", "memo", "memo_at", "reviewer", "reviewed_at", "completion_note", "findings", "history", "version"}
+REVIEW_KEYS = {"status", "memo", "memo_at", "reviewer", "reviewed_at", "completion_note", "findings", "items", "history", "version"}
 LINE_KEYS = {"id", "at", "actor", "kind", "target", "change", "reason"}
 PATH = f"/api/py/analyses/{ANALYSIS_ID}/review-actions"
 

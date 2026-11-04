@@ -164,7 +164,7 @@ FILE_KEYS = {"url", "mime_type", "filename"}
 RISKS = ("high", "medium", "low", "unrated")
 
 # 검토 동작 계약(review-actions — 조회 응답의 review 블록·POST /analyses/{id}/review-actions)
-REVIEW_KEYS = {"status", "memo", "memo_at", "reviewer", "reviewed_at", "completion_note", "findings", "history", "version"}
+REVIEW_KEYS = {"status", "memo", "memo_at", "reviewer", "reviewed_at", "completion_note", "findings", "items", "history", "version"}
 REVIEW_FINDING_KEYS = {"status", "category", "subject", "exposure", "fp_type", "fp_note", "reclass_note", "memo", "updated_at"}
 HISTORY_KEYS = {"id", "at", "actor", "kind", "target", "change", "reason"}
 REVIEW_ACTOR = "api_e2e"  # 이 스크립트가 보내는 처리자 이름
@@ -748,6 +748,7 @@ def _system_lines(row: Mapping[str, Any], targets: list[dict[str, str]]) -> list
     """조회할 때 만드는 이력 두 줄(S1 분석 요청 · S2 최초 AI 결과)의 기대값."""
     result = row.get("result") if isinstance(row.get("result"), Mapping) else {}
     files = len(_documents(row))
+    items = result.get("items") if isinstance(result.get("items"), list) else []  # 검토사항 수(review-items §5.5)
     base = {"actor": SYSTEM_ACTOR, "target": ANALYSIS_TARGET, "reason": ""}
     return [
         {"id": "S1", "at": row.get("created_at"), "kind": "request", "change": f"문서 {files}개 분석 요청", **base},
@@ -755,7 +756,7 @@ def _system_lines(row: Mapping[str, Any], targets: list[dict[str, str]]) -> list
             "id": "S2",
             "at": row.get("updated_at"),
             "kind": "ai",
-            "change": f"분석 완료 · 탐지 {len(targets)}건 · 위험등급 {_risk_label(result)} · 검토사항 0건",
+            "change": f"분석 완료 · 탐지 {len(targets)}건 · 위험등급 {_risk_label(result)} · 검토사항 {len(items)}건",
             **base,
         },
     ]
@@ -1107,7 +1108,16 @@ def _check_reviews(run: Run, analysis_id: str) -> bool:
 
     findings_now = flow.review.get("findings") if isinstance(flow.review.get("findings"), Mapping) else {}
     left = sum(1 for t in targets if ((findings_now.get(t["id"]) or {}).get("status") or "open") == "open")
-    rest = f" (남은 항목: 미확인 탐지 {left}건)" if left else ""
+    # 미해결 검토사항(review-items §5.6 — 이 흐름은 검토사항을 해결하지 않으므로 result.items 중 review.items 가 해결이 아닌 것)
+    result_items = first["result"].get("items") if isinstance(first.get("result"), Mapping) else None
+    items_now = flow.review.get("items") if isinstance(flow.review.get("items"), Mapping) else {}
+    open_items = sum(
+        1
+        for i in (result_items if isinstance(result_items, list) else [])
+        if isinstance(i, Mapping) and not (isinstance(i.get("id"), str) and (items_now.get(i["id"]) or {}).get("resolved") is True)
+    )
+    rest_parts = ([f"미확인 탐지 {left}건"] if left else []) + ([f"미해결 검토사항 {open_items}건"] if open_items else [])
+    rest = f" (남은 항목: {', '.join(rest_parts)})" if rest_parts else ""
 
     def complete_check(review: Mapping[str, Any], _before: Mapping[str, Any]) -> list[str]:
         problems = [

@@ -11,7 +11,7 @@
 #    POST /api/py/analyses                 분석 건 + 서명 업로드 URL 만들기 → 201
 #    POST /api/py/analyses/{id}/start      Upstage 작업 시작(완료를 기다리지 않음) → 200
 #    GET  /api/py/analyses/{id}            조회. running 이면 Upstage 상태를 한 번 확인 → 200
-#                                          result 는 documents·findings·overall(?include=stages 면 stages 도),
+#                                          result 는 documents·findings·overall·items(?include=stages 면 stages 도),
 #                                          review 는 검토 블록(검토할 수 있는 분석만, 검토 행을 읽지 못하면 null)
 #    DELETE /api/py/analyses/{id}          원본 파일·문서 행·검토 기록과 함께 지우기 → 204(본문 없음, 요청 본문은 무시).
 #                                          Storage 원본(지운 것 확인) → 행 → Upstage 파일(최선, 단계별 시간 제한 클라이언트 —
@@ -21,7 +21,8 @@
 #                                          검토 동작 하나 저장(imask_backend.reviews) → 200 {"analysis", "changed"}
 #                                          type: set_status·confirm_many·mark_false_positive·restore·reclassify·
 #                                          save_finding_memo·save_memo·complete_review·reopen_review·log_export(내보내기
-#                                          기록 — 이력 한 줄만, 검토 완료 뒤에도, 늘 changed true)
+#                                          기록 — 이력 한 줄만, 검토 완료 뒤에도, 늘 changed true)·resolve_item·
+#                                          reopen_item(검토사항 해결·다시 열기 — 12종)
 #                                          본문은 직접 읽는다: 65,536 바이트를 넘으면 그 자리에서 413(Content-Length 없이도),
 #                                          JSON·필드 검사 400. Upstage 를 부르지 않는다(의존성도 받지 않음).
 #    POST /api/py/analyses/{id}/retry      실패한 분석을 같은 원본으로 진짜 다시 분석(imask_backend.manage) → 200 AnalysisOut.

@@ -1,5 +1,5 @@
 # ==========================================================================
-#  분석 결과 → 화면용 '서류'·'탐지 항목'·'전체 판정' (BRIEF §5 공통 계약)
+#  분석 결과 → 화면용 '서류'·'탐지 항목'·'전체 판정'·'검토사항' (BRIEF §5 공통 계약 · review-items BRIEF §5.3)
 #  build_view(result) 는 저장된 analyses.result 에서 **조회할 때 계산**한다(DB 저장 형식은 그대로라
 #  예전 분석에도 적용된다). 단계는 result.response(원본)가 있으면 parse_stages 로, 없으면 저장된 stages 로.
 #  status 가 completed(또는 없음)인 단계만 쓴다(results.summarize 와 같은 규칙).
@@ -9,6 +9,11 @@
 #    추출·검증·기타 안내 항목은 쪽 범위(page_ranges 를 정규화한 튜플)가 **정확히 같은** 서류에 붙는다.
 #    정규화한 범위가 빈 쪽이 있으면(어느 쪽이든) 짝짓지 않는다 — 근거 없는 순서 짝짓기를 하지 않는다(T1-fix1).
 #    짝 없는 추출 결과(범위가 빈 것 포함)는 버리지 않고 서류(type null)를 덧붙인다. 짝 없는 검증·기타 안내는 버린다.
+#    검증 content 하나 = verdict(_verdict) + checks(additional_values.checks 원래 값)를 한 번에 짝짓는다(review-items §5.3).
+#    둘 다 없으면 건너뛰고, 있으면 범위가 같고 아직 검증이 붙지 않은 첫 서류에 붙인다 — verdict 없이 checks 만 있는 content 도
+#    자리를 차지한다. verdict 정규화 규칙(_verdict)은 그대로이지만, 쪽 범위가 같은 서류가 여럿일 때 checks 만 있는 content 가
+#    자리를 차지하면 뒤 verdict 가 붙는 서류가 예전과 달라질 수 있다(documents[].validation 배열이 늘 예전과 같지는 않다).
+#    checks 는 응답 documents[] 에 넣지 않고 items.build_items 에만 넘긴다.
 #  - findings: 추출 짝이 있는 서류마다 추출 data 의 키 순서대로(빈 값은 건너뜀). 대응표는 fields,
 #    노출 상태·가림 미리보기는 masking(표시용 가공). 좌표는 단어별 사각형 우선, 없으면 값 영역.
 #  - risk: **판별하지 않는다.** 위험도_판정 단계가 [{branch_key, field, grade, reason}] 목록을 낸 경우에만
@@ -26,8 +31,10 @@
 #  - 항목별 위험등급의 branch_key·field 는 비어 있는지(공백만 포함)만 보고 비교·색인에는 원래 문자열 그대로 쓴다
 #    (strip 하지 않음 — 공백만 다른 다른 키에 등급이 옮겨 가지 않게). grade 는 앞뒤 공백을 지우고, reason 은 빈 문자열이면 null.
 #  - overall: summarize 의 risk_level(상·중·하·검토 필요)·final_stage 와 그 단계 본문(Markdown 그대로).
+#  - items: 검토사항(imask_backend.items.build_items — documents·findings·서류별 checks 로 계산). 그 계산만 실패하면
+#    값 없는 경고 후 items [] 이고 documents·findings·overall 은 그대로다.
 #  바깥 모양이 달라도 예외를 던지지 않는다. 그래도 예상 못 한 예외가 나면 값 없는 경고 로그를 남기고
-#  빈 결과(documents []·findings []·overall 빈 값)를 돌려준다 — 조회가 500 이 되지 않게.
+#  빈 결과(documents []·findings []·overall 빈 값·items [])를 돌려준다 — 조회가 500 이 되지 않게.
 # ==========================================================================
 
 from __future__ import annotations
@@ -41,6 +48,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .fields import field_info
+from .items import build_items
 from .masking import EXPOSED, STAR, exposure, masked
 from .results import (
     FINAL_STAGES,
@@ -72,7 +80,7 @@ MAX_PAGE = 100_000
 UNREADABLE_VALUE = "(값을 읽지 못했습니다)"
 # 표에 없는 키의 이름이 비었거나 공백만일 때의 label
 UNNAMED_LABEL = "(이름 없는 항목)"
-# 계약 키(BRIEF §5)는 _Doc.out·_findings·_overall 이 만드는 dict 그대로다 — 그 밖의 키는 넣지 않는다
+# 계약 키(BRIEF §5)는 _Doc.out·_findings·_overall·items.build_items 가 만드는 dict 그대로다 — 그 밖의 키는 넣지 않는다
 # (tests/view_contract.py 가 정확히 그 키인지 확인한다)
 
 _BOX_MIN = -0.001
@@ -85,7 +93,7 @@ Ranges = tuple[tuple[int, int], ...]
 
 
 def empty_view() -> dict[str, Any]:
-    return {"documents": [], "findings": [], "overall": _empty_overall()}
+    return {"documents": [], "findings": [], "overall": _empty_overall(), "items": []}
 
 
 def _empty_overall() -> dict[str, Any]:
@@ -93,7 +101,7 @@ def _empty_overall() -> dict[str, Any]:
 
 
 def build_view(result: Any) -> dict[str, Any]:
-    """저장된 result → {"documents", "findings", "overall"}. 어떤 모양에도 예외를 던지지 않는다."""
+    """저장된 result → {"documents", "findings", "overall", "items"}. 어떤 모양에도 예외를 던지지 않는다."""
     try:
         return _build_view(result)
     except Exception as exc:  # 조회가 500 이 되지 않게 — 값 없이 예외 종류만 남긴다
@@ -170,14 +178,30 @@ def _first_content(stage: Mapping[str, Any]) -> tuple[Any, Any]:
 # --- 서류 ---------------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class _Check:
+    """서류에 붙은 검증 content 하나 — verdict(_verdict)와 additional_values.checks 원래 값(없으면 None)."""
+
+    verdict: str | None
+    checks: Any
+
+
 @dataclass
 class _Doc:
     index: int
     type: str | None
     ranges: Ranges
     extract: tuple[Mapping[str, Any], Mapping[str, Any]] | None = None
-    validation: str | None = None
+    check: _Check | None = None  # 붙은 검증 content(verdict + checks 원래 값)
     other_guide: str | None = None
+
+    @property
+    def validation(self) -> str | None:
+        return self.check.verdict if self.check is not None else None
+
+    @property
+    def checks(self) -> Any:
+        return self.check.checks if self.check is not None else None
 
     def out(self) -> dict[str, Any]:
         if self.extract is not None:
@@ -262,11 +286,28 @@ def _guide_text(data: Any) -> str | None:
     return None
 
 
+def _attach_checks(stages: Sequence[Mapping[str, Any]], docs: list[_Doc]) -> None:
+    """검증 content 하나 = verdict + checks 원래 값을 한 번에 짝짓는다. 둘 다 없으면 건너뛴다.
+
+    범위가 같고 아직 검증이 붙지 않은 첫 서류에 붙인다(범위가 비거나 짝이 없으면 버린다). checks 는 additional_values 의
+    'checks' 값이 null 이 아닐 때만 '있음'이다(모양은 items.build_items 가 본다).
+    """
+    for stage in usable_stages_for(stages, STAGE_VALIDATE):
+        data, additional = _first_content(stage)
+        verdict = _verdict(data, additional)
+        checks = _mapping(additional).get("checks")
+        if verdict is None and checks is None:
+            continue
+        doc = _first_free(docs, _ranges(additional), "check")
+        if doc is not None:
+            doc.check = _Check(verdict=verdict, checks=checks)
+
+
 def _attach_text(stages: Sequence[Mapping[str, Any]], docs: list[_Doc], key: str, attr: str) -> None:
-    """검증 verdict·기타 안내 본문을 범위가 같은 서류(그 값이 아직 없는 첫 서류)에 붙인다. 범위가 비거나 짝이 없으면 버린다."""
+    """기타 안내 본문을 범위가 같은 서류(그 값이 아직 없는 첫 서류)에 붙인다. 범위가 비거나 짝이 없으면 버린다."""
     for stage in usable_stages_for(stages, key):
         data, additional = _first_content(stage)
-        text = _verdict(data, additional) if attr == "validation" else _guide_text(data)
+        text = _guide_text(data)
         if text is None:
             continue
         doc = _first_free(docs, _ranges(additional), attr)
@@ -542,15 +583,28 @@ def _overall(stages: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _items(documents: list[dict[str, Any]], findings: list[dict[str, Any]], checks: list[Any]) -> list[dict[str, Any]]:
+    """검토사항 — 계산이 실패해도 items [] 로만(documents·findings·overall 은 그대로). 값 없이 예외 종류만 남긴다."""
+    try:
+        return build_items(documents, findings, checks)
+    except Exception as exc:
+        logger.warning("검토사항을 만들지 못해 items 를 비웁니다: %s", type(exc).__name__)
+        return []
+
+
 def _build_view(result: Any) -> dict[str, Any]:
     stages = view_stages(result)
     docs, classify_count = _documents(stages)
     _attach_extracts(stages, docs, classify_count)
-    _attach_text(stages, docs, STAGE_VALIDATE, "validation")
+    _attach_checks(stages, docs)
     _attach_text(stages, docs, STAGE_OTHER, "other_guide")
-    documents = [d.out() for d in sorted(docs, key=lambda d: d.index)]
+    ordered = sorted(docs, key=lambda d: d.index)
+    documents = [d.out() for d in ordered]
+    findings = _findings(docs, item_risks(stages))
+    overall = _overall(stages)
     return {
         "documents": documents,
-        "findings": _findings(docs, item_risks(stages)),
-        "overall": _overall(stages),
+        "findings": findings,
+        "overall": overall,
+        "items": _items(documents, findings, [d.checks for d in ordered]),
     }

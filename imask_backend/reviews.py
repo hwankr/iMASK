@@ -1,14 +1,30 @@
 # ==========================================================================
-#  검토 동작 저장 — 실제 분석의 탐지 항목 검토를 analysis_reviews(분석 1건당 1행)에 저장한다 (FastAPI 와 무관)
-#  계약: .orchestration/review-actions/BRIEF.md §5. 동작·이력 문구의 기준은 데모 코어 src/services/demo/core.ts.
+#  검토 동작 저장 — 실제 분석의 탐지 항목 검토·검토사항 해결을 analysis_reviews(분석 1건당 1행)에 저장한다 (FastAPI 와 무관)
+#  계약: .orchestration/review-actions/BRIEF.md §5 · review-items BRIEF §5.4~5.6. 동작·이력 문구의 기준은 데모 코어
+#  src/services/demo/core.ts.
 #
 #  - 검토할 수 있는 분석(review_scope): status done + result 객체 + 화면용 결과(build_view)의 유효한 서류 1개 이상
 #    (index 는 bool 아닌 정수 ≥ 0, page_start·page_end 는 bool 아닌 정수 ≥ 1). 화면 isDetailReady·readDocSources 와 같다.
 #    검토할 수 있는 탐지 항목 = 화면에 보이는 항목(document_index 가 유효한 서류에 속함 — toLiveFindings 와 같은 순서).
 #    표시 번호 D{서류 순번}-{서류 안 순번 두 자리}, 표시 이름 label → field → '이름 없는 항목'(화면처럼 JavaScript trim 기준),
 #    AI 값은 목록(fields.CATS·SUBJECTS·EXPOSURES) 밖이면 '기타 개인정보'·'기타'·'전체 노출'.
-#  - 동작 10종: set_status·confirm_many·mark_false_positive·restore·reclassify·save_finding_memo·save_memo(잠김 대상 7종),
-#    complete_review·reopen_review, log_export(내보내기 기록 — live-report BRIEF §5.6, 아래).
+#    서류 순번·표시 이름은 검토사항(imask_backend.items — doc_numbers·finding_name)과 한 기준이다.
+#    검토사항 대상(ItemTarget) = view["items"](items.build_items) 중 종류가 ITEM_TYPES(화면 RTYPE) 키이고 id·number 가 문자열이며
+#    document_index 가 보이는 서류인 것(목록 순서). 같은 id·저장 키가 또 나오면 뒤의 것은 저장하지 않는다(동작 404, 미해결로 셈).
+#  - 동작 12종: set_status·confirm_many·mark_false_positive·restore·reclassify·save_finding_memo·save_memo·
+#    resolve_item·reopen_item(잠김 대상 9종), complete_review·reopen_review, log_export(내보내기 기록 — live-report BRIEF §5.6, 아래).
+#  - resolve_item(item_id·note)·reopen_item(item_id) — 검토사항 해결·다시 열기(review-items BRIEF §5.6): item_id 는 문자열,
+#    note 는 다른 글 필드와 같은 규칙(빈 글도 받음). 오류 순서: 413 → 400 형식 → 400 처리자 → 400 글 → 404 분석 →
+#    409 검토할 수 없음 → 404 검토사항(지금 결과에 없음·저장할 수 없음) → 409 잠김 → 409 검토사항 상태(이미 해결에 resolve·
+#    미해결에 reopen) → 409 이력 1000줄 → 409 경쟁 패배(그 사이 지워졌으면 404). 검토사항 상태 409 를 내려는 시도에 검토 행이
+#    없었다면(처음 읽기·경쟁 패배 뒤 다시 읽기 — 분석이 지워지면 검토 행도 cascade 로 사라진다) 값 없는 분석 다시 읽기
+#    (_analysis_gone)로 정말 없으면 404, 있거나 다시 읽기가 저장소 오류면 409 그대로(ItemStateConflict — T1-fix1, 기존 10종은
+#    그대로라 reopen_review 의 같은 경합은 아직 409). 쓰기는 다른 동작과 같은 version 조건부
+#    쓰기 하나(items 열 + 이력 한 줄 + version), 늘 changed true. 항목 값은 지금 값(없으면 미해결 기본값)에서 시작해
+#    resolve 는 {resolved true, note, resolved_at 동작 시각, resolved_by 처리자}, reopen 은 resolved false 만(나머지 그대로).
+#    이력: resolve → kind 'resolve'·target '{R-nn} {종류 라벨}'·change '미해결 → 해결'·reason note,
+#    reopen → kind 'reopenItem'·같은 target·change '해결 → 미해결'·reason ''.
+#    검토 완료 이력의 남은 항목 = '미확인 탐지 n건'·'미해결 검토사항 m건' 중 0 이 아닌 것(데모 completeReview 와 같다).
 #  - 요청 본문(parse_action): UTF-8 JSON 객체 하나(같은 키 두 번·NaN·깊은 중첩 → 400), 종류(type)별로 정확히 정해진 필드만,
 #    엄격한 타입, 목록 값. 400 문구 순서: 형식 → 처리자 이름 → 메모·사유(쓸 수 없는 문자 → 500자). 본문 크기(413)는 api 가 본다.
 #  - 동작 하나 = 검토 행 하나를 조건부로 쓴다(apply_review_action): 분석 읽기 → 검토 행 읽기(없으면 기본값 version 0)
@@ -23,7 +39,7 @@
 #    이 경로의 로그·StoreError 문구에는 값(메모·분석 id·항목 id·바깥 오류 원문)을 넣지 않는다 — 검토 행 저장소 오류는
 #    SupabaseStore._review_error 가 동작 이름 + 예외 종류 + 영숫자 오류 코드만 남긴다(BRIEF §5.3). 분석 행 읽기(처음 읽기
 #    _load_quiet·지워졌는지 다시 읽기 _analysis_gone)도 get_analysis(…, quiet=True) 로 같은 수준(live-report V-T1-1 M1 —
-#    10종 모두. 응답·오류 순서는 그대로, 로그만 조용해짐).
+#    12종 모두. 응답·오류 순서는 그대로, 로그만 조용해짐). 검토사항 경로도 처리 내용·처리자·항목 id·규칙 이름을 남기지 않는다.
 #  - log_export(내보내기 기록): 본문은 정확히 type·actor·format('csv'|'json')·size(bool 아닌 정수 1~104,857,600)·
 #    state('handed'|'saved')·file_name(꼴·확장자가 format 과 맞음 — 규칙은 imask_backend/exports.py). 모양이 틀리면
 #    처리자 이름보다 먼저 400. 분석을 읽은 뒤 409 검토할 수 없음 다음에, file_name 이 이 분석의 기대 이름
@@ -33,13 +49,16 @@
 #    change '<CSV|JSON> · <크기(fmtSize 와 같은 글자)> · <다운로드 요청|저장 완료>', reason '민감한 값 마스킹'. 늘 changed true.
 #    오류 순서: 413 → 400 모양 → 400 처리자 → 404 분석 → 409 검토할 수 없음 → 400 이 분석의 이름 아님 → 409 이력 1000줄
 #    → 409 경쟁 패배(그 사이 지워졌으면 404).
-#  - 저장 형식: findings jsonb 의 키 = 계약 id 의 storage_key(json.dumps(id, ensure_ascii=True)[1:-1] — ASCII 만).
+#  - 저장 형식: findings·items jsonb 의 키 = 계약 id 의 storage_key(json.dumps(id, ensure_ascii=True)[1:-1] — ASCII 만).
 #    항목 값은 처음 건드릴 때 AI 값으로 시작하고, 건드린 항목은 정규화한 값 + 바뀐 값으로 쓴다(그 항목의 모르는 키는 둔다).
+#    items 값은 {resolved, note, resolved_at, resolved_by} — 조회 때 resolved 는 정확히 true 일 때만 true, note·resolved_by 는
+#    문자열 아니면 '', resolved_at 은 문자열 아니면 null 로 정규화한다.
 #    지금 결과에 없는 id·모르는 모양의 값·모양이 틀린 이력 줄은 지우지 않고 그대로 두되 응답에서는 무시한다.
 #    이력 target 은 AI 값(이름)에서 오므로 짝 없는 서로게이트·NUL 을 U+FFFD 로 바꾸고 200자에서 자른다.
 #    한 동작의 시각(항목 updated_at·memo_at·reviewed_at·이력 at)은 같은 값 = 지금(UTC), 단 마지막 이력보다 앞서지 않게.
 #  - 조회용 review 블록(review_block·read_review): 검토할 수 있는 분석에만(그 밖은 null — 검토 행을 읽지도 않음).
 #    검토 행을 읽지 못하면 값 없는 경고 후 null(상세 화면이 깨지지 않게). 행이 없으면 기본값(needed·빈 값·version 0).
+#    S2 문구 '분석 완료 · 탐지 {보이는 탐지 수}건 · 위험등급 {등급} · 검토사항 {검토사항 대상 수 — 저장할 수 없는 것도}건'.
 #    history = [S1(분석 요청)] + [저장된 줄 중 kind 'retry'(다시 분석 요청, 저장 순서)] + [S2(최초 AI 결과)] + [그 밖 저장된 줄].
 #    S1·S2 는 조회할 때 만든다. 다시 분석은 failed 일 때만(= 완료 전), 검토 동작은 완료 뒤에만 생기므로 이 순서가 시간 순서다.
 #    내보내기 기록(kind 'export')도 '그 밖 저장된 줄'에 저장 순서로 들어간다.
@@ -53,7 +72,7 @@ import json
 import logging
 import unicodedata
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
@@ -61,6 +80,7 @@ from .analyses import DONE, MSG_NOT_FOUND, ApiError, _parse_time, _uuid_or_404, 
 from .exports import EXPORT_KIND, EXPORT_REASON, expected_file_name, export_change, export_fields_ok
 from .fields import CATS, EXPOSURES, SUBJECTS
 from .findings import build_view
+from .items import ITEM_TYPES, JS_SPACE, UNNAMED_FINDING, doc_numbers, finding_name
 from .store import Store, StoreError
 
 logger = logging.getLogger("imask.reviews")
@@ -113,9 +133,10 @@ MSG_ALREADY_DONE = "이미 검토를 완료했습니다."
 MSG_NOT_DONE = "검토를 완료한 분석만 다시 열 수 있습니다."
 MSG_HISTORY_FULL = "검토 이력이 너무 많아 더 저장할 수 없습니다."
 MSG_CONFLICT = "다른 요청과 겹쳐 저장하지 못했습니다. 잠시 후 다시 시도해 주세요."
+MSG_ITEM_NOT_FOUND = "검토사항을 찾을 수 없습니다."
+MSG_ITEM_STATE_CHANGED = "검토사항 상태가 바뀌었습니다. 새로 고친 뒤 다시 시도해 주세요."
 
 # --- 표시 값 ---------------------------------------------------------------------------
-UNNAMED_FINDING = "이름 없는 항목"  # 화면 contract.ts UNNAMED_FINDING
 AI_CATEGORY_FALLBACK = "기타 개인정보"
 AI_SUBJECT_FALLBACK = "기타"
 AI_EXPOSURE_FALLBACK = "전체 노출"
@@ -126,11 +147,8 @@ UNRATED_LABEL = "미평가"
 REPLACEMENT = "�"
 ELLIPSIS = "…"
 
-# JavaScript String.prototype.trim 이 지우는 글자(WhiteSpace·LineTerminator) — 화면과 같은 기준으로 이름을 고른다
-_JS_SPACE = (
-    "\t\n\v\f\r              "
-    "    　﻿"
-)
+# JavaScript String.prototype.trim 이 지우는 글자(WhiteSpace·LineTerminator) — items.JS_SPACE 한 곳(화면과 같은 기준)
+_JS_SPACE = JS_SPACE
 
 # --- 요청 모양 -------------------------------------------------------------------------
 # type → 종류별 필수 필드(공통 type·actor 는 따로). 글 필드(reason·note·text)는 동작마다 하나 이하
@@ -145,13 +163,27 @@ ACTION_FIELDS: dict[str, tuple[str, ...]] = {
     "complete_review": ("note",),
     "reopen_review": ("reason",),
     "log_export": ("format", "size", "state", "file_name"),  # 내보내기 기록(live-report BRIEF §5.6)
+    "resolve_item": ("item_id", "note"),  # 검토사항 해결(review-items BRIEF §5.6)
+    "reopen_item": ("item_id",),  # 검토사항 다시 열기
 }
 OPTIONAL_FIELDS: dict[str, tuple[str, ...]] = {"reclassify": ("category", "subject", "exposure")}
 TEXT_FIELDS = ("reason", "note", "text")
+# 검토사항 동작(item_id 로 result.items 의 검토사항을 가리킴)
+ITEM_ACTIONS = ("resolve_item", "reopen_item")
 SET_STATUSES = ("open", "confirmed")
-# 잠김(검토 완료) 동안 거절하는 동작(BRIEF §5.5 의 1~7). log_export 는 넣지 않는다(검토 완료 뒤에도 내보내기를 기록)
+# 잠김(검토 완료) 동안 거절하는 동작(BRIEF §5.5 의 1~7 + 검토사항 두 동작). log_export 는 넣지 않는다(검토 완료 뒤에도 내보내기를 기록)
 LOCKED_ACTIONS = frozenset(
-    {"set_status", "confirm_many", "mark_false_positive", "restore", "reclassify", "save_finding_memo", "save_memo"}
+    {
+        "set_status",
+        "confirm_many",
+        "mark_false_positive",
+        "restore",
+        "reclassify",
+        "save_finding_memo",
+        "save_memo",
+        "resolve_item",
+        "reopen_item",
+    }
 )
 
 def review_defaults() -> dict[str, Any]:
@@ -164,6 +196,7 @@ def review_defaults() -> dict[str, Any]:
         "reviewed_at": None,
         "completion_note": "",
         "findings": {},
+        "items": {},
         "history": [],
     }
 
@@ -191,6 +224,8 @@ class ReviewAction:
     export_size: int | None = None
     export_state: str | None = None
     file_name: str | None = None
+    # resolve_item·reopen_item 만(검토사항 계약 id)
+    item_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -208,10 +243,23 @@ class Target:
 
 
 @dataclass(frozen=True)
+class ItemTarget:
+    """검토할 수 있는 검토사항 하나(result.items 중 종류·id·번호·서류가 맞는 것)."""
+
+    id: str  # 계약 id(원래 문자열)
+    key: str  # 저장 키(storage_key)
+    num: str  # 표시 번호 R-01
+    label: str  # 종류 라벨(ITEM_TYPES — 화면 RTYPE)
+    writable: bool = True  # 같은 id 가 또 나왔거나 저장 키가 앞 항목과 겹치면 False(저장하지 않음 — 동작 404, 미해결로 셈)
+
+
+@dataclass(frozen=True)
 class ReviewScope:
     targets: tuple[Target, ...]
     by_id: Mapping[str, Target]  # 계약 id → 처음 나온 항목
     risk_label: str  # S2 의 위험등급(높음·보통·낮음·미평가)
+    items: tuple[ItemTarget, ...] = ()  # 검토사항(저장할 수 없는 것도 — S2 개수·남은 항목 수에 센다)
+    item_by_id: Mapping[str, ItemTarget] = field(default_factory=dict)  # 계약 id → 저장할 수 있는 검토사항
 
 
 @dataclass(frozen=True)
@@ -243,7 +291,7 @@ def _time_or_none(value: Any) -> str | None:
 
 
 def js_trim(text: str) -> str:
-    """JavaScript trim 과 같은 앞뒤 공백 지우기(화면 toLiveFindings·riskFromLevel 과 같은 기준)."""
+    """JavaScript trim 과 같은 앞뒤 공백 지우기(화면 toLiveFindings·riskFromLevel 과 같은 기준 — items.js_trim 과 같은 집합)."""
     return text.strip(_JS_SPACE)
 
 
@@ -346,6 +394,10 @@ def validate_action(body: Any) -> ReviewAction:
         if not isinstance(body["finding_id"], str):
             raise _bad()
         values["finding_id"] = body["finding_id"]
+    if "item_id" in required:
+        if not isinstance(body["item_id"], str):
+            raise _bad()
+        values["item_id"] = body["item_id"]
     if "finding_ids" in required:
         ids = body["finding_ids"]
         if not isinstance(ids, list) or not ids or not all(isinstance(i, str) for i in ids) or len(set(ids)) != len(ids):
@@ -411,19 +463,40 @@ def _risk_label(row: Mapping[str, Any], view: Mapping[str, Any]) -> str:
 
 
 def _doc_numbers(documents: Any) -> dict[int, int]:
-    """유효한 서류의 index → 서류 순번(1부터, index 순, 같은 index 는 처음 것만)."""
-    if not isinstance(documents, list):
-        return {}
-    seen: list[int] = []
-    for doc in documents:
-        if not isinstance(doc, Mapping):
+    """유효한 서류의 index → 서류 순번(1부터, index 순, 같은 index 는 처음 것만) — items.doc_numbers(검토사항과 한 기준)."""
+    return doc_numbers(documents)
+
+
+def _item_targets(items: Any, numbers: Mapping[int, int]) -> tuple[tuple[ItemTarget, ...], dict[str, ItemTarget]]:
+    """view["items"] → 검토사항 대상(목록 순서)과 계약 id → 저장할 수 있는 대상.
+
+    종류가 ITEM_TYPES 밖이거나 id·number 가 문자열이 아니거나 document_index 가 보이는 서류가 아니면 대상이 아니다.
+    같은 id 가 또 나오거나 저장 키가 앞 대상과 겹치면 뒤의 것은 저장하지 않는다(writable False — 미해결로 센다).
+    """
+    if not isinstance(items, list):
+        return (), {}
+    targets: list[ItemTarget] = []
+    by_id: dict[str, ItemTarget] = {}
+    keys: set[str] = set()
+    for item in items:
+        if not isinstance(item, Mapping):
             continue
-        index, start, end = doc.get("index"), doc.get("page_start"), doc.get("page_end")
-        if not (_is_int(index) and index >= 0 and _is_int(start) and start >= 1 and _is_int(end) and end >= 1):
+        kind, item_id, number, index = item.get("type"), item.get("id"), item.get("number"), item.get("document_index")
+        if not (isinstance(kind, str) and kind in ITEM_TYPES and isinstance(item_id, str) and isinstance(number, str)):
             continue
-        if index not in seen:
-            seen.append(index)
-    return {index: number for number, index in enumerate(sorted(seen), 1)}
+        if not _is_int(index) or index not in numbers:
+            continue
+        key = storage_key(item_id)
+        target = ItemTarget(
+            id=item_id, key=key, num=number, label=ITEM_TYPES[kind], writable=item_id not in by_id and key not in keys
+        )
+        if target.writable:
+            by_id[item_id] = target
+            keys.add(key)
+        elif item_id not in by_id:
+            logger.warning("저장 키가 겹치는 검토사항이 있어 뒤의 항목은 저장하지 않습니다")
+        targets.append(target)
+    return tuple(targets), by_id
 
 
 def review_scope(row: Mapping[str, Any], view: Mapping[str, Any] | None) -> ReviewScope | None:
@@ -452,7 +525,7 @@ def review_scope(row: Mapping[str, Any], view: Mapping[str, Any] | None) -> Revi
             id=finding_id,
             key=key,
             num=f"D{number}-{seq[number]:02d}",
-            label=js_trim(_text(finding.get("label"))) or js_trim(_text(finding.get("field"))) or UNNAMED_FINDING,
+            label=finding_name(finding),
             category=_pick(CATS, finding.get("category"), AI_CATEGORY_FALLBACK),
             subject=_pick(SUBJECTS, finding.get("subject"), AI_SUBJECT_FALLBACK),
             exposure=_pick(EXPOSURES, finding.get("exposure"), AI_EXPOSURE_FALLBACK),
@@ -464,7 +537,10 @@ def review_scope(row: Mapping[str, Any], view: Mapping[str, Any] | None) -> Revi
         elif finding_id not in by_id:
             logger.warning("저장 키가 겹치는 탐지 항목이 있어 뒤의 항목은 저장하지 않습니다")
         targets.append(target)
-    return ReviewScope(targets=tuple(targets), by_id=by_id, risk_label=_risk_label(row, view))
+    items, item_by_id = _item_targets(view.get("items"), numbers)
+    return ReviewScope(
+        targets=tuple(targets), by_id=by_id, risk_label=_risk_label(row, view), items=items, item_by_id=item_by_id
+    )
 
 
 # --- 검토 행 정규화 ----------------------------------------------------------------------------
@@ -477,12 +553,13 @@ class _State:
     findings: Mapping[str, Any]  # 저장된 그대로
     history: Sequence[Any]  # 저장된 그대로
     version: int
+    items: Mapping[str, Any] = field(default_factory=dict)  # 저장된 그대로(검토사항 해결 기록)
 
 
 def _state(raw: Mapping[str, Any] | None, *, for_write: bool) -> _State:
     """검토 행 → 상태. 행이 없으면 기본값(version 0). for_write 면 version 이 틀린 행은 StoreError(쓸 수 없음)."""
     if raw is None:
-        return _State(exists=False, status="needed", findings={}, history=[], version=0)
+        return _State(exists=False, status="needed", findings={}, history=[], version=0, items={})
     version = raw.get("version")
     if not (_is_int(version) and version >= 1):
         if for_write:
@@ -490,12 +567,14 @@ def _state(raw: Mapping[str, Any] | None, *, for_write: bool) -> _State:
         version = 0
     findings = raw.get("findings")
     history = raw.get("history")
+    items = raw.get("items")
     return _State(
         exists=True,
         status=_pick(RSTATUS, raw.get("status"), "needed"),
         findings=findings if isinstance(findings, Mapping) else {},
         history=history if isinstance(history, list) else [],
         version=version,
+        items=items if isinstance(items, Mapping) else {},
     )
 
 
@@ -523,6 +602,22 @@ def finding_state(target: Target, findings: Mapping[str, Any]) -> dict[str, Any]
             out[name] = _text(saved.get(name))
         out["updated_at"] = _time_or_none(saved.get("updated_at"))
     return out
+
+
+def item_state(target: ItemTarget, items: Mapping[str, Any]) -> dict[str, Any]:
+    """검토사항 하나의 지금 해결 값(저장 값을 정규화, 없으면 미해결 기본값).
+
+    resolved 는 저장 값이 정확히 true 일 때만 true, note·resolved_by 는 문자열 아니면 '', resolved_at 은 문자열 아니면 null.
+    """
+    saved = items.get(target.key) if target.writable else None
+    if not isinstance(saved, Mapping):
+        return {"resolved": False, "note": "", "resolved_at": None, "resolved_by": ""}
+    return {
+        "resolved": saved.get("resolved") is True,
+        "note": _text(saved.get("note")),
+        "resolved_at": _time_or_none(saved.get("resolved_at")),
+        "resolved_by": _text(saved.get("resolved_by")),
+    }
 
 
 def history_line(line: Any) -> dict[str, str] | None:
@@ -554,20 +649,27 @@ def _system_lines(row: Mapping[str, Any], scope: ReviewScope) -> list[dict[str, 
             "actor": SYSTEM_ACTOR,
             "kind": "ai",
             "target": ANALYSIS_TARGET,
-            "change": f"분석 완료 · 탐지 {found}건 · 위험등급 {scope.risk_label} · 검토사항 0건",
+            "change": f"분석 완료 · 탐지 {found}건 · 위험등급 {scope.risk_label} · 검토사항 {len(scope.items)}건",
             "reason": "",
         },
     ]
 
 
 def review_block(row: Mapping[str, Any], scope: ReviewScope, raw: Mapping[str, Any] | None) -> dict[str, Any]:
-    """응답 review 블록(BRIEF §5.6) — 검토 행(없으면 기본값)을 정규화한다. 저장 키는 원래 계약 id 로 돌려준다."""
+    """응답 review 블록(BRIEF §5.6 · review-items §5.5) — 검토 행(없으면 기본값)을 정규화한다. 저장 키는 원래 계약 id 로 돌려준다.
+
+    findings·items 는 지금 결과의 저장할 수 있는 대상 중 저장 값이 객체인 것만(다시 분석 등으로 사라진 id 는 무시).
+    """
     state = _state(raw, for_write=False)
     source: Mapping[str, Any] = raw if raw is not None else review_defaults()
     findings: dict[str, Any] = {}
     for target in scope.targets:
         if target.writable and isinstance(state.findings.get(target.key), Mapping):
             findings[target.id] = finding_state(target, state.findings)
+    items: dict[str, Any] = {}
+    for item in scope.items:
+        if item.writable and isinstance(state.items.get(item.key), Mapping):
+            items[item.id] = item_state(item, state.items)
     stored_lines = [line for line in (history_line(item) for item in state.history) if line is not None]
     first, ai = _system_lines(row, scope)
     retries = [line for line in stored_lines if line["kind"] == "retry"]
@@ -580,6 +682,7 @@ def review_block(row: Mapping[str, Any], scope: ReviewScope, raw: Mapping[str, A
         "reviewed_at": _time_or_none(source.get("reviewed_at")),
         "completion_note": _text(source.get("completion_note")),
         "findings": findings,
+        "items": items,
         "history": [first, *retries, ai, *others],
         "version": state.version,
     }
@@ -627,12 +730,69 @@ def _targets_for(scope: ReviewScope, action: ReviewAction) -> tuple[Target, ...]
     return targets  # type: ignore[return-value]
 
 
+def _item_for(scope: ReviewScope, action: ReviewAction) -> ItemTarget | None:
+    """검토사항 동작이 가리키는 검토사항. 지금 결과에 없거나 저장할 수 없으면 404. 그 밖 동작은 None."""
+    if action.type not in ITEM_ACTIONS:
+        return None
+    item = scope.item_by_id.get(action.item_id) if action.item_id is not None else None
+    if item is None:
+        raise ApiError(404, MSG_ITEM_NOT_FOUND)
+    return item
+
+
 def _with_entry(findings: Mapping[str, Any], target: Target, value: Mapping[str, Any]) -> dict[str, Any]:
     """저장된 findings 사본에 항목 하나를 쓴다(그 항목의 모르는 키는 둔다, 다른 키는 그대로)."""
     out = dict(findings)
     saved = findings.get(target.key)
     out[target.key] = {**(dict(saved) if isinstance(saved, Mapping) else {}), **value}
     return out
+
+
+def _with_item(items: Mapping[str, Any], target: ItemTarget, value: Mapping[str, Any]) -> dict[str, Any]:
+    """저장된 items 사본에 검토사항 하나를 쓴다(그 항목의 모르는 키·다른 키·지금 결과에 없는 id 는 그대로)."""
+    out = dict(items)
+    saved = items.get(target.key)
+    out[target.key] = {**(dict(saved) if isinstance(saved, Mapping) else {}), **value}
+    return out
+
+
+class ItemStateConflict(ApiError):
+    """검토사항 상태 409(이미 해결에 resolve · 미해결에 reopen) — 검토사항 두 동작만 낸다.
+
+    apply_review_action 이 이 시도에 검토 행이 없었을 때만(그 사이 분석이 지워져 검토 행도 cascade 로 사라졌을 수 있음)
+    분석을 다시 읽어 404 로 바꾼다. 응답은 ApiError 와 같다(409 + MSG_ITEM_STATE_CHANGED).
+    """
+
+    def __init__(self) -> None:
+        super().__init__(409, MSG_ITEM_STATE_CHANGED)
+
+
+def _resolve_item(action: ReviewAction, target: ItemTarget, state: _State, at: str) -> _Change:
+    current = item_state(target, state.items)
+    if current["resolved"]:
+        raise ItemStateConflict()
+    entry = {**current, "resolved": True, "note": action.text, "resolved_at": at, "resolved_by": action.actor}
+    return _Change(
+        columns={"items": _with_item(state.items, target, entry)},
+        kind="resolve",
+        target=f"{target.num} {target.label}",
+        change="미해결 → 해결",
+        reason=action.text,
+    )
+
+
+def _reopen_item(target: ItemTarget, state: _State) -> _Change:
+    current = item_state(target, state.items)
+    if not current["resolved"]:
+        raise ItemStateConflict()
+    entry = {**current, "resolved": False}  # note·resolved_at·resolved_by 는 그대로(데모 reopenItem 과 같다)
+    return _Change(
+        columns={"items": _with_item(state.items, target, entry)},
+        kind="reopenItem",
+        target=f"{target.num} {target.label}",
+        change="해결 → 미해결",
+        reason="",
+    )
 
 
 def _set_status(action: ReviewAction, target: Target, state: _State, at: str) -> _Change:
@@ -744,13 +904,27 @@ def _open_count(scope: ReviewScope, state: _State) -> int:
     return sum(1 for t in scope.targets if finding_state(t, state.findings)["status"] == "open")
 
 
+def _open_item_count(scope: ReviewScope, state: _State) -> int:
+    """미해결 검토사항 수 — 저장할 수 없는 검토사항은 미해결로 센다."""
+    return sum(1 for t in scope.items if not item_state(t, state.items)["resolved"])
+
+
 def _compute(
-    action: ReviewAction, scope: ReviewScope, targets: Sequence[Target], state: _State, at: str
+    action: ReviewAction,
+    scope: ReviewScope,
+    targets: Sequence[Target],
+    state: _State,
+    at: str,
+    item: ItemTarget | None = None,
 ) -> _Change | None:
     """검사(잠김·상태)와 새 값 계산. 바뀐 것이 없으면 None. 409 는 ApiError."""
     if action.type in LOCKED_ACTIONS and state.status == "done":
         raise ApiError(409, MSG_LOCKED)
     kind = action.type
+    if kind in ITEM_ACTIONS:
+        if item is None:
+            raise ApiError(404, MSG_ITEM_NOT_FOUND)  # apply_review_action 이 먼저 찾는다 — 여기에는 오지 않는다
+        return _resolve_item(action, item, state, at) if kind == "resolve_item" else _reopen_item(item, state)
     if kind == "set_status":
         return _set_status(action, targets[0], state, at)
     if kind == "confirm_many":
@@ -774,8 +948,11 @@ def _compute(
     if kind == "complete_review":
         if state.status != "needed":
             raise ApiError(409, MSG_ALREADY_DONE)
-        left = _open_count(scope, state)
-        rest = f" (남은 항목: 미확인 탐지 {left}건)" if left else ""
+        left, open_items = _open_count(scope, state), _open_item_count(scope, state)
+        parts = [f"미확인 탐지 {left}건"] if left else []
+        if open_items:
+            parts.append(f"미해결 검토사항 {open_items}건")
+        rest = f" (남은 항목: {', '.join(parts)})" if parts else ""
         return _Change(
             columns={"status": "done", "reviewed_at": at, "reviewer": action.actor, "completion_note": action.text},
             kind="complete",
@@ -858,13 +1035,22 @@ def apply_review_action(
         if expected is None or action.file_name != expected:
             raise ApiError(400, MSG_BAD_REQUEST)
     targets = _targets_for(scope, action) if action.finding_id is not None or action.finding_ids else ()
+    item = _item_for(scope, action)  # 검토사항 두 동작만 — 지금 결과에 없거나 저장할 수 없으면 404
     moment = now() if callable(now) else (now or datetime.now(UTC))
 
     for _attempt in range(MAX_ATTEMPTS):
         raw = store.get_review(analysis_id)  # StoreError → 502
         state = _state(raw, for_write=True)
         at = _action_time(state.history, moment)
-        planned = _compute(action, scope, targets, state, at)
+        try:
+            planned = _compute(action, scope, targets, state, at, item)
+        except ItemStateConflict:
+            # 검토사항 두 동작만(T1-fix1): 이 시도에 검토 행이 없었다면(처음 읽기든 경쟁 패배 뒤 다시 읽기든) 그 사이 분석이
+            # 지워져 검토 행도 cascade 로 사라졌을 수 있다 — 값 없는 다시 읽기로 정말 없으면 404, 있거나 다시 읽기가
+            # 저장소 오류면 409 그대로. 검토 행이 있던 시도의 상태 409 는 바로 낸다. 기존 10종은 이 예외를 내지 않는다.
+            if raw is None and _analysis_gone(store, analysis_id):
+                raise ApiError(404, MSG_NOT_FOUND) from None
+            raise
         if planned is None:  # 바뀐 것 없음 — 쓰지 않는다(이력·version 그대로)
             return ActionOutcome(row=row, view=view, review=review_block(row, scope, raw), changed=False)
         if len(state.history) >= MAX_HISTORY:

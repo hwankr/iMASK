@@ -420,7 +420,7 @@ def test_unexpected_exception_returns_empty_view(monkeypatch: pytest.MonkeyPatch
 
 
 def test_contract_shape_of_full_view(base: dict[str, Any]) -> None:
-    assert set(base) == {"documents", "findings", "overall"}
+    assert set(base) == {"documents", "findings", "overall", "items"}  # items: 검토사항(review-items §5.3)
     assert_view(base)
 
 

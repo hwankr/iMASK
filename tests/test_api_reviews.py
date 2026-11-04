@@ -47,7 +47,7 @@ ANALYSIS_KEYS = {
     "poll_error",
     "review",
 }
-REVIEW_KEYS = {"status", "memo", "memo_at", "reviewer", "reviewed_at", "completion_note", "findings", "history", "version"}
+REVIEW_KEYS = {"status", "memo", "memo_at", "reviewer", "reviewed_at", "completion_note", "findings", "items", "history", "version"}
 MSG_FORMAT = "요청 형식이 올바르지 않습니다."
 MSG_TOO_LARGE = "요청 본문이 너무 큽니다."
 MSG_NOT_FOUND = "분석 건을 찾을 수 없습니다."
@@ -136,7 +136,8 @@ def test_post_returns_the_same_analysis_shape_as_get(ctx: Ctx) -> None:
     assert review["version"] == 1 and review["status"] == "needed"
     assert review["findings"][first]["status"] == "confirmed"
     assert [h["id"] for h in review["history"]] == ["S1", "S2", "H1"]
-    assert review["history"][1]["change"] == "분석 완료 · 탐지 29건 · 위험등급 높음 · 검토사항 0건"
+    # 검토사항 6건(review-items §5.5 — lowconf 4·nolocation 1·other 1, tests/test_items.py 가 내용을 본다)
+    assert review["history"][1]["change"] == "분석 완료 · 탐지 29건 · 위험등급 높음 · 검토사항 6건"
     assert review["history"][2]["target"] == "D1-01 이름" and review["history"][2]["change"] == "미확인 → 확인함"
     # 다시 조회해도 같은 값(새로 고침·다른 브라우저)
     got = ctx.get(analysis_id)
@@ -156,6 +157,7 @@ def test_get_of_done_analysis_without_row_has_the_default_block(ctx: Ctx) -> Non
         "reviewed_at": None,
         "completion_note": "",
         "findings": {},
+        "items": {},
         "history": [
             {"id": "S1", "at": row["created_at"], "actor": "시스템", "kind": "request", "target": "분석 건", "change": "문서 1개 분석 요청", "reason": ""},
             {"id": "S2", "at": row["updated_at"], "actor": "시스템", "kind": "ai", "target": "분석 건", "change": "분석 완료 · 탐지 4건 · 위험등급 미평가 · 검토사항 0건", "reason": ""},

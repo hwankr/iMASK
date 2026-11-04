@@ -43,7 +43,7 @@ from imask_backend.results import parse_stages
 from imask_backend.settings import get_settings, load_settings
 from imask_backend.upstage import UpstageClient
 
-VIEW_KEYS = {"format", "job", "summary", "documents", "findings", "overall"}
+VIEW_KEYS = {"format", "job", "summary", "documents", "findings", "overall", "items"}  # items: 검토사항(review-items §5.3)
 MSG_NOT_FOUND = "분석 건을 찾을 수 없습니다."
 MSG_ORIGINAL_MISSING = "원본 파일을 찾을 수 없습니다."
 MSG_LINK_FAILED = "원본 파일 주소를 만들지 못했습니다. 잠시 후 다시 시도해 주세요."

@@ -555,13 +555,14 @@ def test_get_non_running_returns_stored_without_upstage(ctx: Ctx, status: str) -
     assert body["status"] == status
     assert body["upstage_status"] is None and body["poll_error"] is None
     # 응답 모양이 바뀜(T1 findings-api): stages·response 는 빼고 화면용 documents·findings·overall 을 더한다.
-    # 원본(response)에 단계가 없으므로 셋 다 빈 값이다(저장된 summary 는 그대로 옮긴다).
+    # 원본(response)에 단계가 없으므로 모두 빈 값이다(저장된 summary 는 그대로 옮긴다). 검토사항 items 도(review-items §5.3).
     assert body["result"] == {
         "format": "imask-upstage-v1",
         "summary": {"risk_level": "상"},
         "documents": [],
         "findings": [],
         "overall": {"level": None, "text": "", "next_stage": None, "next_text": ""},
+        "items": [],
     }
     # ?include=stages 면 저장된 stages 를 그대로 넣는다
     with_stages = ctx.get(analysis_id, params={"include": "stages"}).json()["result"]
@@ -611,7 +612,7 @@ def test_get_completed_saves_result_and_deletes_file(ctx: Ctx, caplog: pytest.Lo
     assert body["upstage_status"] == "completed"
     # API 응답: response(원본)·stages 없음, 화면용 documents·findings·overall 있음(T1 findings-api)
     result = body["result"]
-    assert set(result) == {"format", "job", "summary", "documents", "findings", "overall"}
+    assert set(result) == {"format", "job", "summary", "documents", "findings", "overall", "items"}
     assert result["format"] == "imask-upstage-v1"
     assert result["job"]["id"] == "job_up1"
     assert result["job"]["config_id"] == FAKE_CONFIG_ID

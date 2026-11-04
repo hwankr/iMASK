@@ -8,6 +8,7 @@
 #  - 오류는 StoreError 하나로 감싼다. 메시지는 값 없는 짧은 문구(로그용 — 동작 이름 + 예외 종류 + 영숫자 오류 코드 + HTTP 상태)이고,
 #    화면에는 업무 로직이 정한 한국어 문장만 내보낸다.
 #  - 검토 행(analysis_reviews, 분석 1건당 1행 — imask_backend.reviews 가 쓴다). analyses 행은 건드리지 않는다.
+#    REVIEW_COLUMNS 에 items(검토사항 해결 기록 — 마이그레이션 20261104094327)도 읽는다.
 #    get_review: 행 하나(없으면 None). insert_review: upsert(on_conflict=analysis_id, ignore_duplicates) =
 #    `insert … on conflict (analysis_id) do nothing` — 이미 행이 있으면 빈 응답 → None(예외로 흐름을 가르지 않는다).
 #    update_review: `update … where analysis_id=? and version=?` — 바뀐 행이 없으면 None(다른 요청이 먼저 씀).
@@ -63,7 +64,7 @@ LIST_SELECT = (
 )
 REVIEW_TABLE = "analysis_reviews"
 REVIEW_COLUMNS = (
-    "analysis_id,status,memo,memo_at,reviewer,reviewed_at,completion_note,findings,history,version,created_at,updated_at"
+    "analysis_id,status,memo,memo_at,reviewer,reviewed_at,completion_note,findings,items,history,version,created_at,updated_at"
 )
 # 검토 행 오류 로그에 남겨도 되는 오류 코드(PostgREST PGRST205·Postgres SQLSTATE 23514 등 — 영숫자만, 16자까지)
 _ERROR_CODE = re.compile(r"[A-Za-z0-9]{1,16}")

@@ -396,7 +396,7 @@ def test_new_rows_start_with_version_one_and_history_ids_follow_versions(env: En
     env.act("save_memo", at=1, text="a")
     (method, _, values, expect) = env.store.review_writes[0]
     assert method == "insert_review" and expect is None and values["version"] == 1
-    assert set(values) == {"analysis_id", "status", "memo", "memo_at", "reviewer", "reviewed_at", "completion_note", "findings", "history", "version"}
+    assert set(values) == {"analysis_id", "status", "memo", "memo_at", "reviewer", "reviewed_at", "completion_note", "findings", "items", "history", "version"}
     env.act("save_memo", at=2, text="b")
     (method, _, values, expect) = env.store.review_writes[1]
     assert method == "update_review" and expect == 1 and values["version"] == 2
@@ -644,6 +644,7 @@ def test_block_without_a_row_is_the_default_with_two_system_lines(env: Env) -> N
         "reviewed_at": None,
         "completion_note": "",
         "findings": {},
+        "items": {},
         "history": [
             {"id": "S1", "at": analysis["created_at"], "actor": "시스템", "kind": "request", "target": "분석 건", "change": "문서 1개 분석 요청", "reason": ""},
             {

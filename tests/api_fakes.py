@@ -8,6 +8,7 @@
 #    검토 행(analysis_reviews): get_review·insert_review(이미 있으면 None — on conflict do nothing)·update_review(version
 #    조건, 안 맞으면 None)와 updated_at 갱신, 분석 FK·check 제약·jsonb 가 거절하는 값(NUL·짝 없는 서로게이트)을 흉내 낸다.
 #    review_hooks 에 함수를 넣으면 검토 행을 쓰기 직전에 하나씩 꺼내 부른다(다른 요청이 끼어드는 경쟁 흉내).
+#    items 열(검토사항 해결 기록, review-items — 기본 {} · 객체 check)도 마이그레이션 20261104094327 처럼 흉내 낸다.
 #    공유 목록·삭제(shared-analyses): list_analyses 는 store.LIST_SELECT 모양(result 없이 JSON 경로 두 값 — risk_level 은
 #    Postgres ->> 처럼 문자열(숫자·객체도 JSON 글자로)·null, document_count 는 -> 처럼 JSON 값 그대로, 문서 행은 키 다섯 개를
 #    일부러 거꾸로, analysis_reviews 는 1:1 객체 또는 null — review_embed_as_list 면 목록 모양)를 created_at desc·id desc 로.
@@ -432,6 +433,7 @@ def _review_defaults() -> dict[str, Any]:
         "reviewed_at": None,
         "completion_note": "",
         "findings": {},
+        "items": {},
         "history": [],
     }
 
@@ -467,6 +469,7 @@ def _check_review(row: Mapping[str, Any]) -> None:
     ok = (
         row.get("status") in ("needed", "done")
         and isinstance(row.get("findings"), dict)
+        and isinstance(row.get("items"), dict)
         and isinstance(row.get("history"), list)
         and isinstance(version, int)
         and not isinstance(version, bool)

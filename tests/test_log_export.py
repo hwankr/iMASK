@@ -300,8 +300,8 @@ def test_fixture_name_is_the_seoul_date_not_the_utc_date() -> None:
 
 def test_log_export_is_the_tenth_action_and_not_locked() -> None:
     assert ACTION_FIELDS["log_export"] == ("format", "size", "state", "file_name")
-    assert len(ACTION_FIELDS) == 10
-    assert "log_export" not in LOCKED_ACTIONS and len(LOCKED_ACTIONS) == 7
+    assert len(ACTION_FIELDS) == 12  # review-items §5.6 — resolve_item·reopen_item 을 더해 12종
+    assert "log_export" not in LOCKED_ACTIONS and len(LOCKED_ACTIONS) == 9  # 검토사항 두 동작도 잠김 대상
     assert "export" in HKIND
 
 
@@ -856,8 +856,8 @@ def test_row_with_a_broken_version_is_not_written(store: FakeStore) -> None:
 
 
 def test_reviews_module_reexports_nothing_new_by_accident() -> None:
-    # 기존 9종의 필드 표는 그대로(log_export 만 더함)
-    assert {k: v for k, v in ACTION_FIELDS.items() if k != "log_export"} == {
+    # 기존 9종의 필드 표는 그대로(log_export 와 검토사항 두 동작 resolve_item·reopen_item 만 더함)
+    assert {k: v for k, v in ACTION_FIELDS.items() if k not in ("log_export", "resolve_item", "reopen_item")} == {
         "set_status": ("finding_id", "status", "reason"),
         "confirm_many": ("finding_ids",),
         "mark_false_positive": ("finding_id", "reason_type", "note"),

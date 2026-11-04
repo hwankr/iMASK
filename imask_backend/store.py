@@ -5,15 +5,16 @@
 #    documents 비공개 버킷을 다룬다. RLS 는 켜져 있고 정책이 없어 비밀 키(service_role)로만 읽고 쓴다.
 #  - 조건부 갱신(update_analysis 의 expect_status 등): `update … where id=? and status=?` 를 한 번에
 #    보내고 바뀐 행이 없으면 None. 같은 분석을 두 요청이 동시에 처리해도 한 번만 반영된다.
-#  - 오류는 StoreError 하나로 감싼다. 메시지는 redaction.redact 로 가린 짧은 문구(로그용)이고,
+#  - 오류는 StoreError 하나로 감싼다. 메시지는 값 없는 짧은 문구(로그용 — 동작 이름 + 예외 종류 + 영숫자 오류 코드 + HTTP 상태)이고,
 #    화면에는 업무 로직이 정한 한국어 문장만 내보낸다.
 #  - 검토 행(analysis_reviews, 분석 1건당 1행 — imask_backend.reviews 가 쓴다). analyses 행은 건드리지 않는다.
 #    get_review: 행 하나(없으면 None). insert_review: upsert(on_conflict=analysis_id, ignore_duplicates) =
 #    `insert … on conflict (analysis_id) do nothing` — 이미 행이 있으면 빈 응답 → None(예외로 흐름을 가르지 않는다).
 #    update_review: `update … where analysis_id=? and version=?` — 바뀐 행이 없으면 None(다른 요청이 먼저 씀).
 #    검토 행 오류(_review_error)는 값 없이: 동작 이름 + 예외 종류 + 영숫자 오류 코드만(바깥 오류 원문·메모·분석 id 없음).
-#    분석·문서·파일 경로의 _error(가린 짧은 이유 포함)는 그대로다. 단 get_analysis(…, quiet=True)(검토 동작 경로 —
-#    처음 읽기와 지워졌는지 다시 읽기, live-report V-T1-1 M1)는 검토 행과 같은 값 없는 오류(_quiet_error, HTTP 상태 없음).
+#    분석·문서·파일 경로의 _error 도 값 없는 오류다(_quiet_error 와 같다 — 바깥 오류 원문·분석 id·경로를 넣지 않는다).
+#    get_analysis(…, quiet=True)(검토 동작 경로 — 처음 읽기와 지워졌는지 다시 읽기, live-report V-T1-1 M1)는
+#    검토 행과 같은 꼴(HTTP 상태 없음).
 #  - 서명 다운로드 URL(create_signed_download_url): storage3 2.33 의 create_signed_url(path, expires_in) 은
 #    {'signedURL', 'signedUrl'} 에 이미 절대 주소(Storage 기준 주소 + /object/sign/…?token=…)를 담아 준다.
 #    다른 버전·가짜가 상대 경로를 주면 Storage 기준 주소(client.storage_url)에 붙인다. 없는 객체는 None.
@@ -47,7 +48,6 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
-from .redaction import redact
 from .settings import STORAGE_BUCKET, Settings
 
 logger = logging.getLogger("imask.store")
@@ -65,7 +65,6 @@ REVIEW_TABLE = "analysis_reviews"
 REVIEW_COLUMNS = (
     "analysis_id,status,memo,memo_at,reviewer,reviewed_at,completion_note,findings,history,version,created_at,updated_at"
 )
-MAX_ERROR_DETAIL = 300
 # 검토 행 오류 로그에 남겨도 되는 오류 코드(PostgREST PGRST205·Postgres SQLSTATE 23514 등 — 영숫자만, 16자까지)
 _ERROR_CODE = re.compile(r"[A-Za-z0-9]{1,16}")
 # 값 없는 오류에 남겨도 되는 HTTP 상태(세 자리 숫자만)
@@ -222,11 +221,12 @@ class SupabaseStore:
     # --- 내부 -----------------------------------------------------------------
 
     def _error(self, action: str, exc: BaseException) -> StoreError:
-        """예외 종류와 짧은 이유만(가린 뒤). 원래 예외는 끊는다(요청 정보를 품을 수 있어서)."""
-        detail = getattr(exc, "message", None) or str(exc)
-        text = redact(f"{action}: {type(exc).__name__}: {detail}", self._secrets, limit=MAX_ERROR_DETAIL)
-        logger.warning("%s", text)
-        return StoreError(text)
+        """저장소 오류(분석·문서·파일 경로 공통) — 값 없이: 고정 동작 이름 + 예외 종류 + 영숫자 오류 코드 + HTTP 상태.
+
+        _quiet_error 와 같다. 바깥 오류 원문(PostgREST·Storage 문구 — 요청 주소의 분석 id·경로가 섞일 수 있다)은
+        가려서라도 로그·StoreError 문구에 넣지 않는다. 원래 예외는 끊는다.
+        """
+        return self._quiet_error(action, exc)
 
     @staticmethod
     def _quiet_error(action: str, exc: BaseException, *, with_status: bool = True) -> StoreError:
@@ -343,7 +343,7 @@ class SupabaseStore:
                 .execute()
             )
         except Exception as exc:
-            # quiet(검토 동작 경로): 값 없는 오류. 기본은 지금 그대로 _error(가린 짧은 이유 포함)
+            # 둘 다 값 없는 오류 — quiet(검토 동작 경로)는 HTTP 상태도 넣지 않는다(검토 행과 같은 꼴), 기본은 _error
             if quiet:
                 raise self._quiet_error("분석 읽기", exc, with_status=False) from None
             raise self._error("분석 읽기", exc) from None

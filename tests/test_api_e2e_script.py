@@ -379,7 +379,31 @@ def _assert_no_values(out: str) -> None:
 def test_fake_done_result_matches_script_expectations(script: Any) -> None:
     summary = DONE_RESULT["summary"]
     assert (summary["document_count"], summary["extracted_document_count"], summary["risk_level"]) == (6, 5, "상")
-    assert script.EXPECTED_FINDINGS == 29 and script.EXPECTED_BOXED == 28
+    shape = script._known_shape(6, {"extracted": 5, "other": 1})
+    assert shape is not None and (shape["findings"], shape["boxed"]) == (29, 28)
+
+
+def test_known_shapes_are_exact(script: Any) -> None:
+    # 합성 묶음의 알려진 두 모양만 받는다 — 위임장 따로(6·5·29·28) · 위임장 합침(5·4·26·26), 섞인 모양 · 새 모양은 아님
+    split = script._known_shape(6, {"extracted": 5, "other": 1})
+    merged = script._known_shape(5, {"extracted": 4, "other": 1})
+    assert split is not None and (split["findings"], split["boxed"]) == (29, 28)
+    assert merged is not None and (merged["findings"], merged["boxed"]) == (26, 26)
+    for documents, kinds in [
+        (6, {"extracted": 4, "other": 1}),
+        (5, {"extracted": 5, "other": 1}),
+        (5, {"extracted": 4}),
+        (7, {"extracted": 6, "other": 1}),
+        (True, {"extracted": 5, "other": 1}),
+        ("6", {"extracted": 5, "other": 1}),
+    ]:
+        assert script._known_shape(documents, kinds) is None, (documents, kinds)
+    ok = {"risk_level": "상"}
+    assert script._summary_ok({**ok, "document_count": 6, "extracted_document_count": 5})
+    assert script._summary_ok({**ok, "document_count": 5, "extracted_document_count": 4})
+    assert not script._summary_ok({**ok, "document_count": 6, "extracted_document_count": 4})
+    assert not script._summary_ok({**ok, "document_count": 5, "extracted_document_count": 5})
+    assert not script._summary_ok({"risk_level": "중", "document_count": 5, "extracted_document_count": 4})
 
 
 def test_done_checks_view_size_and_original_file(script: Any, capsys: Any) -> None:
@@ -859,7 +883,7 @@ def _wrong_409_detail(api: FakeApi, body: dict[str, Any], n: int) -> httpx.Respo
     ("override", "message"),
     [
         (_accept_second_confirm, "HTTP 200"),
-        (_wrong_change_text, "새 이력 change: '다른 문구'"),
+        (_wrong_change_text, "새 이력 change: 계약과 다름"),
         (_changed_true_without_write, "changed True(기대 false)"),
         (_wrong_409_detail, "HTTP 409 탐지 항목 상태가 바뀌었습니다."),
     ],
@@ -1071,12 +1095,12 @@ def _export_wrong_400_detail(api: FakeApi, body: dict[str, Any], n: int) -> http
 @pytest.mark.parametrize(
     ("override", "message"),
     [
-        (_export_line(EXPORT_POSTS[1], "change", "JSON · 1.2MB · 저장 완료"), "새 이력 change: 'JSON · 1.2MB · 저장 완료'"),
-        (_export_line(EXPORT_POSTS[0], "change", "CSV · 6KB · 저장 완료"), "새 이력 change: 'CSV · 6KB · 저장 완료'"),
-        (_export_line(EXPORT_POSTS[0], "reason", ""), "새 이력 reason: ''"),
-        (_export_line(EXPORT_POSTS[0], "kind", "memo"), "새 이력 kind: 'memo'"),
+        (_export_line(EXPORT_POSTS[1], "change", "JSON · 1.2MB · 저장 완료"), "새 이력 change: 계약과 다름"),
+        (_export_line(EXPORT_POSTS[0], "change", "CSV · 6KB · 저장 완료"), "새 이력 change: 계약과 다름"),
+        (_export_line(EXPORT_POSTS[0], "reason", ""), "새 이력 reason: 계약과 다름"),
+        (_export_line(EXPORT_POSTS[0], "kind", "memo"), "새 이력 kind: 계약과 다름"),
         (_export_line(EXPORT_POSTS[0], "target", EXPORT_WRONG), "새 이력 target:"),
-        (_export_line(EXPORT_POSTS[1], "actor", "다른 처리자"), "새 이력 actor: '다른 처리자'"),
+        (_export_line(EXPORT_POSTS[1], "actor", "다른 처리자"), "새 이력 actor: 계약과 다름"),
         (_export_locked, "HTTP 409 검토를 완료한 분석은 바꿀 수 없습니다.(기대 200"),
         (_export_moves("status", "needed"), "review status 가 바뀜"),
         (_export_moves("reviewer", "다른 검토자"), "review reviewer 가 바뀜"),
@@ -1119,6 +1143,16 @@ def test_unexpected_export_response_fails(script: Any, capsys: Any, override: An
     assert any("log_export" in line or "마지막 —" in line for line in failed), failed
     assert "검토 동작 확인: " in out and "— 기대와 다름" in out
     assert "결과: 기대와 다름" in out
+
+
+def test_mismatch_output_has_no_values(script: Any, capsys: Any) -> None:
+    # 서버가 이력 줄에 원문 같은 값을 잘못 담아 돌려줘도 진단 출력에는 필드 이름과 '계약과 다름'만 나온다
+    sentinel = "원문센티널-RAW-7Q2"
+    api = FakeApi(poll_mode="done", review_override=_export_line(EXPORT_POSTS[0], "reason", sentinel))
+    assert _run(script, api, _done_upstage(), []) == 1
+    out = capsys.readouterr().out
+    assert "새 이력 reason: 계약과 다름" in out
+    assert sentinel not in out
 
 
 def test_export_steps_are_numbered_after_lock_checks(script: Any, capsys: Any) -> None:
@@ -1828,7 +1862,7 @@ def test_retry_flow_keep_stores_retry_lines_with_previous_reasons(script: Any, m
 
 
 def test_retry_flow_judges_fixed_expectations_separately(script: Any, monkeypatch: pytest.MonkeyPatch, capsys: Any) -> None:
-    # 가짜 서버의 기본 응답(서류 6 · 추출 키 하나)은 고정 기대값(탐지 29 등)과 다르다 — 새 확인은 따로 통과로 보인다
+    # 가짜 서버의 기본 응답(서류 6 · 추출 키 하나)은 알려진 모양(탐지 29 · 26 등)과 다르다 — 새 확인은 따로 통과로 보인다
     code, ctx, _ = _app_run(script, monkeypatch, ["--retry-flow"])
     out = capsys.readouterr().out
     assert code == 1
@@ -1867,8 +1901,8 @@ def _job_without_original(request: httpx.Request, status: int, body: Any) -> Any
 @pytest.mark.parametrize(
     ("tamper", "message"),
     [
-        (_old_history_order, "H1 id: 'S2' (기대 'H1')"),
-        (_wrong_retry_reason, "H1 reason: '다른 이유'"),
+        (_old_history_order, "H1 id: 계약과 다름"),
+        (_wrong_retry_reason, "H1 reason: 계약과 다름"),
         (_job_without_original, "upstage_job_id 가 있음(Upstage 작업을 만듦)"),
     ],
     ids=["old_history_order", "wrong_reason", "job_without_original"],

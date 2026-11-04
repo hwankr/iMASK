@@ -6,7 +6,7 @@
 #    log_export 와 save_memo 로 본다.
 #  - 'imask' 로거는 propagate=False 라 root caplog 로는 잡히지 않는다 → 핸들러를 imask 로거에 직접 붙이고,
 #    값 없는 문구가 실제로 잡혔음을 먼저 확인한 뒤 sentinel 이 하나도 없음을 확인한다. StoreError 문구도 같다.
-#  - 다른 경로(조회 GET 등)는 그대로: get_analysis 기본값(quiet=False)은 지금의 _error 문구 꼴, FakeStore 기록으로
+#  - 다른 경로(조회 GET 등)도 값 없는 오류: get_analysis 기본값(quiet=False)은 _error(= _quiet_error, HTTP 상태까지), FakeStore 기록으로
 #    검토 동작만 quiet=True 로 읽는지 확인한다.
 # ==========================================================================
 
@@ -100,6 +100,29 @@ class ScriptedClient:
         if isinstance(outcome, BaseException):
             raise outcome
         return _Response(copy.deepcopy(outcome))
+
+
+class _Raising:
+    """어떤 쿼리 빌더 호출(insert·update·eq·is_·select …)이든 받고 execute() 에서 정해 둔 예외를 던진다."""
+
+    def __init__(self, exc: BaseException) -> None:
+        self.exc = exc
+
+    def __getattr__(self, _name: str) -> Callable[..., _Raising]:
+        return lambda *_a, **_k: self
+
+    def execute(self) -> Any:
+        raise self.exc
+
+
+class _RaisingClient:
+    """모든 테이블 요청이 같은 예외로 실패하는 클라이언트(네트워크 없음)."""
+
+    def __init__(self, exc: BaseException) -> None:
+        self.exc = exc
+
+    def table(self, _name: str) -> _Raising:
+        return _Raising(self.exc)
 
 
 def _analysis_row() -> dict[str, Any]:
@@ -279,13 +302,38 @@ def test_quiet_read_error_keeps_only_a_short_alphanumeric_code() -> None:
     assert log.lines and all(OUTSIDE_SENTINEL not in line for line in log.lines)
 
 
-def test_default_analysis_read_error_is_unchanged() -> None:
-    # 다른 경로(조회·시작·다시 분석·삭제)는 기본값 그대로 — 지금의 _error 꼴(예외 종류 뒤에 가린 짧은 이유)
+def test_default_analysis_read_error_is_also_value_free() -> None:
+    # 다른 경로(조회·시작·다시 분석·삭제)의 기본값(_error)도 값 없는 오류 — quiet 와 달리 HTTP 상태까지
     store = SupabaseStore(ScriptedClient({("analyses", "select"): [UpstreamError()]}))
     with imask_log() as log, pytest.raises(StoreError) as info:
         store.get_analysis(ANALYSIS_ID)
-    assert info.value.message.startswith("분석 읽기: UpstreamError: ")
-    assert info.value.message != QUIET_READ and any(line.endswith(info.value.message) for line in log.lines)
+    assert info.value.message == QUIET_READ + " HTTP 500"
+    assert any(line.endswith(info.value.message) for line in log.lines)
+    for line in log.lines:
+        _assert_value_free(line)
+    _assert_value_free(info.value.message)
+    _assert_value_free(repr(info.value))
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda s: s.update_analysis(ANALYSIS_ID, {"status": "failed"}),
+        lambda s: s.update_document("d1", {"upstage_file_id": "f"}),
+        lambda s: s.insert_analysis(f"이름 {ACTOR_SENTINEL}"),
+    ],
+    ids=["update_analysis", "update_document", "insert_analysis"],
+)
+def test_other_store_errors_are_value_free(call: Callable[[SupabaseStore], Any]) -> None:
+    # 분석·문서 경로의 다른 저장소 오류도 같은 꼴(_error = _quiet_error) — 바깥 오류 원문·분석 id 가 로그·문구에 없다
+    store = SupabaseStore(_RaisingClient(UpstreamError()))
+    with imask_log() as log, pytest.raises(StoreError) as info:
+        call(store)
+    assert info.value.message.endswith(": UpstreamError (XX000) HTTP 500")
+    assert log.lines
+    for line in log.lines:
+        _assert_value_free(line)
+    _assert_value_free(info.value.message)
 
 
 def test_quiet_read_success_returns_the_same_row() -> None:

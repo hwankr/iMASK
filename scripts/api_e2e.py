@@ -15,8 +15,10 @@
 #                      원본 파일 확인, 검토 기록 모양 확인만 한다(**읽기만 — 검토 동작을 보내지 않음**).
 #                      비교할 원본은 --file(기본 합성 묶음). 코드를 고친 뒤 재확인용.
 #    --no-review     : 검토 동작 확인(아래)을 끈다(--analysis-id 에서는 검토 기록 모양 확인을 끈다).
-#  done 확인(T1 findings-api): 요약(서류 6·추출 5·상) + 화면용 결과 — findings 29·boxes 있는 항목 28·
-#    documents 6(kind extracted 5·other 1, other 에 other_guide·extracted 에 validation)·overall 상/권장_조치·
+#  done 확인(T1 findings-api): 요약(서류·추출 = 알려진 모양 6·5 또는 5·4 · 상) + 화면용 결과 — 알려진 모양 둘 중 하나와
+#    정확히 같은 수(위임장 따로: documents 6(extracted 5·other 1)·findings 29·boxes 있는 항목 28 / 위임장 합침:
+#    documents 5(extracted 4·other 1)·findings 26·boxes 26 — 모양을 섞지 않음, EXPECTED_SHAPES),
+#    other 에 other_guide·extracted 에 validation, overall 상/권장_조치·
 #    risk 분포(허용 값·risk_source 와 맞는지만 — unrated 를 강제하지 않음)·계약 키·id 중복·document_index·
 #    boxes 0~1, 기본 응답에 stages·response 없음, 응답 크기(기본 GET vs ?include=stages GET 바이트 — 기본이 작아야 함).
 #    원본 파일: GET /analyses/{id}/file 200·키 {url, mime_type, filename} → url 로(사용자 지정 헤더 없이) 받아 올린 내용과
@@ -38,7 +40,9 @@
 #    단계마다 응답 상태·changed·review 값·새 이력 줄(id H{version}·actor·kind·target·change·reason)을 보고 GET 으로 다시
 #    읽어 같은지 확인한다(오류 단계는 다시 읽은 review 가 그대로인지 = 쓰기 없음). 마지막에 이력 id H1…Hn 연속,
 #    at 이 줄어들지 않음, 저장 줄 수 = 쓴 동작 수 = version, 분석 created_at·updated_at 이 처음 조회와 같음(분석 시각·
-#    걸린 시간 불변). 출력은 단계 이름·통과/실패·개수만. 기대 문구는 계약(데모 코어와 같은 전이·문구)을 그대로 적은 것이다.
+#    걸린 시간 불변). 출력은 단계 이름·통과/실패·개수만 — 기대와 다른 이력 줄·검토 값도 필드 이름과 '계약과 다름'만
+#    (받은 값·기대 값은 출력하지 않는다 — 서버가 잘못해 원문 값을 담아도 터미널에 나오지 않게).
+#    기대 문구는 계약(데모 코어와 같은 전이·문구)을 그대로 적은 것이다.
 #    기대값도 계약대로 따로 만든다(백엔드 함수를 쓰지 않음): 표시 이름·위험등급은 JavaScript trim() 공백 집합(_js_trim —
 #    U+FEFF 는 지우고 U+0085·U+001C~001F 는 두는 화면 기준), 이력 target 은 저장 안전화(_stored_target — 짝 없는
 #    서로게이트·NUL → U+FFFD, 200 코드 포인트 넘으면 앞 199자 + '…'). 검토 동작 본문(_json_body)은 httpx json= 과 같은
@@ -124,14 +128,16 @@ DEFAULT_FILE = "testdocs/iMASK_smoke_bundle.pdf"
 TERMINAL = {"done", "partial", "failed"}
 WITHIN_SECONDS = 180  # queued → running → done 기대 시간(3분)
 
-# 합성 묶음 기대값(BRIEF §3)
-EXPECTED_DOCUMENTS = 6
-EXPECTED_EXTRACTED = 5
+# 합성 묶음의 알려진 결과 모양(BRIEF §3). Upstage 워크플로우가 4쪽 위임장을 따로 나누거나(서류 6) 소득 증빙(3–4쪽)에
+# 합친다(서류 5) — 2026-11-03~04 실제 실행에서 두 모양이 모두 나왔다. 수는 둘 중 한 모양과 **정확히** 같아야 한다
+# (느슨하게 보지 않는다 — 새 모양이 나오면 실패로 보이고, 확인한 뒤 이 표에 더한다).
+EXPECTED_SHAPES: tuple[dict[str, Any], ...] = (
+    # 3쪽 소득 정보 하나는 위치(page)를 못 찾아 좌표가 없다(boxes 28)
+    {"name": "위임장 따로", "documents": 6, "kinds": {"extracted": 5, "other": 1}, "findings": 29, "boxed": 28},
+    {"name": "위임장 합침", "documents": 5, "kinds": {"extracted": 4, "other": 1}, "findings": 26, "boxed": 26},
+)
 EXPECTED_RISK = "상"
-EXPECTED_FINDINGS = 29
-EXPECTED_BOXED = 28  # 3쪽 소득 정보 하나는 위치(page)를 못 찾아 좌표가 없다
 EXPECTED_NEXT_STAGE = "권장_조치"
-EXPECTED_KINDS = {"extracted": 5, "other": 1}
 
 # 공통 계약(BRIEF §5)
 DOCUMENT_KEYS = {"index", "type", "page_start", "page_end", "kind", "other_guide", "validation"}
@@ -368,10 +374,21 @@ def _upload(run: Run, upload: Mapping[str, str], content: bytes, mime_type: str)
         return False
 
 
+def _known_shape(documents: Any, kinds: Mapping[str, Any]) -> dict[str, Any] | None:
+    """서류 수 · kind 분포가 알려진 모양(EXPECTED_SHAPES) 중 하나와 같으면 그 모양, 아니면 None."""
+    for shape in EXPECTED_SHAPES:
+        if _is_int(documents) and documents == shape["documents"] and dict(kinds) == shape["kinds"]:
+            return shape
+    return None
+
+
 def _summary_ok(summary: Mapping[str, Any]) -> bool:
+    count, extracted = summary.get("document_count"), summary.get("extracted_document_count")
     return (
-        summary.get("document_count") == EXPECTED_DOCUMENTS
-        and summary.get("extracted_document_count") == EXPECTED_EXTRACTED
+        any(
+            _is_int(count) and _is_int(extracted) and (count, extracted) == (s["documents"], s["kinds"]["extracted"])
+            for s in EXPECTED_SHAPES
+        )
         and summary.get("risk_level") == EXPECTED_RISK
     )
 
@@ -487,7 +504,8 @@ def _print_summary(result: Mapping[str, Any]) -> bool:
     _say(f"  기타 서류 수: {summary.get('other_document_count')}")
     _say(f"  단계 이름: {summary.get('stage_names')}")
     expected = _summary_ok(summary)
-    _say(f"  기대값(서류 {EXPECTED_DOCUMENTS}·추출 {EXPECTED_EXTRACTED}·위험도 {EXPECTED_RISK}): {_mark(expected)}")
+    pairs = " 또는 ".join(f"{s['documents']}·{s['kinds']['extracted']}" for s in EXPECTED_SHAPES)
+    _say(f"  기대값(서류·추출 {pairs} · 위험도 {EXPECTED_RISK}): {_mark(expected)}")
     return expected and no_raw
 
 
@@ -501,22 +519,20 @@ def _print_view(result: Mapping[str, Any]) -> bool:
     kinds = dict(Counter(str(d.get("kind")) for d in documents))
     guides = sum(1 for d in others if d.get("other_guide"))
     validations = sum(1 for d in extracted if d.get("validation"))
-    docs_ok = (
-        len(documents) == EXPECTED_DOCUMENTS
-        and kinds == EXPECTED_KINDS
-        and guides == len(others)
-        and validations == len(extracted)
-    )
+    shape = _known_shape(len(documents), kinds)
+    docs_ok = shape is not None and guides == len(others) and validations == len(extracted)
     boxed = sum(1 for f in findings if f.get("boxes"))
-    counts_ok = len(findings) == EXPECTED_FINDINGS and boxed == EXPECTED_BOXED
+    # 탐지 수 · 위치 있는 항목 수는 서류 모양과 **같은 모양**의 값이어야 한다(모양을 섞지 않는다)
+    counts_ok = shape is not None and len(findings) == shape["findings"] and boxed == shape["boxed"]
+    want = f"{shape['findings']} · {shape['boxed']}" if shape else "알려진 모양 없음"
     overall_ok = overall.get("level") == EXPECTED_RISK and overall.get("next_stage") == EXPECTED_NEXT_STAGE
     text, next_text = overall.get("text"), overall.get("next_text")
     _say("화면용 결과(documents·findings·overall):")
     _say(
         f"  documents: {len(documents)} · kind {kinds} · other_guide 있음 {guides}/{len(others)}"
-        f" · validation 있음 {validations}/{len(extracted)} (기대 {EXPECTED_DOCUMENTS} · {EXPECTED_KINDS}): {_mark(docs_ok)}"
+        f" · validation 있음 {validations}/{len(extracted)} (알려진 모양: {shape['name'] if shape else '없음'}): {_mark(docs_ok)}"
     )
-    _say(f"  findings: {len(findings)} · boxes 있는 항목 {boxed} (기대 {EXPECTED_FINDINGS} · {EXPECTED_BOXED}): {_mark(counts_ok)}")
+    _say(f"  findings: {len(findings)} · boxes 있는 항목 {boxed} (기대 {want}): {_mark(counts_ok)}")
     _say(f"  risk 분포: {dict(Counter(str(f.get('risk')) for f in findings))}")
     _say(f"  risk_source 분포: {dict(Counter(str(f.get('risk_source')) for f in findings))}")
     _say(f"  exposure 분포: {dict(Counter(str(f.get('exposure')) for f in findings))}")
@@ -748,7 +764,7 @@ def _system_lines(row: Mapping[str, Any], targets: list[dict[str, str]]) -> list
 def _line_problems(line: Any, want: Mapping[str, Any], where: str) -> list[str]:
     if not isinstance(line, Mapping) or set(line) != HISTORY_KEYS:
         return [f"{where}: 이력 줄 모양이 다름"]
-    return [f"{where} {key}: {line.get(key)!r} (기대 {value!r})" for key, value in want.items() if line.get(key) != value]
+    return [f"{where} {key}: 계약과 다름" for key, value in want.items() if line.get(key) != value]
 
 
 def _review_shape_problems(row: Mapping[str, Any], targets: list[dict[str, str]]) -> list[str]:
@@ -794,7 +810,7 @@ def _first_review_problems(row: Mapping[str, Any], targets: list[dict[str, str]]
     if problems or not isinstance(review, Mapping):
         return problems
     want = {"status": "needed", "memo": "", "memo_at": None, "reviewer": "", "reviewed_at": None, "completion_note": "", "findings": {}, "version": 0}
-    problems += [f"{key}: {review.get(key)!r} (기대 {value!r})" for key, value in want.items() if review.get(key) != value]
+    problems += [f"{key}: 계약과 다름" for key, value in want.items() if review.get(key) != value]
     if len(review["history"]) != 2:
         problems.append(f"history {len(review['history'])}줄(기대 S1·S2 2줄)")
     return problems
@@ -963,7 +979,7 @@ class _ReviewFlow:
         value = findings.get(target["id"])
         if not isinstance(value, Mapping) or set(value) != REVIEW_FINDING_KEYS:
             return [f"{target['num']}: 저장 값 모양이 다름"]
-        return [f"{target['num']} {key}: {value.get(key)!r} (기대 {expected!r})" for key, expected in want.items() if value.get(key) != expected]
+        return [f"{target['num']} {key}: 계약과 다름" for key, expected in want.items() if value.get(key) != expected]
 
     def touched_now(self, review: Mapping[str, Any], target: Mapping[str, str]) -> list[str]:
         """그 항목의 updated_at = 이번 동작 시각(새 이력 at)."""
@@ -1095,7 +1111,7 @@ def _check_reviews(run: Run, analysis_id: str) -> bool:
 
     def complete_check(review: Mapping[str, Any], _before: Mapping[str, Any]) -> list[str]:
         problems = [
-            f"{key}: {review.get(key)!r} (기대 {value!r})"
+            f"{key}: 계약과 다름"
             for key, value in {"status": "done", "reviewer": REVIEW_ACTOR, "completion_note": TEXT_COMPLETE}.items()
             if review.get(key) != value
         ]
@@ -1156,7 +1172,7 @@ def _check_reviews(run: Run, analysis_id: str) -> bool:
 
     def reopen_check(review: Mapping[str, Any], _before: Mapping[str, Any]) -> list[str]:
         want = {"status": "needed", "reviewed_at": None, "reviewer": REVIEW_ACTOR, "completion_note": TEXT_COMPLETE, "memo": TEXT_MEMO}
-        return [f"{key}: {review.get(key)!r} (기대 {value!r})" for key, value in want.items() if review.get(key) != value]
+        return [f"{key}: 계약과 다름" for key, value in want.items() if review.get(key) != value]
 
     flow.write(
         "reopen_review(reviewer·completion_note 남음, reviewed_at null)",

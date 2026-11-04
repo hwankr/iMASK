@@ -1141,5 +1141,8 @@
       ],
       "link_id": null
     }
-  ]
+  ],
+  "links": [],
+  "decision": null,
+  "bundle_check": null
 }

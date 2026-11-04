@@ -103,7 +103,7 @@ def test_fixture_is_the_done_result_copy_plus_the_failed_document() -> None:
     # items-result.json = done-result.json 사본 + 서류 index 1 의 validation 'red' + items — findings·overall 등은 같다
     items_fixture, done_fixture = _load(ITEMS_FIXTURE), _load(DONE_FIXTURE)
     assert "items" not in done_fixture  # 옛 결과(검토사항 0개) 자료는 그대로
-    assert set(items_fixture) == set(done_fixture) | {"items"}
+    assert set(items_fixture) == set(done_fixture) | {"items", "links", "decision", "bundle_check"}
     for key in done_fixture:
         if key != "documents":
             assert items_fixture[key] == done_fixture[key], key

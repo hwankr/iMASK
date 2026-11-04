@@ -7,9 +7,9 @@
 #    imask_backend.masking 의 masked(value, field_info(field).kind) · exposure(value, kind) 와 정확히 같다.
 #    원문과 다른 masked 는 17개.
 #  - items-result.json: assert_view 전체(검토사항 items 포함 — items 값이 build_items 와 같은지는
-#    test_items_fixture_sync.py 가 지킨다).
+#    test_items_fixture_sync.py 가 지킨다). 지금 서버 모양대로 최종 흐름 키 셋(links []·decision null·bundle_check null)도 있다.
 #  - done-result.json: items 키가 없는 옛 결과(화면은 검토사항 0개로 읽는다). items 를 뺀 나머지는 assert_view 와
-#    같은 검사(빈 items 로)를 통과한다.
+#    같은 검사(빈 items 로 — 최종 흐름 키 links·decision·bundle_check 도 서버가 옛 결과에 내는 빈 값으로)를 통과한다.
 #  - label·mapping_status 는 비교하지 않는다 — 화면 테스트용 값이라 대응표(field_info)와 다른 곳이 있다(이번 범위 밖).
 #
 #  **실패 출력에 원문·가린 값을 넣지 않는다**(F2-fix1·fix2). 자료(fixture)의 바이트·글·파싱 결과를 만지는 코드는
@@ -70,6 +70,7 @@ DONE = "done-result.json"
 ITEMS = "items-result.json"
 FILES = (DONE, ITEMS)
 OLD_RESULT_KEYS = ["format", "job", "summary", "documents", "findings", "overall"]
+FINAL_FLOW_KEYS = ["links", "decision", "bundle_check"]  # 서버(build_view)가 늘 내는 최종 흐름 키 셋(final-flow T3 A)
 FINDINGS = 19
 UNMASKED_DIFFERENT = 17  # value ≠ masked 인 항목 수(화면 테스트의 '원문 값' 목록이 이것에서 나온다)
 BOM = b"\xef\xbb\xbf"
@@ -230,7 +231,7 @@ def test_overall_passes_the_contract(name: str) -> None:
 def test_items_fixture_passes_the_whole_view_contract() -> None:
     def body(p: list[str]) -> None:
         fixture = _load(ITEMS)
-        _need(p, "최상위 키 = 옛 결과 6개 + items", lambda: list(fixture) == [*OLD_RESULT_KEYS, "items"])
+        _need(p, "최상위 키 = 옛 결과 6개 + items + 최종 흐름 3개", lambda: list(fixture) == [*OLD_RESULT_KEYS, "items", *FINAL_FLOW_KEYS])
         _need(p, "items 가 비지 않은 목록", lambda: isinstance(fixture["items"], list) and len(fixture["items"]) > 0)
         _contract(p, "결과 전체", assert_view, fixture)
 
@@ -243,7 +244,9 @@ def test_done_fixture_is_an_old_result_without_items() -> None:
         _need(p, "items 키 없음", lambda: "items" not in fixture)
         _need(p, "최상위 키 = 옛 결과 6개", lambda: list(fixture) == OLD_RESULT_KEYS)
         # items 만 없을 뿐 나머지(서류 순서·id 겹침·서류 참조)는 새 결과와 같은 검사를 통과한다
-        _contract(p, "결과 전체(+ 빈 items)", assert_view, {**fixture, "items": []})
+        # (최종 흐름 키 셋은 옛 결과를 지금 계약으로 읽을 때 서버 build_view 가 내는 빈 값으로 — final-flow T3 A.4)
+        old_view = {**fixture, "items": [], "links": [], "decision": None, "bundle_check": None}
+        _contract(p, "결과 전체(+ 빈 items·links·decision·bundle_check)", assert_view, old_view)
 
     _verify(DONE, body)
 

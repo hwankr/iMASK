@@ -3,7 +3,7 @@
 은행 여신 담당자가 대출 서류 묶음(PDF·이미지)에서 찾은 민감정보 탐지 결과(위험등급과 판단 근거)를 검토하고, 보고서로 내보내는 웹 서비스 **iMASK**입니다. 1단계 화면 껍데기(데모)에 Upstage 워크플로우로 실제 분석하는 모드를 더했습니다.
 
 - 기본은 브라우저 안의 **데모 서비스**가 샘플 데이터로 응답합니다. 샘플 속 이름·주민등록번호·전화번호·계좌번호·주소·금액은 모두 가상입니다. 화면의 '데모 데이터' 표시도 이 때문에 있습니다.
-- `NEXT_PUBLIC_IMASK_SERVICE=api` 로 켜는 **실제 분석 모드**에서는 서류 묶음 하나를 올리면 **FastAPI 백엔드**(`api/`)가 **Upstage Studio 워크플로우**로 분석하고, 화면은 진행 상태를 보여 주고, 끝나면 데모와 같은 상세 검토 화면(올린 PDF·이미지 원문 위의 탐지 위치 상자·마스킹 미리보기·분석 요약)을 보여 줍니다([실제 분석 모드](#실제-분석-모드)). 검토 동작(확인·오탐·분류 수정·메모·검토 완료/다시 열기)은 서버에 저장됩니다. 검토사항·문서 간 연결·보고서·내보내기는 아직 데모에만 있습니다.
+- `NEXT_PUBLIC_IMASK_SERVICE=api` 로 켜는 **실제 분석 모드**에서는 서류 묶음 하나를 올리면 **FastAPI 백엔드**(`api/`)가 **Upstage Studio 워크플로우**로 분석하고, 화면은 진행 상태를 보여 주고, 끝나면 데모와 같은 상세 검토 화면(올린 PDF·이미지 원문 위의 탐지 위치 상자·마스킹 미리보기·분석 요약)을 보여 줍니다([실제 분석 모드](#실제-분석-모드)). 검토 동작(확인·오탐·분류 수정·메모·검토 완료/다시 열기)은 서버에 저장됩니다. 분석 목록은 서버에 있어 누구나 같은 목록을 보고, 분석을 지우거나 실패한 분석을 같은 원본으로 다시 분석할 수 있습니다. 검토사항·문서 간 연결·보고서·내보내기는 아직 데모에만 있습니다.
 - 모드는 **주소 기준**입니다. **`/demo` 아래는 언제나 데모**이고, 그 밖은 빌드 모드(`NEXT_PUBLIC_IMASK_SERVICE`)를 따릅니다. 그래서 실제 분석 모드로 빌드한 운영 사이트에서도 `/demo` 로 들어가면 데모(샘플 6건·상세 검토·보고서·내보내기)가 그대로 동작합니다. 실제 분석 화면 헤더의 **'데모 체험하기'** 링크가 `/demo` 로 가고, `/demo` 헤더의 **'실제 분석으로'** 링크로 돌아옵니다.
 - Next.js 16(App Router), TypeScript strict, CSS Modules와 디자인 토큰(CSS 변수)으로 만들었습니다. Tailwind, CSS-in-JS, UI 라이브러리는 쓰지 않습니다.
 
@@ -123,7 +123,7 @@ src/
 │  ├─ demo/                 데모 구현 — 동기 코어(core.ts), 비동기 겉면(service.ts),
 │  │                        미리 해 둔 검토 동작(seed.ts), /dev/states 상태 준비(scenarios.ts)
 │  ├─ api/                  실제 분석 구현 — 백엔드 클라이언트(client.ts), 응답 → 화면 타입(mapping.ts),
-│  │                        서명 업로드(upload.ts), 이 탭의 저장소·분석 id(browser-storage.ts·session-list.ts)
+│  │                        서명 업로드(upload.ts), 원본 파일 받기(file-download.ts)
 │  ├─ mode.ts               서비스 모드 — 빌드 모드 SERVICE_MODE(NEXT_PUBLIC_IMASK_SERVICE — demo | api)와
 │  │                        주소 기준 모드 modeForPath(/demo 아래는 언제나 demo)
 │  ├─ index.ts              createServiceFor(mode) · createServiceCache() — 모드별 데모·실제 분석 서비스를 만드는 한 곳
@@ -163,7 +163,7 @@ supabase/                   DB 변경 기록 — migrations/에 적용한 SQL을
 
 ## 실제 분석 모드
 
-기본은 데모 모드입니다. 환경변수 `NEXT_PUBLIC_IMASK_SERVICE` 가 정확히 `api` 이면 루트 주소(`/`·`/analyses/…`·`/dev/…`)의 화면이 데모 서비스 대신 **실제 분석 서비스**(`src/services/api/`)를 씁니다. **`/demo` 아래는 이 값과 상관없이 언제나 데모 서비스**입니다 — 샘플·검토 동작·보고서·내보내기가 그대로 됩니다. 서류 묶음 하나를 올리면 [FastAPI 백엔드](#fastapi-백엔드-api)가 Upstage Studio 워크플로우로 분석하고, 화면은 진행 상태와, 끝나면 데모와 같은 상세 검토 화면(원본 파일 원문 · 탐지 위치 상자 · 마스킹 미리보기 · 분석 요약)을 보여 줍니다. 그 화면의 검토 동작(탐지 항목 확인·오탐·분류 수정·메모, 검토 메모, 검토 완료/다시 열기)은 서버(`analysis_reviews`)에 저장됩니다. **합성 자료만 올립니다** — 실제 고객 서류나 본인 서류는 올리지 않습니다.
+기본은 데모 모드입니다. 환경변수 `NEXT_PUBLIC_IMASK_SERVICE` 가 정확히 `api` 이면 루트 주소(`/`·`/analyses/…`·`/dev/…`)의 화면이 데모 서비스 대신 **실제 분석 서비스**(`src/services/api/`)를 씁니다. **`/demo` 아래는 이 값과 상관없이 언제나 데모 서비스**입니다 — 샘플·검토 동작·보고서·내보내기가 그대로 됩니다. 서류 묶음 하나를 올리면 [FastAPI 백엔드](#fastapi-백엔드-api)가 Upstage Studio 워크플로우로 분석하고, 화면은 진행 상태와, 끝나면 데모와 같은 상세 검토 화면(원본 파일 원문 · 탐지 위치 상자 · 마스킹 미리보기 · 분석 요약)을 보여 줍니다. 그 화면의 검토 동작(탐지 항목 확인·오탐·분류 수정·메모, 검토 메모, 검토 완료/다시 열기)은 서버(`analysis_reviews`)에 저장됩니다. 목록은 서버의 **공유 목록**이라 누가 어느 브라우저에서 올렸든 같은 분석이 보이고, 목록·상세에서 분석을 **지우거나**(원본 파일·검토 기록 포함) 실패한 분석을 **다시 분석**(같은 원본으로 Upstage 작업을 새로 만듦)할 수 있습니다. **합성 자료만 올립니다** — 실제 고객 서류나 본인 서류는 올리지 않습니다.
 
 ### 켜는 법(로컬)
 
@@ -184,48 +184,57 @@ supabase/                   DB 변경 기록 — migrations/에 적용한 SQL을
 ### 흐름
 
 ```
+목록(/) — GET /api/py/analyses 한 번(서버 공유 목록, 최근 100건)
+  대기·분석 중 행이 있으면 3초마다 그 분석만 GET /api/py/analyses/{id}(한 번에 최대 3개, 돌아가며)
+  · 삭제        DELETE /api/py/analyses/{id}(확인 창) → 행이 빠지고 '분석을 지웠습니다.'
+  · 재시도      POST /api/py/analyses/{id}/retry(실패한 분석만) → '다시 분석을 시작했습니다.', 행은 분석 중으로
 새 분석(/analyses/new) — 분석명(선택) · 파일 1개
   ① POST /api/py/analyses             분석 건 + 서명 업로드 URL          '분석 건 만드는 중'
   ② Supabase Storage 서명 업로드       @supabase/supabase-js · 공개 키    '파일 올리는 중'
   ③ POST /api/py/analyses/{id}/start  Upstage 작업 시작                  '분석 시작 중'
 상세(/analyses/{id}) — 3초마다 GET /api/py/analyses/{id}(조회마다 백엔드가 Upstage 상태를 한 번 확인)
-  queued · running ──▶ done | failed(백엔드 오류 문구 그대로 + '새 분석')
+  queued · running ──▶ done | failed(백엔드 오류 문구 그대로 + '다시 분석' · '새 분석')
+  failed ──(다시 분석: POST …/retry)──▶ running ──▶ …(진행 화면으로 돌아가 다시 조회)
   done + 공통 계약 결과 ──▶ 상세 검토 화면
     · 원본 파일   GET /api/py/analyses/{id}/file → 서명 주소에서 한 번 받아 둔다(서류 · 쪽을 바꿔도 다시 받지 않음)
     · 단계별 JSON GET /api/py/analyses/{id}?include=stages — '분석 요약' 탭에서 접은 칸을 처음 펼칠 때 한 번
     · 검토 동작   POST /api/py/analyses/{id}/review-actions — 성공하면 다시 조회(조회 응답의 review 블록을 덧씌움)
   done + 옛 형식(서류 0개 등) ──▶ 요약 + 단계별 결과(JSON 나무)
+  어느 상태든 '삭제' → DELETE /api/py/analyses/{id} → 목록으로 + '분석을 지웠습니다.'
 ```
 
 - 파일은 **1개**(워크플로우가 묶음 하나를 서류별로 나눕니다), PDF·PNG·JPEG, 20MB 이하입니다. 어기면 고르는 순간 한국어 오류가 보입니다. 분석명은 60자까지, 비우면 파일 이름입니다.
 - `@supabase/supabase-js` 는 실제로 올릴 때만 불러옵니다(동적 `import()`) — 첫 화면 묶음과 데모 모드에는 들어가지 않습니다. 서명 토큰이 권한이라 공개 키(publishable key)로 충분합니다.
 - PDF 원문은 **`pdfjs-dist`**(버전 고정)로 쪽을 캔버스에만 그립니다(주석·텍스트 레이어·폼·스크립트 없음). 원본이 PDF 일 때만 상세 화면에서 동적 `import()` 하므로(`src/components/detail/liveFile.ts` → `pdfRuntime.ts`) 첫 화면·목록·새 분석 묶음과 데모 빌드에는 들어가지 않습니다. 데모 빌드에서 그 분기가 빠지도록 `next.config.ts` 의 `env` 가 `NEXT_PUBLIC_IMASK_SERVICE` 를 값이 없어도 빈 글자로 넣습니다. 워커는 문서마다 `new Worker(new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url), { type: 'module' })` 로 만들어 `PDFWorker` 에 넘깁니다 — `next dev`(Turbopack)와 `next build`/`next start` 모두 번들러가 워커를 따로 묶어 같은 출처에서 내보내고, 화면을 떠나면 문서와 워커를 정리합니다. PNG·JPEG 는 object URL 의 `<img>` 로 그립니다.
-- 시작이 409(이미 시작)이거나 `failed` 행을 돌려줘도 상세로 갑니다(상세가 상태·오류를 보여 줍니다). 업로드에 실패하면 새 분석 화면 위에 `파일을 올리지 못했습니다. …` 가 보이고, 그 분석 건은 `queued` 로 남습니다(목록에는 보이지 않음).
-- 업로드까지 끝낸 뒤 **시작이 5xx·네트워크 오류·시간 초과로 끝나면** 시작이 실제로는 됐을 수 있습니다. 새 분석 화면은 오류와 함께 '분석 건은 만들어졌지만 시작됐는지 확인하지 못했습니다' 와 **'분석 건 확인하기'** 링크(상세 → 실제 상태: 분석 중·실패·대기)를 보여 주고, 그 분석을 이 탭 목록에도 넣습니다. 성공했다고 표시하지 않습니다.
+- 시작이 409(이미 시작)이거나 `failed` 행을 돌려줘도 상세로 갑니다(상세가 상태·오류를 보여 줍니다). 업로드에 실패하면 새 분석 화면 위에 `파일을 올리지 못했습니다. …` 가 보이고, 그 분석 건은 `queued` 로 남습니다(목록에 대기로 보이고, 지울 수 있습니다).
+- 업로드까지 끝낸 뒤 **시작이 5xx·네트워크 오류·시간 초과로 끝나면** 시작이 실제로는 됐을 수 있습니다. 새 분석 화면은 오류와 함께 '분석 건은 만들어졌지만 시작됐는지 확인하지 못했습니다' 와 **'분석 건 확인하기'** 링크(상세 → 실제 상태: 분석 중·실패·대기)를 보여 줍니다. 성공했다고 표시하지 않습니다.
 - 요청 하나의 시간 제한은 60초이고 응답 본문을 다 받을 때까지 걸립니다.
-- 상세 화면은 `queued`·`running` 인 동안만 조회합니다. 앞 요청이 끝난 뒤 다음을 잡아 겹치지 않고, 탭이 숨겨지면 쉬었다가 다시 보이면 바로 한 번 조회합니다. 끝나거나(`done`·`failed`) 화면을 떠나면 멈춥니다. **백엔드는 조회가 올 때만 상태를 나아가게 하므로 상세 화면이 열려 있어야 끝납니다**(닫았다가 다시 열면 이어서 진행합니다).
+- 상세 화면은 `queued`·`running` 인 동안만 조회합니다. 앞 요청이 끝난 뒤 다음을 잡아 겹치지 않고, 탭이 숨겨지면 쉬었다가 다시 보이면 바로 한 번 조회합니다. 끝나거나(`done`·`failed`) 화면을 떠나면 멈춥니다. 목록 화면도 대기·분석 중 행을 같은 규칙으로 조회하고(실제 분석 모드만), 끝난 것을 보면 목록·헤더 숫자를 다시 불러옵니다. **백엔드는 조회가 올 때만 상태를 나아가게 하므로 상세나 목록 화면이 열려 있어야 끝납니다**(닫았다가 다시 열면 이어서 진행합니다).
+- 진행 화면의 경과와 요약의 '걸린 시간'은 마지막으로 시작한 시각(`started_at`, 없으면 `created_at`)부터 잽니다 — 다시 분석하면 그때부터 다시 셉니다. 요청 시각·분석 번호·목록 순서는 `created_at` 그대로입니다.
 
 ### 접근 제한 없음
 
-접근 코드(예전 `X-Demo-Code` · `DEMO_ACCESS_CODE`)는 2026-11-03 없앴습니다 — 팀만 아는 주소이고 Upstage 키가 대회용 무제한이라서입니다. 그래서 **주소를 아는 사람은 누구나 분석을 올리고 돌릴 수 있습니다**(Upstage 크레딧 · Supabase 저장 공간이 쓰입니다). 다른 사람의 분석은 목록 경로가 없고 분석 id(UUID)를 알아야 볼 수 있습니다.
+접근 코드(예전 `X-Demo-Code` · `DEMO_ACCESS_CODE`)는 2026-11-03 없앴습니다 — 팀만 아는 주소이고 Upstage 키가 대회용 무제한이라서입니다. 로그인도 없습니다. 그래서 **주소를 아는 사람은 누구나 모든 분석을 보고·검토하고·지우고·다시 분석할 수 있습니다**(2026-11-04 정함 — 대회용으로 받아들인 위험. 올리기·다시 분석에 Upstage 크레딧 · Supabase 저장 공간이 쓰입니다). 처리자 이름은 모두 `CONFIG.user.name` 으로 남습니다.
 
 ### 화면별 동작
 
 | 주소 | 실제 분석 모드 |
 |---|---|
-| `/` | 기존 목록 화면 그대로입니다. **이 탭에서 만든 분석만** 보입니다(백엔드에 목록 경로가 없습니다 — 남의 분석이 보이지 않게). id 목록은 sessionStorage `imask:api-analyses`(최신 50개)에 있습니다. 위험등급은 묶음 전체 위험도 판정에서 옵니다 — 공통 계약의 `result.overall.level`, 없으면 `result.summary.risk_level`(상·중·하 → 높음·보통·낮음, 검토 필요·없음 → 미평가). 탐지 항목별 위험등급은 워크플로우가 판정한 항목(`risk_source: "workflow"`)만 받은 값이고 나머지는 미평가입니다. 검토 상태는 서버의 검토 기록(조회 응답의 `review.status`)입니다 — 상세 검토 화면으로 보이는 완료 분석은 '검토 필요', 검토를 완료하면 '검토 완료', 그 밖(대기·분석 중·실패·옛 형식, 검토 기록을 못 읽음)은 미검토입니다. 헤더 '검토 필요' 숫자도 이 탭 목록에서 셉니다. |
+| `/` | 기존 목록 화면에 **서버 공유 목록**(`GET /api/py/analyses` 하나 — 최근 100건)을 그립니다. 다른 사람·다른 브라우저가 올린 분석도 보이고, 브라우저를 닫았다 열어도 그대로입니다. 위험등급은 묶음 전체 위험도(목록 항목의 `risk_level` = `result.summary.risk_level` — 상·중·하 → 높음·보통·낮음, 그 밖 미평가), 검토 상태는 목록 항목의 `review`(완료이고 서류가 1개 이상이면 검토 기록에 따라 '검토 필요'·'검토 완료', 그 밖 미검토)입니다. 헤더 '검토 필요' 숫자도 이 목록에서 셉니다. 대기·분석 중 행은 목록만 보고 있어도 완료까지 바뀝니다(위 흐름). 데스크톱 표의 행 끝 **'삭제'**(확인 창 `이 분석을 지울까요?` — 휴대폰 카드에는 없고 상세에서 지웁니다). 실패한 행의 **'재시도'**와 오류 확인 창의 **'다시 시도'**는 진짜 다시 분석입니다 — 시작하면 `다시 분석을 시작했습니다.`, 원본이 없는 등으로 시작하지 못하면 `다시 분석을 시작하지 못했습니다 · <이유>`, 다른 사람이 이미 지웠으면 `이미 지워진 분석입니다.`. 요청하는 동안 버튼이 잠겨 두 번 눌러도 요청은 한 번입니다. |
 | `/analyses/new` | 실제 분석 새 화면(`src/components/live/LiveUploadScreen.tsx`) — 걸리는 시간 안내, 분석명, 파일 1개, 진행 단계 |
-| `/analyses/[id]` | 실제 분석 상세(`src/components/live/LiveDetailScreen.tsx`) — 대기·분석 중: 머리(분석명·상태·분석 번호 `DG-YYYYMMDD-XXXX`·요청 시각·파일·경과 시간), 진행 중 안내와 Upstage 상태. 실패: 실패 문구와 '새 분석'. **완료 + 공통 계약 결과**(`raw.detailReady`): 데모와 같은 상세 검토 화면(`DetailView` — 3단 배치·휴대폰 탭)을 새로 고침 없이 바로 그립니다 — 문서 목록(한국어 서류 이름, `1페이지 · 파일 3쪽`), 원문 자리에 올린 파일의 그 서류 쪽(PDF 는 캔버스, PNG·JPEG 는 이미지)과 탐지 위치 상자(위험등급 색 · 누르면 그 항목 · 고르면 강조와 이름표 · 마스킹 미리보기면 검은 상자), 위치 없는 항목은 '위치 확인 필요', 기타 서류는 '기타 서류 안내', 결과 패널은 '탐지 항목'과 '분석 요약'(위험도 판정·다음 단계 문구를 글자 그대로, 결과 요약 줄, 접은 원본 단계별 JSON). 원본 파일을 받지 못하면 이유와 '다시 시도'(결과 패널은 그대로). 검토 동작(탐지 내용 확인·확인 취소·오탐 표시·오탐 취소·분류 수정·항목 메모, 검토 메모, 검토 완료·검토 다시 열기)은 데모와 같은 버튼·모달·토스트로 하고 **서버에 저장됩니다** — 새로 고침하거나 다른 브라우저에서 같은 주소를 열어도 검토 상태·메모가 그대로입니다. 검토를 완료하면 잠기고(다시 열기 전까지 백엔드도 409 로 거절), 검토 완료 띠·토스트에 '보고서 보기'는 없습니다. 저장에 실패하면 '저장하지 못했습니다. 잠시 후 다시 시도해 주세요.' 가 보입니다. 검토 기록을 읽지 못하면(`review: null`) 화면은 그대로 보이고 검토 버튼만 막힙니다. **완료지만 옛 형식**(서류 0개 등): 완료 요약(분류한 서류 수와 종류·정보를 추출한 서류 수·위험도·마지막 단계·기타 서류·걸린 시간·Upstage 작업 번호)과 단계별 결과(단계마다 접고 펴는 JSON — 펼칠 때만 그립니다). 없는 id 면 안내와 '새 분석'(목록으로 보내지 않습니다). |
+| `/analyses/[id]` | 실제 분석 상세(`src/components/live/LiveDetailScreen.tsx`) — 대기·분석 중: 머리(분석명·상태·분석 번호 `DG-YYYYMMDD-XXXX`·요청 시각·파일·경과 시간 — 마지막으로 시작한 때부터), 진행 중 안내와 Upstage 상태. 실패: 실패 문구와 '다시 분석'·'새 분석'(다시 분석을 시작하면 진행 화면으로 돌아가 다시 조회합니다). **완료 + 공통 계약 결과**(`raw.detailReady`): 데모와 같은 상세 검토 화면(`DetailView` — 3단 배치·휴대폰 탭)을 새로 고침 없이 바로 그립니다 — 문서 목록(한국어 서류 이름, `1페이지 · 파일 3쪽`), 원문 자리에 올린 파일의 그 서류 쪽(PDF 는 캔버스, PNG·JPEG 는 이미지)과 탐지 위치 상자(위험등급 색 · 누르면 그 항목 · 고르면 강조와 이름표 · 마스킹 미리보기면 검은 상자), 위치 없는 항목은 '위치 확인 필요', 기타 서류는 '기타 서류 안내', 결과 패널은 '탐지 항목'과 '분석 요약'(위험도 판정·다음 단계 문구를 글자 그대로, 결과 요약 줄, 접은 원본 단계별 JSON). 원본 파일을 받지 못하면 이유와 '다시 시도'(결과 패널은 그대로). 검토 동작(탐지 내용 확인·확인 취소·오탐 표시·오탐 취소·분류 수정·항목 메모, 검토 메모, 검토 완료·검토 다시 열기)은 데모와 같은 버튼·모달·토스트로 하고 **서버에 저장됩니다** — 새로 고침하거나 다른 브라우저에서 같은 주소를 열어도 검토 상태·메모가 그대로입니다. 검토를 완료하면 잠기고(다시 열기 전까지 백엔드도 409 로 거절), 검토 완료 띠·토스트에 '보고서 보기'는 없습니다. 저장에 실패하면 '저장하지 못했습니다. 잠시 후 다시 시도해 주세요.' 가 보입니다. 검토 기록을 읽지 못하면(`review: null`) 화면은 그대로 보이고 검토 버튼만 막힙니다. **완료지만 옛 형식**(서류 0개 등): 완료 요약(분류한 서류 수와 종류·정보를 추출한 서류 수·위험도·마지막 단계·기타 서류·걸린 시간·Upstage 작업 번호)과 단계별 결과(단계마다 접고 펴는 JSON — 펼칠 때만 그립니다). 없는 id 면 안내와 '새 분석'(목록으로 보내지 않습니다). 어느 상태든 **'삭제'**(완료 상세는 머리글 — 휴대폰은 휴지통 아이콘, 진행·실패 화면은 맨 위 줄)를 누르면 확인 창 뒤 지우고 목록으로 가며 `분석을 지웠습니다.` 가 뜹니다. 검토 저장이 다른 요청과 겹쳐(409) 실패하면 최신 상태를 다시 불러오고, 다른 사람이 지운 분석이면(404) `이미 지워진 분석입니다.` 뒤 '찾을 수 없음' 화면이 됩니다. |
 | `/analyses/[id]/report` | '실제 분석 보고서는 아직 없습니다' 안내와 상세로 가는 링크 |
-| `/demo/**` | **데모 그대로** — 헤더 배지 '데모 데이터'와 배지 앞 **'실제 분석으로'** 링크(→ `/`), '검토 필요' 숫자는 데모 목록 기준, 페이지 설명(meta description)은 '(데모 데이터)'가 붙은 문구(`src/app/demo/layout.tsx`), 샘플 6건·상세 검토 동작·보고서·내보내기·`?sample=1`·분석 완료 토스트가 모두 됩니다. 데모 서비스(브라우저 메모리)는 처음 `/demo` 를 열 때 만들어 탭 안에서 이어지고(`/` 로 갔다가 클라이언트 이동으로 돌아와도 검토가 남음), `/demo` 만 다니면 실제 분석 서비스는 만들지 않아 `/api/py` 요청이 없습니다. 새로 고침하면 샘플 상태로 돌아갑니다. |
+| `/demo/**` | **데모 그대로** — 헤더 배지 '데모 데이터'와 배지 앞 **'실제 분석으로'** 링크(→ `/`), '검토 필요' 숫자는 데모 목록 기준, 페이지 설명(meta description)은 '(데모 데이터)'가 붙은 문구(`src/app/demo/layout.tsx`), 샘플 6건·상세 검토 동작·보고서·내보내기·`?sample=1`·분석 완료 토스트가 모두 됩니다. '삭제'도 같은 화면에 있고 브라우저 메모리에서만 지웁니다(새로 고침하거나, 목록이 비었을 때의 '샘플 분석 건 둘러보기'로 되살아남). 데모의 다시 분석 결과 문구(`다시 분석했지만 실패했습니다 · <이유>`)는 그대로입니다. 데모 서비스(브라우저 메모리)는 처음 `/demo` 를 열 때 만들어 탭 안에서 이어지고(`/` 로 갔다가 클라이언트 이동으로 돌아와도 검토가 남음), `/demo` 만 다니면 실제 분석 서비스는 만들지 않아 `/api/py` 요청이 없습니다. 새로 고침하면 샘플 상태로 돌아갑니다. |
 
 ### 실제 분석 모드에서 안 되는 것
 
-- 검토사항·문서 간 연결(데이터가 아직 없어 탭을 숨김)·보고서·내보내기·다시 분석. 서비스의 그 메서드(`resolveItem`·`reopenItem`·`decideLink`·`buildExport`·`logExport`)는 `실제 분석에서는 아직 지원하지 않는 기능입니다.` 로 거절하고, 다시 분석(`retry`)은 같은 문구의 실패 결과를 돌려줍니다(목록의 '재시도'를 누르면 그 문구가 토스트로 보입니다).
+- 검토사항·문서 간 연결(데이터가 아직 없어 탭을 숨김)·보고서·내보내기. 서비스의 그 메서드(`resolveItem`·`reopenItem`·`decideLink`·`buildExport`·`logExport`)는 `실제 분석에서는 아직 지원하지 않는 기능입니다.` 로 거절합니다.
+- 다시 분석은 **실패한 분석만** 됩니다(완료한 분석은 안 됨). 문서 하나만 다시 분석하기(`retry` 의 `docId`)는 무시합니다(분석 1건 = 묶음 파일 1개).
 - 검토 이력(동작마다 한 줄)은 서버에 저장되고 조회 응답의 `review.history` 에 있지만 화면에는 아직 보이지 않습니다(보고서 작업에서 씁니다).
 - 루트 주소에서는 샘플 문서(`sampleFiles()` 는 빈 목록, `?sample=1` 은 무시)와 '샘플 분석 건 둘러보기'가 없습니다 — 이것들과 위의 검토사항·연결·보고서·내보내기는 **`/demo` 아래 데모**에서 됩니다.
 - `/dev/**`(`/dev/states` 미리보기 등)는 `/demo` 밖이라 실제 분석 서비스를 쓰므로 여전히 동작하지 않습니다(`DemoControls` 가 없습니다).
-- 마스킹한 파일 만들기(마스킹 미리보기는 화면에서만 가립니다), 결과 표·보고서, 다른 탭이나 다른 사람이 만든 분석 목록, 분석 지우기.
+- 마스킹한 파일 만들기(마스킹 미리보기는 화면에서만 가립니다), 결과 표·보고서.
+- 실시간 반영: 다른 사람이 바꾼 것(검토·삭제·다시 분석)은 목록·상세를 다시 불러오면 보입니다(진행 중 분석의 상태는 위 조회로 바뀝니다).
 - 원본 PDF 에 들어 있지 않은 글꼴(표준 14 글꼴 · CJK 미리 정의 CMap)·JPEG 2000 이미지는 pdf.js 의 글꼴 · wasm 자료를 함께 내보내지 않아 대체 글꼴로 보이거나 빠질 수 있습니다(합성 묶음은 글꼴을 품고 있어 해당 없음).
 
 ### Vercel 에 넣을 환경변수
@@ -260,7 +269,8 @@ supabase/                   DB 변경 기록 — migrations/에 적용한 SQL을
 | `tests/` | pytest. 네트워크를 쓰지 않습니다(저장소는 메모리 가짜, Upstage 는 `httpx.MockTransport`) |
 | `scripts/upstage_smoke.py` | Upstage 워크플로우를 직접 한 번 돌려 응답 모양을 확인합니다 |
 | `imask_backend/reviews.py` | 검토 동작 저장(본문 검사·상태 전이·이력 줄·`analysis_reviews` 조건부 갱신)과 조회 응답의 `review` 블록(FastAPI 와 무관) |
-| `scripts/api_e2e.py` | 로컬·배포 백엔드를 브라우저처럼 끝까지(만들기 → 올리기 → 시작 → 조회 → 원본 파일 → 검토 동작) 돌려 봅니다 |
+| `imask_backend/manage.py` | 공유 목록·삭제·다시 분석 업무 로직(FastAPI 와 무관) |
+| `scripts/api_e2e.py` | 로컬·배포 백엔드를 브라우저처럼 끝까지(만들기 → 올리기 → 시작 → 조회 → 원본 파일 → 검토 동작 → 목록 → 삭제, `--retry-flow` 는 다시 분석) 돌려 봅니다 |
 
 ### 환경변수
 
@@ -303,9 +313,17 @@ npm run dev
 .venv\Scripts\python.exe scripts\api_e2e.py --base-url https://<배포 주소>              # 배포 사이트 확인
 .venv\Scripts\python.exe scripts\api_e2e.py --analysis-id <분석 id>                     # 이미 끝난 분석 재확인(Upstage 작업 없음 · 검토는 읽기만)
 .venv\Scripts\python.exe scripts\api_e2e.py --no-review                                # 검토 동작 확인 없이
+.venv\Scripts\python.exe scripts\api_e2e.py --retry-flow                               # 다시 분석 확인(Upstage 1번)
+.venv\Scripts\python.exe scripts\api_e2e.py --fail-with-original                       # 화면에서 다시 분석해 볼 실패 분석 만들기(Upstage 0번, 남김)
+.venv\Scripts\python.exe scripts\api_e2e.py --keep                                     # 끝나도 만든 분석을 지우지 않음
 ```
 
-배포 사이트에 Vercel 보호가 켜져 있으면 `VERCEL_PROTECTION_BYPASS` 환경변수를 `x-vercel-protection-bypass` 헤더로 보냅니다. 종료 코드는 기대대로면 0, 아니면 1 입니다. done 이면 다음이 모두 맞아야 합니다: 요약(서류 6·추출 5·위험도 상), 화면용 결과(`findings` 29·좌표 있는 항목 28·`documents` 6(extracted 5·other 1, other 에 `other_guide`·extracted 에 `validation`)·`overall` 상/권장_조치·계약 키와 허용 값·id 중복 없음·`document_index` 가 `documents` 에 있음·`boxes` 0~1·`risk` 가 `risk_source` 와 맞음), 기본 응답에 `stages`·`response` 없음, 기본 응답이 `?include=stages` 응답보다 작음, `/file` 의 주소로 받은 내용이 올린 파일과 같음(sha256). 출력에는 개수·분포·바이트 수만 나오고 원문 값·가림 미리보기·서명 URL 은 나오지 않습니다. 정상 경로는 이어서 **그 실행이 만든 분석에만** 검토 동작을 보내 확인합니다(처리자 `api_e2e`, 글은 스크립트가 만든 합성 문구): 처음 조회(검토 필요·version 0·항목 값 없음·이력 S1·S2) → 확인 → 확인 취소 → 2건 한꺼번에 확인 → 같은 항목 다시 확인(409) → 오탐 표시 → 오탐 취소 → 분류 수정 → 같은 값 분류 수정(`changed: false`·이력 없음) → 오탐 표시 → 오탐 취소(→ 분류 수정) → 항목 메모 저장·삭제 → 검토 메모 → 검토 완료(남은 미확인 수가 이력 문구에) → 잠김 409·이미 완료 409 → 다시 열기 → 400 두 가지(모르는 동작, 501자 글). 단계마다 응답(상태 코드·`changed`·review 값·새 이력 줄)과 다시 조회한 값이 같은지 보고, 마지막에 이력 id `H1…Hn` 연속·시간 순서·이력 줄 수 = 쓴 동작 수 = version·분석 `created_at`·`updated_at` 불변을 봅니다. `--no-review` 로 끕니다. `--analysis-id` 는 만들기·올리기·시작 없이 그 분석을 조회해 위 done 확인과 원본 파일 확인, 검토 기록 모양(review 키·상태·항목 값·이력 S1·S2·version) 확인만 합니다 — **검토 동작은 보내지 않습니다**(비교할 원본은 `--file`, 기본 합성 묶음). 어떻게 끝나든(시간 초과·Ctrl+C·연결 오류 포함) 마지막에 이번 실행이 Upstage 에 남겼을 수 있는 파일을 `UPSTAGE_API_KEY` 로 지우고(404 = 이미 지움), 정리를 못 하면 종료 코드 1 입니다.
+배포 사이트에 Vercel 보호가 켜져 있으면 `VERCEL_PROTECTION_BYPASS` 환경변수를 `x-vercel-protection-bypass` 헤더로 보냅니다. 출력에는 개수·분포·바이트 수만 나오고 원문 값·가림 미리보기·서명 URL 은 나오지 않습니다.
+
+- **done 확인**: 요약(서류 6·추출 5·위험도 상), 화면용 결과(`findings` 29·좌표 있는 항목 28·`documents` 6(extracted 5·other 1, other 에 `other_guide`·extracted 에 `validation`)·`overall` 상/권장_조치·계약 키와 허용 값·id 중복 없음·`document_index` 가 `documents` 에 있음·`boxes` 0~1·`risk` 가 `risk_source` 와 맞음), 기본 응답에 `stages`·`response` 없음, 기본 응답이 `?include=stages` 응답보다 작음, `/file` 의 주소로 받은 내용이 올린 파일과 같음(sha256). `--analysis-id` 는 이 확인과 검토 기록 모양(review 키·상태·항목 값·이력 S1·S2·version)만 봅니다(비교할 원본은 `--file`).
+- **검토 동작 확인**(정상 경로, **그 실행이 만든 분석에만** — 처리자 `api_e2e`, 글은 합성 문구): 처음 조회(검토 필요·version 0·항목 값 없음·이력 S1·S2) → 확인 → 확인 취소 → 2건 한꺼번에 확인 → 같은 항목 다시 확인(409) → 오탐 표시 → 오탐 취소 → 분류 수정 → 같은 값 분류 수정(`changed: false`) → 오탐 표시 → 오탐 취소(→ 분류 수정) → 항목 메모 저장·삭제 → 검토 메모 → 검토 완료 → 잠김 409·이미 완료 409 → 다시 열기 → 400 두 가지. 단계마다 응답과 다시 조회한 값이 같은지, 마지막에 이력 id `H1…Hn` 연속·시간 순서·줄 수 = version·분석 `created_at`·`updated_at` 불변을 봅니다.
+- **목록·삭제·다시 분석 확인**: done 뒤 목록(모든 항목 키 10개·`result` 없음·만든 순, 이 분석의 항목 = 조회 응답에서 계약대로 만든 값, 응답 바이트 수)과 삭제(`DELETE` 204 → 조회·`/file` 404·목록에 없음 — 이렇게 없음을 확인한 뒤에만 다시 분석 404·두 번째 `DELETE` 404)를 봅니다. `--retry-flow` 는 원본 없이 시작·다시 분석(같은 이유로 실패·작업 없음) → 같은 서명 업로드 주소로 올림 → 다시 분석 → 분석 중 409 → done 을 거치며 `started_at`(다시 분석마다 바뀜)·`created_at`(그대로)·이력 `[S1, 다시 분석 줄(사유 = 앞 실패 이유), S2, …]` 을 봅니다.
+- **판정과 정리**: 확인 묶음마다 통과/실패를 한 줄씩 내고 새 확인(목록·다시 분석·삭제)은 따로 판정합니다(고정 기대값 서류 6·탐지 29 의 어긋남과 섞이지 않게). 종료 코드는 모두 맞으면 0, 아니면 1 입니다. 어떻게 끝나든(시간 초과·Ctrl+C·연결 오류 포함) 마지막에 이번 실행이 Upstage 에 남겼을 수 있는 파일을 `UPSTAGE_API_KEY` 로 지우고(시작·다시 분석의 응답을 못 받았으면 분석을 다시 읽어 file id 를 모음, 404 = 이미 지움), 만든 분석을 `DELETE` 로 지운 뒤 없음을 확인합니다(404 = 이미 없음). 정리를 못 하면 종료 코드 1 입니다.
 
 ### 경로
 
@@ -314,14 +332,17 @@ npm run dev
 | 요청 | 하는 일 | 응답 |
 |---|---|---|
 | `GET /api/py/health` | 설정이 있는지만 | 200 `{"ok": true, "configured": {"supabase", "upstage", "upstage_project"}}` |
+| `GET /api/py/analyses` | 공유 목록 — 만든 시각 최신순(`created_at desc, id desc`). 쿼리 `limit` 은 1~200(없으면 100, 정확히 한 번·숫자 1~3자리만). DB 질의 한 번이고 `result` 전체는 읽지 않습니다(JSON 경로 두 값만). Upstage 를 부르지 않고 아무것도 쓰지 않음 | 200 `{"analyses": [{"id", "name", "status", "error", "created_at", "updated_at", "started_at", "documents": [{"filename", "size_bytes", "mime_type"}], "risk_level", "review"}]}` — `risk_level` 은 `summary.risk_level`(문자열 아니면 null), `review` 는 `done`·`needed`(완료이고 `summary.document_count` ≥ 1)·`none` · 400 `요청 형식이 올바르지 않습니다.`(limit) · 502 |
 | `POST /api/py/analyses` | 본문 `{"name"?, "filename", "size", "mime_type"}`. `analyses`(queued)·`documents` 행과 서명 업로드 URL 을 만든다 | 201 `{"analysis": 분석 건, "upload": {"bucket", "path", "token", "signed_url"}}` · 400 검사 실패 · 502 준비 실패(만든 행은 지움) |
 | `POST /api/py/analyses/{id}/start` | 올린 파일을 Upstage 에 넘겨 작업을 만든다(완료를 기다리지 않음) | 200 분석 건(`running`, 선점 뒤 실패면 `failed` + `error`) · 404 · 409 이미 시작함 · 502 실패 기록도 못 함 |
 | `GET /api/py/analyses/{id}` | 분석 건 조회. `running` 이면 Upstage 상태를 **한 번** 확인. 쿼리 `include` 에 `stages` 가 있으면(여러 번·쉼표로 줄 수 있음, 모르는 값은 무시) `result.stages` 도 넣는다. 검토할 수 있는 분석이면 검토 행을 읽어 `review` 블록을 넣는다 | 200 분석 건 · 404 |
+| `DELETE /api/py/analyses/{id}` | 분석을 원본 파일·문서 행·검토 기록과 함께 지운다(상태와 상관없이, 요청 본문은 무시). Storage 원본 → `analyses` 행(문서·검토 행은 cascade) → Upstage 파일(최선) 순서. `analyses` 행을 갱신하지 않음 | 204(본문 없음) · 404 `분석 건을 찾을 수 없습니다.`(uuid 아님·없음·이미 지움) · 502 `원본 파일을 지우지 못했습니다. …`(행은 그대로 — 다시 누르면 이어서 지움) · 502·409 `분석을 지우지 못했습니다. 잠시 후 다시 시도해 주세요.` |
 | `GET /api/py/analyses/{id}/file` | 원본 파일의 Storage 서명 다운로드 URL(10분 유효)을 만든다. 상태와 상관없이, Upstage 는 부르지 않음 | 200 `{"url", "mime_type", "filename"}`(`filename` 은 원래 이름, 헤더 `Cache-Control: no-store`) · 404 `분석 건을 찾을 수 없습니다.`(uuid 아님·행 없음) · 404 `원본 파일을 찾을 수 없습니다.`(문서 행 없음·경로 빔·객체 없음) · 502 `원본 파일 주소를 만들지 못했습니다. 잠시 후 다시 시도해 주세요.` |
+| `POST /api/py/analyses/{id}/retry` | 실패한 분석을 같은 원본으로 진짜 다시 분석한다. 본문 `{"actor"}`(검토 동작과 같은 검사). 조건부로 `failed → queued`(오류·결과·작업 id 를 비우고 `started_at` = 지금) 뒤 이력에 한 줄(`retry` · `같은 파일로 다시 분석 요청` · 사유 = 앞 실패 이유, 실패해도 계속) → 시작과 같은 경로(파일 올리기 1 + 작업 만들기 1 — 크레딧) | 200 분석 건(조회와 같은 모양 — `running`, 원본이 없으면 `failed` + 그 이유) · 400 · 404 · 409 `이미 분석하고 있습니다.`(대기·분석 중 — 동시에 두 번 눌러도 작업은 하나) / `실패한 분석만 다시 분석할 수 있습니다.` / `다른 요청과 겹쳐 다시 분석하지 못했습니다. 잠시 후 다시 시도해 주세요.` · 413 · 500 설정 빠짐 · 502 |
 | `POST /api/py/analyses/{id}/review-actions` | 검토 동작 하나를 `analysis_reviews` 의 그 분석 행에 저장한다(아래 [검토 동작](#검토-동작-review-actions)). 본문 `{"type", "actor", …종류별 필드}` — `type` 9종: `set_status`·`confirm_many`·`mark_false_positive`·`restore`·`reclassify`·`save_finding_memo`·`save_memo`·`complete_review`·`reopen_review`. `analyses` 행은 쓰지 않고 Upstage 는 부르지 않음 | 200 `{"analysis": 분석 건(조회와 같은 모양, review 는 방금 쓴 값, stages 없음), "changed": bool}` · 400 본문·필드·처리자 이름·글 검사 · 404 분석 없음·탐지 항목 없음 · 409 검토할 수 없는 분석·잠김·상태 불일치·이력 1000줄·경쟁 패배 · 413 본문 65,536 바이트 초과 · 502 저장소 오류 |
 
 - 검사(400): 형식은 `application/pdf`·`image/png`·`image/jpeg` 이고 확장자가 형식과 맞아야 합니다(pdf, png, jpg·jpeg). 크기는 1바이트~20MB(20,971,520) 정수, 파일 이름은 경로를 뗀 뒤 1~200자, 분석명은 앞뒤 공백을 지운 뒤 60자 이하입니다(비면 파일 이름). 본문이 JSON 이 아니거나 필드 타입이 틀리면 `요청 형식이 올바르지 않습니다.` 입니다(FastAPI 기본 422 대신 400).
-- **분석 건**(`AnalysisOut`): `id`, `name`, `status`, `upstage_job_id`, `error`, `result`(아래 [API 응답의 `result`](#api-응답의-result) — 저장 형식에서 `response`·`stages` 를 빼고 화면용 값을 더한 것), `created_at`, `updated_at`(ISO 8601, 시간대 포함), `documents[]`(`id`, `filename`, `size_bytes`, `mime_type`, `upstage_file_id`, `created_at`), `upstage_status`·`poll_error`(GET 에서 이번 조회에 본 Upstage 상태와 확인 실패 문구. DB 에는 저장하지 않음), `review`(늘 있는 키 — 검토 블록 객체 또는 `null`, 아래 [검토 동작](#검토-동작-review-actions)). `agent_id`·`storage_path` 는 응답에 넣지 않습니다.
+- **분석 건**(`AnalysisOut`): `id`, `name`, `status`, `upstage_job_id`, `error`, `result`(아래 [API 응답의 `result`](#api-응답의-result) — 저장 형식에서 `response`·`stages` 를 빼고 화면용 값을 더한 것), `created_at`, `updated_at`, `started_at`(마지막으로 시작한 시각 — 아직 시작하지 않았으면 `null`. 모두 ISO 8601, 시간대 포함), `documents[]`(`id`, `filename`, `size_bytes`, `mime_type`, `upstage_file_id`, `created_at`), `upstage_status`·`poll_error`(GET 에서 이번 조회에 본 Upstage 상태와 확인 실패 문구. DB 에는 저장하지 않음), `review`(늘 있는 키 — 검토 블록 객체 또는 `null`, 아래 [검토 동작](#검토-동작-review-actions)). `agent_id`·`storage_path` 는 응답에 넣지 않습니다.
 - **Storage 경로**는 `analyses/{분석 id}/{안전한 이름}` 입니다. Supabase Storage 키는 일부 ASCII 만 받으므로(한글 이름은 'Invalid key') 원래 이름의 줄기에서 `[A-Za-z0-9._-]` 밖 글자 묶음을 `_` 로 바꾸고 앞뒤 `._-` 를 지운 뒤 80자까지, 비면 `document` 로 합니다. 확장자는 소문자입니다. 예: `대출 서류.pdf` → `document.pdf`, `김 2024 묶음.PDF` → `2024.pdf`. 원래 이름은 `documents.filename` 에 남습니다.
 - 브라우저는 `@supabase/supabase-js` 의 `storage.from(bucket).uploadToSignedUrl(path, token, file)` 로 올립니다. 공개 키로 충분합니다(서명 토큰이 권한).
 - **원본 파일 주소**(`/file`)는 `documents` 행(분석 1건 = 묶음 파일 1개)의 `storage_path` 로 `storage3` 의 `create_signed_url(path, 600)` 을 부릅니다. `supabase==2.33.0`(storage3 2.33)은 `{"signedURL", "signedUrl"}` 에 Storage 기준 주소를 붙인 **절대 주소**를 돌려줍니다(다른 버전이 상대 경로 `/object/sign/…` 를 주면 `storage_url` 에 붙입니다). 없는 객체는 Storage 가 HTTP 400 + 본문 `statusCode "404"` 로 알려 404 로 답합니다. 서명 URL 은 로그에 남기지 않습니다.
@@ -346,13 +367,17 @@ npm run dev
 
 ```
 queued ──(start: 원자적 선점)──▶ running ──(GET 이 Upstage 완료를 봄)──▶ done
-   │                               ├──(Upstage 실패·취소·incomplete)──▶ failed
-   │                               ├──(job 404, job id 저장 뒤 2분 지남)─▶ failed
-   │                               └──(job id 없이 5분 지남)──────────▶ failed
-   └──(start 선점 뒤 실패: 파일 없음·형식 불일치·Upstage 시작 실패)──▶ failed
+   ▲  │                            ├──(Upstage 실패·취소·incomplete)──▶ failed
+   │  │                            ├──(job 404, job id 저장 뒤 2분 지남)─▶ failed
+   │  │                            └──(job id 없이 5분 지남)──────────▶ failed
+   │  └──(start 선점 뒤 실패: 파일 없음·형식 불일치·Upstage 시작 실패)──▶ failed
+   └──────(retry: failed 만, 조건부 되돌리기 → 곧바로 같은 start 경로)────────┘
+어느 상태든 DELETE 로 행이 사라진다(진행 중인 Upstage 작업은 끝까지 돌고 결과는 버림)
 ```
 
-- **선점**: `update analyses set status='running' where id=? and status='queued'`. 바뀐 행이 없으면 409 입니다. 같은 분석을 두 번 시작해 Upstage 작업이 둘 생기지 않습니다.
+- **선점**: `update analyses set status='running', started_at=<지금> where id=? and status='queued' and updated_at=<읽은 값>`. 바뀐 행이 없으면 409 입니다. 같은 분석을 두 번 시작해 Upstage 작업이 둘 생기지 않습니다.
+- **다시 분석의 되돌리기**: `update analyses set status='queued', error=null, result=null, upstage_job_id=null, started_at=<지금> where id=? and status='failed' and updated_at=<처음 읽은 값>`. 하나만 이기므로 두 사람이 동시에 눌러도 작업은 하나이고 다른 쪽은 409 입니다. `started_at` 은 이 두 곳(선점·되돌리기)에서만 씁니다.
+- **실행 구분**: 다시 분석으로 한 분석이 `failed → queued → running` 을 여러 번 돌 수 있어, `running` 행을 쓰는 조건부 갱신은 자기가 본 실행에만 맞게 합니다(결과 반영은 조회한 작업 id, 시작의 job id 저장·실패 기록·오래된 시작 만료는 읽은 `updated_at`, 문서의 `upstage_file_id` 는 비교 후 교환). 늦게 끝난 옛 실행이 새 실행을 덮어쓰지 않습니다.
 - **결과 반영**: `where status='running'` 조건부 갱신입니다. 두 조회가 같은 결과를 동시에 처리해도 한 번만 반영되고, 진 쪽은 다시 읽어 돌려줍니다. 진 쪽이 다시 읽기도 실패하면 조회는 조회 전 `running` 행과 `poll_error`(`분석 상태를 다시 읽지 못했습니다…`)를, 시작은 502(`분석 시작 결과를 확인하지 못했습니다…`)를 돌려줘 다시 확인하게 합니다(저장하지 못한 상태를 확정해 보여 주지 않음). 실제 분석 화면은 이 시작 502 를 받으면 오류와 함께 **'분석 건 확인하기'**(그 분석의 상세 — 실제 상태)를 보여 줍니다.
 - Upstage 조회가 실패하면(연결·401·403·429·5xx·결과 받기 실패) 상태를 바꾸지 않고 `poll_error` 만 채웁니다. 다음 조회에서 다시 확인합니다(키 같은 설정을 고치면 이어서 진행).
 - 단 **404**(작업 없음)는 job id 를 저장한 뒤(`updated_at` 기준) **2분이 지났으면** 없어진 작업으로 보고 `failed`(`Upstage 작업을 찾을 수 없습니다. 새 분석으로 다시 올려 주세요.`)로 바꾸고 파일을 정리합니다. 2분 전이면 만든 직후의 일시적 404 로 보고 다시 시도합니다. `include[]=all` 받기의 404 도 같습니다.
@@ -415,6 +440,11 @@ queued ──(start: 원자적 선점)──▶ running ──(GET 이 Upstage �
 - **실제 단계 이름이 Studio 노드 이름과 다릅니다**(`step_1_parse`, `Instruct - 위험도_판정` 등). 이름 문자열을 직접 비교하지 말고 `imask_backend.results.stage_key`·`stages_for` 를 씁니다.
 - `vercel.json` 에서 `"framework": "nextjs"` 로 고정합니다. 루트 `requirements.txt` 에 FastAPI 가 있으면 Vercel 이 Python 프레임워크 프리셋을 잡아 `api/` 파일 함수 대신 앱 전체를 Python 으로 돌리기 때문입니다([공식 문서](https://vercel.com/docs/functions/runtimes/python/api-directory)). Python 함수 묶음에서는 `excludeFiles` 로 `node_modules`·`src`·`tests` 등을 뺍니다.
 - 앞 단계가 Upstage 캐시를 쓰면 30초 안팎에 끝나지만, 처음 보는 파일은 1~3분 걸릴 수 있습니다.
+- **목록은 최근 100건까지**입니다(`?limit=` 최대 200 — 화면은 기본값을 씀). 그보다 오래된 분석은 목록에 보이지 않습니다(대회 규모).
+- **Upstage 작업 취소 API 가 없습니다.** 분석 중에 지우거나 밀려난 실행의 작업은 끝까지 돌고(크레딧 사용) 결과는 버립니다.
+- 삭제의 Upstage 파일 정리는 최선이고 httpx **단계별** 시간 제한(연결 5초·읽기·쓰기·풀 10초)의 클라이언트로 합니다 — 전체 마감은 아닙니다(원본·행은 그 전에 이미 지워져 늦어져도 결과는 같습니다). 실패는 로그만 남기고 204 입니다.
+- 지운 분석의 **서명 업로드 주소(2시간 유효)** 로 그 뒤에 파일을 올리면 버킷에 고아 객체가 생길 수 있습니다(받아들인 한계).
+- 목록의 검토 상태는 `summary.document_count ≥ 1` 로 '검토할 수 있음'을 대신합니다. 상세(화면용 유효 서류 1개 이상)와 어긋나는 결과(서류 수는 있는데 쪽 범위가 없는 옛 형식 등)는 목록 '검토 필요'·상세 미검토로 보일 수 있습니다 — 그런 분석은 지우면 됩니다.
 
 ---
 
@@ -429,13 +459,14 @@ DB 구조를 바꿀 때는 **항상 `supabase/migrations/` 에 SQL 파일을 남
 | `20261102003443_init_analyses_documents.sql` | `analyses`(분석 건)·`documents`(문서) 테이블, `documents` 비공개 버킷(파일당 20MB, PDF·PNG·JPG) |
 | `20261102024252_grant_service_role_tables.sql` | `service_role`(서버 비밀 키)에 두 테이블의 읽기·쓰기 권한(select·insert·update·delete)과 `public` 스키마 사용 권한을 명시. `imask` 에는 이미 같은 권한이 있어 적용해도 바뀐 것은 없음 |
 | `20261103150745_add_analysis_reviews.sql` | `analysis_reviews`(검토 기록 — 분석 1건당 1행, `analyses` FK `on delete cascade`): 검토 상태(`needed`·`done`)·검토 메모·검토자·완료 시각·완료 메모·항목별 검토 값(`findings` jsonb 객체)·이력(`history` jsonb 배열)·`version`(1 이상, 조건부 갱신용)·`created_at`·`updated_at`(이 테이블에만 `set_updated_at` 트리거). RLS 켜고 정책 없음, `service_role` GRANT 직접 적음. 2026-11-04 Supabase 커넥터로 적용 |
+| `20261104002351_add_analyses_started_at.sql` | `analyses.started_at`(timestamptz, null 허용 — 마지막으로 시작한 시각) 열 하나만 더함. 기존 행은 고치지 않음(모두 null, `updated_at` 그대로). 권한 변화 없음(`service_role` 테이블 권한이 새 열에도 적용). 2026-11-04 Supabase 커넥터로 적용 |
 
 - **이미 적용한 파일은 고치지 않습니다.** 바꿀 것이 있으면 새 파일을 추가합니다.
 - **세 테이블 모두 RLS를 켜고 정책은 두지 않았습니다.** 브라우저는 DB에 직접 접근하지 않고, FastAPI가 비밀 키로만 읽고 씁니다. 파일은 FastAPI가 만든 서명된 업로드 주소(2시간 유효)로 브라우저가 버킷에 바로 올립니다. Vercel 함수가 받는 요청은 4.5MB까지라 파일을 서버로 보내지 않기 때문입니다.
 - **새 테이블을 만드는 마이그레이션에는 `service_role` 용 GRANT를 직접 적습니다.** `service_role` 은 RLS를 건너뛰지만, 테이블 권한(GRANT)은 따로 있어야 합니다. 2026-11-02에 확인했을 때 `imask` 에는 예전 기본 권한이 남아 있어, 새 `public` 테이블에 API 역할 권한이 자동으로 붙습니다. 하지만 Supabase가 이 자동 권한을 없애는 중이라 새 환경에서는 붙지 않을 수 있습니다([공식 공지](https://supabase.com/changelog/45329-breaking-change-tables-not-exposed-to-data-and-graphql-api-automatically)). 적는 방법은 `20261102024252_grant_service_role_tables.sql` 을 따릅니다. 브라우저용 역할(`anon`·`authenticated`)은 DB에 직접 접근하지 않으므로, 지금 설계에서는 정책이나 권한을 더하지 않습니다(`analysis_reviews` 에도 예전 기본 권한으로 두 역할의 권한이 자동으로 붙었지만 — 2026-11-04 확인 — RLS 가 켜져 있고 정책이 없어 행이 보이지 않습니다).
 - **`analyses.status` 값은 화면 코드의 상태 키(`src/display/rules.ts` 의 `ASTATUS`)와 같습니다**: `queued`·`running`·`done`·`partial`·`failed`. DB에는 이 키를 저장하고, 화면에는 키에 붙은 한국어 라벨(대기·분석 중·완료·일부 실패·실패)이 보입니다.
 - `analyses.result` 에는 분석이 끝났을 때 백엔드가 `imask-upstage-v1` 형식 JSON 을 저장합니다: 요약(`summary`), 단계별로 푼 결과(`stages`), Upstage 원본 응답(`response`, 최상위 `model` 만 뺌). 자세한 모양은 [`analyses.result` 형식](#analysesresult-형식)에 있습니다. 탐지 항목은 따로 테이블에 두지 않고 조회할 때 이 결과에서 계산합니다. 검토 기록은 `analysis_reviews` 에 두고(항목별 값의 키는 계약 id 를 ASCII 로 escape 한 것 — `json.dumps(id, ensure_ascii=True)[1:-1]`), 검토 동작은 `analyses` 행을 쓰지 않습니다([검토 동작](#검토-동작-review-actions)).
-- `analyses.agent_id`·`upstage_job_id` 와 `documents.upstage_file_id` 는 백엔드가 분석을 시작할 때 채웁니다. `documents.filename` 은 올린 원래 이름, `storage_path` 는 버킷 안 경로(`analyses/<분석 id>/<ASCII 로 바꾼 이름>`)입니다.
+- `analyses.agent_id`·`upstage_job_id` 와 `documents.upstage_file_id` 는 백엔드가 분석을 시작할 때 채우고(다시 분석이면 새 값으로), `analyses.started_at` 은 시작 선점·다시 분석 때 넣습니다. 분석을 지우면 `documents`·`analysis_reviews` 행은 FK cascade 로, 버킷의 원본은 백엔드가 먼저 지웁니다. `documents.filename` 은 올린 원래 이름, `storage_path` 는 버킷 안 경로(`analyses/<분석 id>/<ASCII 로 바꾼 이름>`)입니다.
 
 ```bash
 npx supabase login                                     # 처음 한 번. Supabase 계정 로그인(DB 비밀번호와 별개)
@@ -483,14 +514,15 @@ export function createServiceFor(mode: ServiceMode): AnalysisService {
 
 ### 2. 인터페이스 계약 — `AnalysisService`
 
-- **`subscribe` 를 뺀 모든 메서드는 `Promise` 를 돌려줍니다.** 각 메서드 주석(`src/services/analysis-service.ts`)에 실제 분석 서비스가 부르는 경로(`실제: POST /api/py/analyses/{id}/review-actions`(type …) 등)나 '실제 분석에서는 아직 지원하지 않음'을 적어 두었습니다. 백엔드 경로는 [경로](#경로) 표의 여섯 개(health 포함)입니다.
+- **`subscribe` 를 뺀 모든 메서드는 `Promise` 를 돌려줍니다.** 각 메서드 주석(`src/services/analysis-service.ts`)에 실제 분석 서비스가 부르는 경로(`실제: POST /api/py/analyses/{id}/review-actions`(type …) 등)나 '실제 분석에서는 아직 지원하지 않음'을 적어 두었습니다. 백엔드 경로는 [경로](#경로) 표의 아홉 개(health 포함)입니다.
 - **조회 결과는 화면이 고치지 않는 값으로 다룹니다.** 데모 서비스는 깊은 복사본(`structuredClone`)을 돌려주고, 실제 분석 서비스는 요청마다 새로 만든 값을 돌려주므로 화면에서 고쳐도 서비스 상태가 바뀌지 않습니다. 바꾸려면 변경 메서드를 부릅니다.
 - 위험등급과 판단 근거는 서비스가 준 값을 그대로 표시하고, 화면에서 계산하지 않습니다.
 
 | 묶음 | 메서드 | 실제 분석 서비스 |
 |---|---|---|
-| 조회 | `list()`, `get(id)`(없으면 `null`), `pending(id)`(검토 완료 전에 남은 항목), `sampleFiles()` | `list` 는 이 탭에서 만든 분석을 조회(404 는 빼고 건너뜀), `get` 은 `GET /api/py/analyses/{id}`(404 → `null`), `pending` 은 그 분석을 조회해 미확인(`open`) 탐지 항목(검토사항·연결은 빈 목록, 없는 분석이면 빈 값), `sampleFiles` 는 빈 목록 |
-| 분석 | `requestAnalysis({ name, files, onProgress? })` → 분석 ID, `retry(id, docId?)` | `requestAnalysis` 는 파일 1개(`UploadFile.file`)로 만들기 → 서명 업로드 → 시작, 단계마다 `onProgress('create' \| 'upload' \| 'start')`. 시작이 5xx·네트워크·시간 초과면 분석 id 를 목록에 넣고 `ApiError.analysisId` 에 담아 거절. `retry` 는 `{ ok: false, message }`(지원하지 않음) |
+| 조회 | `list()`, `get(id)`(없으면 `null`), `pending(id)`(검토 완료 전에 남은 항목), `sampleFiles()` | `list` 는 `GET /api/py/analyses` 하나(서버 공유 목록 — 가벼운 항목 매핑, 탐지 항목 등은 빈 값. 같은 때의 `list()` 는 요청 하나를 나눠 씀), `get` 은 `GET /api/py/analyses/{id}`(404 → `null`), `pending` 은 그 분석을 조회해 미확인(`open`) 탐지 항목(검토사항·연결은 빈 목록, 없는 분석이면 빈 값), `sampleFiles` 는 빈 목록 |
+| 분석 | `requestAnalysis({ name, files, onProgress? })` → 분석 ID, `retry(id, docId?)` | `requestAnalysis` 는 파일 1개(`UploadFile.file`)로 만들기 → 서명 업로드 → 시작, 단계마다 `onProgress('create' \| 'upload' \| 'start')`. 시작이 5xx·네트워크·시간 초과면 분석 id 를 `ApiError.analysisId` 에 담아 거절. `retry` 는 `POST /api/py/analyses/{id}/retry`(`docId` 무시) — 시작했으면 `{ ok: true, started: true }`, 시작하지 못했으면 `{ ok: false, started: false, message }`(404 면 `gone: true`), 거절하지 않음(데모는 `started` 없이 예전 그대로) |
+| 삭제 | `deleteAnalysis(id)` | `DELETE /api/py/analyses/{id}`(204). 없는 분석은 두 모드 모두 '찾을 수 없음' `ApiError` 로 거절(데모는 메모리에서 지우고 남은 타이머를 취소) |
 | 탐지 항목 검토 | `setStatus`, `confirmMany`, `markFalsePositive`, `restore`, `reclassify`(바뀐 값이 없으면 `false`), `saveFindingMemo` | 구현됨 — `POST /api/py/analyses/{id}/review-actions`(`type` `set_status`·`confirm_many`·`mark_false_positive`·`restore`·`reclassify`·`save_finding_memo`). 분석을 조회해 화면 번호(`D1-01`)를 계약 id(`Finding.live.id`)로 바꿔 보내고(없는 분석·번호면 요청 없이 거절), `actor` 는 `CONFIG.user.name`. `reclassify` 는 응답의 `changed` 를 돌려줌. 실패는 그 `ApiError` 로 거절 |
 | 검토사항·문서 간 연결 | `resolveItem`, `reopenItem`, `decideLink` | 거절(`실제 분석에서는 아직 지원하지 않는 기능입니다.`) |
 | 검토 메모·완료 | `saveMemo`, `completeReview`, `reopenReview` | 구현됨 — 같은 경로(`type` `save_memo`·`complete_review`·`reopen_review`) |
@@ -512,7 +544,7 @@ export function createServiceFor(mode: ServiceMode): AnalysisService {
 `subscribe(listener)` 는 유일하게 Promise가 아닌 메서드로, 구독 해제 함수를 돌려줍니다. 데이터 훅(`useAnalyses`·`useAnalysis`·`usePending`)과 헤더의 '검토 필요' 숫자는 **이 알림을 받으면 다시 불러옵니다.**
 
 - 데모 서비스: 변경 메서드가 성공했을 때, 분석 진행(대기 → 분석 중 → 완료·실패)이 바뀌었을 때 `listener()`, 분석이 끝났을 때 `listener({ type: 'done', id, name, items, findings })`(`ServiceEvent` — 화면이 분석 완료 토스트를 띄웁니다).
-- 실제 분석 서비스: `requestAnalysis` 가 성공했을 때와 검토 동작이 성공했을 때(`changed` 와 상관없이 — 데모와 같다. 그 분석의 진행 중 조회를 나눠 쓰지 않게 뗀 뒤) `listener()`. 진행 확인은 상세 화면이 3초마다 `refresh()` 로 조회하고, 조회(`get`·`list`)에서 진행 중으로 본 분석이 끝난 것(완료·일부 실패·실패)을 처음 보면 `listener()` 를 한 번 부릅니다 — 헤더 '검토 필요' 숫자·목록이 화면 이동 없이 완료(검토 필요)를 반영합니다. 분석 완료 이벤트(`ServiceEvent`)는 보내지 않습니다(탐지 항목이 아직 없어 완료 토스트의 '탐지 0건'이 오해를 줍니다).
+- 실제 분석 서비스: `requestAnalysis`·검토 동작(`changed` 와 상관없이 — 데모와 같다)·삭제·다시 분석이 끝났을 때(검토 동작·다시 분석의 409·404, 삭제의 404 포함 — 그 분석의 진행 중 조회와 나눠 쓰던 목록 요청을 뗀 뒤) `listener()`. 진행 확인은 상세 화면과 목록 화면(대기·분석 중 행)이 3초마다 조회하고, 조회(`get`·`list`)에서 진행 중으로 본 분석이 끝난 것(완료·일부 실패·실패)을 처음 보면 `listener()` 를 한 번 부릅니다 — 헤더 '검토 필요' 숫자·목록이 화면 이동 없이 완료(검토 필요)를 반영합니다. 분석 완료 이벤트(`ServiceEvent`)는 보내지 않습니다(탐지 항목이 아직 없어 완료 토스트의 '탐지 0건'이 오해를 줍니다).
 
 ### 4. 데모 전용 조작 — `DemoControls`
 
@@ -587,7 +619,7 @@ export function createServiceFor(mode: ServiceMode): AnalysisService {
 
 ## 이번 단계에서 하지 않은 것
 
-- **로그인, 실제 분석의 검토사항·연결·보고서.** 실제 분석 모드는 업로드·분석·진행 상태와, 끝난 결과의 상세 검토(탐지 항목 검토·검토 메모·검토 완료/다시 열기 — 서버에 저장)까지입니다. 검토사항·문서 간 연결·보고서·내보내기는 데모 서비스에만 있습니다(업로드·분석 진행은 `CONFIG.sim` 의 지연 시간으로 흉내 냄). 담당자(`CONFIG.user`)는 로그인 전 단계의 데모 값이고, 실제 분석의 검토 처리자 이름도 이 값(`CONFIG.user.name`)입니다(백엔드는 검사만 함). 내보내기 파일은 브라우저 다운로드(Blob)로 저장합니다.
+- **로그인, 실제 분석의 검토사항·연결·보고서.** 실제 분석 모드는 업로드·분석·진행 상태, 끝난 결과의 상세 검토(탐지 항목 검토·검토 메모·검토 완료/다시 열기 — 서버에 저장), 공유 목록·삭제·실패한 분석 다시 분석까지입니다. 검토사항·문서 간 연결·보고서·내보내기는 데모 서비스에만 있습니다(업로드·분석 진행은 `CONFIG.sim` 의 지연 시간으로 흉내 냄). 담당자(`CONFIG.user`)는 로그인 전 단계의 데모 값이고, 실제 분석의 검토 처리자 이름도 이 값(`CONFIG.user.name`)입니다(백엔드는 검사만 함). 내보내기 파일은 브라우저 다운로드(Blob)로 저장합니다.
 - **마스킹한 파일 만들기.** 데모의 원문은 프로토타입처럼 샘플 문서 화면(블록으로 그린 가상 문서)이고, 실제 분석 모드는 올린 PDF·이미지의 쪽을 그대로 그립니다. 마스킹 미리보기는 둘 다 화면에서만 가립니다(원본 파일은 바뀌지 않음).
 - **규칙 ID(`PII-ID-001` 등)와 위험 판정은 디자인용 예시입니다.** 실제 기준처럼 늘리지 않습니다.
 - **`next.config.ts` 의 `cacheComponents`·`partialPrefetching` 은 껐습니다.** 데이터를 모두 브라우저에서 가져오기 때문입니다(데모 서비스, 또는 실제 분석 모드에서 브라우저가 부르는 `/api/py`). 서버 컴포넌트에서 데이터를 가져오게 되면 다시 검토합니다.

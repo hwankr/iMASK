@@ -7,7 +7,7 @@
 #    .venv\Scripts\python.exe scripts\api_e2e.py [--base-url http://127.0.0.1:8000]
 #        [--file testdocs/iMASK_smoke_bundle.pdf] [--name 분석명] [--interval 3] [--timeout 600]
 #        [--skip-upload] [--content-file <올릴 실제 내용>] [--no-start] [--expect done|failed]
-#        [--analysis-id <이미 있는 분석 id>] [--no-review]
+#        [--analysis-id <이미 있는 분석 id>] [--no-review] [--retry-flow | --fail-with-original] [--keep]
 #    --skip-upload   : 올리지 않고 시작 → '업로드된 파일을 찾을 수 없습니다' 실패 경로(Upstage 호출 없음)
 #    --content-file  : 이름·형식은 --file 로 알리고 내용은 이 파일로 올린다 → 형식 불일치 실패 경로
 #    --no-start      : 만들기·올리기까지만(한글 파일 이름이 Storage 에 올라가는지 확인할 때)
@@ -46,11 +46,42 @@
 #  Upstage 실행 1번 = 크레딧 사용(BRIEF §3). 합성 자료만 올린다.
 #  정리: 시간 초과·Ctrl+C·연결 오류·예상 못 한 예외를 포함한 모든 종료 경로의 finally 에서, 관찰한
 #    Upstage file id 를 .env 의 UPSTAGE_API_KEY 로 지운다(404 = 이미 지움 = 성공). 시작한 분석이 끝나지 않았는데
-#    file id 를 모르면(시작 응답을 받았어도) 분석을 한 번 다시 읽어 얻는다. 그래도 확인할 수 없거나 정리를 못 하면
-#    값 없는 문구로 알리고 종료 코드 1.
+#    file id 를 모르면(시작 응답을 받았어도) 분석을 한 번 다시 읽어 얻는다. /start·/retry(작업을 만들 수 있는 요청)는 보내기
+#    전에 '시작 결과 미확인'을 적고 응답(200 분석 건 또는 작업을 만들지 않는 거절 400·404·409·413)을 관찰해야 푼다 — 응답을 잃으면
+#    앞에서 끝난 것으로 보았어도·file id 를 모았어도 다시 읽어 새 file id 를 더한다(다시 읽은 행이 끝났거나 file id 가 있어야 확인).
+#    그래도 확인할 수 없거나 정리를 못 하면 값 없는 문구로 알리고 종료 코드 1.
 #  출력의 오류 문구는 원문 전체를 가린 뒤에 자른다(_short).
 #  종료 코드: 기대(--expect, 기본 done)대로면 0 — done 이면 위 done 확인·원본 파일 확인·검토 동작 확인(또는 검토 기록
 #    모양 확인)도 모두 맞아야 한다. 하나라도 실패하면 1.
+#
+#  공유 목록·삭제·다시 분석 확인(shared-analyses). 기대값은 계약(BRIEF §5.2~5.5)대로 따로 만든다(백엔드 함수를 쓰지 않음).
+#    목록 확인(done 뒤): GET /api/py/analyses 200 {"analyses": [...]} — 모든 항목 키가 계약 10개(result 없음)·문서 키 3개·
+#      created_at desc, id desc 순서, 이 분석이 정확히 한 번 있고 값이 조회 응답에서 계약대로 만든 기대값(_list_expected —
+#      risk_level = summary.risk_level 문자열, review = done + 서류 수 ≥ 1 이면 검토 상태(done 아니면 needed), 그 밖 none,
+#      문서 = 올린 파일 행 filename·size_bytes·mime_type)과 같음. 응답 바이트 수를 출력한다(다른 분석의 값은 출력하지 않음).
+#    삭제 확인(기본, --keep 이면 건너뜀): DELETE 204(본문 없음) → GET 404 → GET …/file 404 → 목록에 없음
+#      → 지운 분석 다시 분석 404 → 두 번째 DELETE 404(문구 '분석 건을 찾을 수 없습니다.'). 첫 DELETE 가 204·빈 본문이 아니거나
+#      (연결 오류 포함) 그 뒤 GET·/file·목록이 아직 있음을 보이면 다시 분석·두 번째 DELETE 를 보내지 않고 실패로 끝낸다(남은 분석에
+#      작업을 만들지 않게). 지웠다는 표식은 없음을 확인한 뒤에만 단다 — 아니면 finally 가 다시 지운다.
+#    documents 모양: 목록 항목·다시 분석 응답·조회 응답의 documents 가 목록이 아니거나 객체가 아닌 항목이 있으면 그 확인의 실패로
+#      적는다(예외 없이 — 정리용 file id 는 정상 항목에서만 모은다).
+#    --retry-flow   : 올리지 않고 시작('업로드된 파일을 찾을 수 없습니다' 실패, Upstage 없음) → 목록에 failed → 원본 없이
+#                     다시 분석(같은 이유로 다시 실패, 작업·file id 없음, 조회와 같은 값) → 만들 때 받은 같은 서명 업로드
+#                     주소로 원본을 올림 → 다시 분석(running, 새 작업 — Upstage 1번) → 분석 중 다시 분석 409 '이미 분석하고
+#                     있습니다.'(작업·started_at 그대로) → done. 다시 분석마다 started_at 이 앞 시작보다 뒤, created_at 그대로,
+#                     완료 행의 created_at = 처음 · started_at = 마지막 다시 분석 때 값(다르면 '다시 분석' 확인 실패).
+#                     done 뒤: done 확인·원본 파일 확인, 검토 이력 [S1, retry 줄(H1·H2 — 사유 = 앞 실패 이유), S2] · at 이
+#                     줄지 않음 · 각 retry 줄 at 이 앞 시작 뒤 · 새 시작 이전, 검토 동작 하나(확인) 뒤 [S1, H1, H2, S2, H3]
+#                     (--no-review 면 이 동작을 보내지 않음), 목록 확인, 삭제 확인.
+#    --fail-with-original : 올리지 않고 시작해 실패시킨 뒤 같은 서명 주소로 원본을 올리고(원본 파일 확인) **다시 분석하지 않고
+#                     남긴다**(화면에서 다시 분석을 눌러 볼 실패 분석 — Upstage 0번). 만든 분석 id 를 출력한다. --keep 과 같다.
+#    --keep         : 이번 실행이 만든 분석을 지우지 않는다. 기본은 어떻게 끝나든(시간 초과·Ctrl+C·연결 오류 포함) finally 에서
+#                     Upstage 파일 정리 뒤 이번 실행이 만든 분석을 DELETE 로 지운다(삭제 확인에서 이미 지웠으면 그대로).
+#                     204 뒤 다시 읽어 404 = 지움, DELETE 404 = 이미 없음(출력), 그 밖·연결 오류·204 인데 아직 있음은 정리 실패
+#                     (분석 id 출력, 종료 코드 1). 정리 중 Ctrl+C 면 지우지 않는다.
+#                     --analysis-id 로 읽은 기존 분석은 지우지 않는다(만든 것이 아니므로).
+#  확인 요약: 끝에 확인 묶음마다 통과/실패를 한 줄씩 내고, 새 확인(목록·다시 분석·삭제)만 따로 모아 판정한다 — done 확인의
+#    고정 기대값(서류 6·탐지 29 등)이 실제 Upstage 결과와 어긋나는 문제와 섞이지 않게. 종료 코드는 모든 확인이 맞아야 0.
 # ==========================================================================
 
 from __future__ import annotations
@@ -142,6 +173,18 @@ TEXT_MEMO = "api_e2e 검토 메모"
 TEXT_COMPLETE = "api_e2e 검토 완료"
 TEXT_REOPEN = "api_e2e 다시 열기"
 
+# 공유 목록·삭제·다시 분석 계약(shared-analyses — BRIEF §5.2~5.5, §5.8 백엔드 문구)
+LIST_PATH = "/api/py/analyses"
+LIST_ITEM_KEYS = {"id", "name", "status", "error", "created_at", "updated_at", "started_at", "documents", "risk_level", "review"}
+LIST_DOC_KEYS = {"filename", "size_bytes", "mime_type"}
+MSG_NOT_FOUND = "분석 건을 찾을 수 없습니다."
+MSG_FILE_MISSING = "업로드된 파일을 찾을 수 없습니다. 파일을 다시 올려 주세요."
+MSG_BUSY = "이미 분석하고 있습니다."
+RETRY_KIND = "retry"
+RETRY_CHANGE = "같은 파일로 다시 분석 요청"
+REASON_MAX = 500  # 이력 reason 저장 한도(코드 포인트)
+NO_JOB_STATUSES = {400, 404, 409, 413}  # /start·/retry 가 작업을 만들지 않고 거절하는 상태(BRIEF §5.4 — Upstage 를 부르지 않음)
+
 EXIT_OK = 0
 EXIT_FAIL = 1
 
@@ -204,8 +247,18 @@ class Run:
         self.analysis_id: str | None = None
         self.start_requested = False
         self.start_row_received = False
+        self.start_pending = False  # /start·/retry 를 보냈는데 응답을 아직 관찰하지 못함(작업이 생겼을 수 있음)
         self.terminal = False
         self.file_ids: dict[str, None] = {}  # 순서 있는 집합
+        # 끝에 지울 분석(이번 실행이 만든 것만) — --keep·--fail-with-original 이면 남긴다
+        self.created = False
+        self.deleted = False
+        self.keep = bool(getattr(args, "keep", False) or getattr(args, "fail_with_original", False))
+        self.verdicts: list[tuple[str, bool, bool]] = []  # (확인 묶음 이름, 통과, 새 확인인지)
+
+    def verdict(self, name: str, passed: bool, *, new: bool = False) -> bool:
+        self.verdicts.append((name, passed, new))
+        return passed
 
     def log(self, message: str) -> None:
         _say(f"[{time.monotonic() - self.start:6.1f}s] {message}")
@@ -215,12 +268,28 @@ class Run:
         return response
 
     def observe(self, row: Mapping[str, Any]) -> None:
-        """응답의 분석 건에서 Upstage file id 와 끝났는지를 기억한다."""
-        for doc in row.get("documents") or []:
-            file_id = doc.get("upstage_file_id") if isinstance(doc, Mapping) else None
+        """응답의 분석 건에서 Upstage file id 와 끝났는지를 기억한다(documents 모양이 틀려도 정상 항목의 file id 만 모은다)."""
+        for doc in _documents(row):
+            file_id = doc.get("upstage_file_id")
             if isinstance(file_id, str) and file_id:
                 self.file_ids[file_id] = None
         self.terminal = row.get("status") in TERMINAL
+
+    def begin_start(self) -> None:
+        """작업을 만들 수 있는 요청(/start · /retry)을 보내기 직전 — 응답을 관찰하기 전에는 앞의 끝남 값을 믿지 않는다.
+
+        응답을 잃으면(시간 초과·연결 오류·Ctrl+C·5xx) 정리 단계가 그 분석을 다시 읽어 새 file id 를 모은다(모은 것은 유지)."""
+        self.start_requested = True
+        self.start_pending = True
+
+    def settle_start(self, status_code: int, body: Any) -> None:
+        """/start · /retry 응답을 받은 뒤: 200 분석 건이면 관찰, 작업을 만들지 않는 거절(400·404·409·413)이면 미확인을 푼다.
+        그 밖(5xx·모양이 틀린 200)은 미확인 그대로 둔다 — 서버가 작업을 만들었을 수 있다."""
+        if status_code == 200 and isinstance(body, Mapping):
+            self.observe(body)
+            self.start_pending = False
+        elif status_code in NO_JOB_STATUSES:
+            self.start_pending = False
 
     def upstage_key(self) -> str:
         return os.environ.get("UPSTAGE_API_KEY") or self.env.get("UPSTAGE_API_KEY") or ""
@@ -545,10 +614,15 @@ def _js_trim(text: str) -> str:
     return text.strip(JS_TRIM_CHARS)
 
 
+def _stored_text(text: str, limit: int) -> str:
+    """이력 글이 저장되는 모양: 짝 없는 서로게이트·NUL → U+FFFD, limit 코드 포인트를 넘으면 앞 limit-1 자 + '…'."""
+    cleaned = "".join(REPLACEMENT_CHAR if char == "\x00" or 0xD800 <= ord(char) <= 0xDFFF else char for char in text)
+    return cleaned if len(cleaned) <= limit else cleaned[: limit - 1] + "…"
+
+
 def _stored_target(text: str) -> str:
     """이력 target 이 저장되는 모양(BRIEF §5.5): 짝 없는 서로게이트·NUL → U+FFFD, 200 코드 포인트를 넘으면 앞 199자 + '…'."""
-    cleaned = "".join(REPLACEMENT_CHAR if char == "\x00" or 0xD800 <= ord(char) <= 0xDFFF else char for char in text)
-    return cleaned if len(cleaned) <= TARGET_MAX else cleaned[: TARGET_MAX - 1] + "…"
+    return _stored_text(text, TARGET_MAX)
 
 
 def _when(value: Any) -> datetime | None:
@@ -616,7 +690,7 @@ def _risk_label(result: Mapping[str, Any]) -> str:
 def _system_lines(row: Mapping[str, Any], targets: list[dict[str, str]]) -> list[dict[str, str]]:
     """조회할 때 만드는 이력 두 줄(S1 분석 요청 · S2 최초 AI 결과)의 기대값."""
     result = row.get("result") if isinstance(row.get("result"), Mapping) else {}
-    files = len([d for d in row.get("documents") or [] if isinstance(d, Mapping)])
+    files = len(_documents(row))
     base = {"actor": SYSTEM_ACTOR, "target": ANALYSIS_TARGET, "reason": ""}
     return [
         {"id": "S1", "at": row.get("created_at"), "kind": "request", "change": f"문서 {files}개 분석 요청", **base},
@@ -685,19 +759,12 @@ def _first_review_problems(row: Mapping[str, Any], targets: list[dict[str, str]]
     return problems
 
 
-class _ReviewFlow:
-    """검토 동작을 차례로 보내고, 응답과 다시 읽은 값을 확인한다. 이번 실행이 만든 분석에만 쓴다."""
+class _Checklist:
+    """번호를 매긴 단계별 통과/실패 출력(단계 이름·개수·문제 줄만 — 값은 넣지 않는다)."""
 
-    def __init__(self, run: Run, analysis_id: str, first: Mapping[str, Any]) -> None:
-        self.run = run
-        self.analysis_id = analysis_id
-        self.first = first
-        review = first.get("review")
-        self.review: Mapping[str, Any] = review if isinstance(review, Mapping) else {}
+    def __init__(self) -> None:
         self.steps = 0
         self.failed = 0
-        self.expected_writes = 0  # 이력 한 줄을 남겨야 하는 동작 수
-        self.writes = 0  # 실제로 changed true 였던 동작 수
 
     def report(self, name: str, problems: list[str], note: str = "") -> bool:
         self.steps += 1
@@ -708,6 +775,41 @@ class _ReviewFlow:
         for problem in problems[:6]:
             _say(f"      - {_short(problem)}")
         return ok
+
+    @property
+    def ok(self) -> bool:
+        return self.failed == 0
+
+    def summary(self, title: str) -> bool:
+        _say(f"{title}: {self.steps - self.failed}/{self.steps} 통과 — {'기대대로' if self.ok else '기대와 다름'}")
+        return self.ok
+
+
+class _ReviewFlow:
+    """검토 동작을 차례로 보내고, 응답과 다시 읽은 값을 확인한다. 이번 실행이 만든 분석에만 쓴다.
+
+    checks 를 주면 그 체크리스트에 이어서 번호를 매긴다(다시 분석 확인 안에서 검토 동작 하나를 볼 때)."""
+
+    def __init__(self, run: Run, analysis_id: str, first: Mapping[str, Any], checks: _Checklist | None = None) -> None:
+        self.run = run
+        self.analysis_id = analysis_id
+        self.first = first
+        review = first.get("review")
+        self.review: Mapping[str, Any] = review if isinstance(review, Mapping) else {}
+        self.checks = checks if checks is not None else _Checklist()
+        self.expected_writes = 0  # 이력 한 줄을 남겨야 하는 동작 수
+        self.writes = 0  # 실제로 changed true 였던 동작 수
+
+    @property
+    def steps(self) -> int:
+        return self.checks.steps
+
+    @property
+    def failed(self) -> int:
+        return self.checks.failed
+
+    def report(self, name: str, problems: list[str], note: str = "") -> bool:
+        return self.checks.report(name, problems, note)
 
     def finding(self, target: Mapping[str, str]) -> Mapping[str, Any]:
         found = self.review.get("findings", {}).get(target["id"]) if isinstance(self.review.get("findings"), Mapping) else None
@@ -1046,6 +1148,328 @@ def _check_review_shape(run: Run, analysis_id: str) -> bool:
     return not problems
 
 
+# --- 공유 목록·삭제·다시 분석 확인(shared-analyses) ---------------------------------------------
+# 기대값은 계약(BRIEF §5.2~5.5)을 그대로 적어 조회 응답에서 만든다(백엔드 함수를 가져다 쓰지 않음).
+
+
+def _after(later: Any, earlier: Any) -> bool:
+    """두 ISO 시각을 읽어 later 가 earlier 보다 뒤인지. 하나라도 못 읽으면 False."""
+    a, b = _when(later), _when(earlier)
+    return a is not None and b is not None and a > b
+
+
+def _list_expected(row: Mapping[str, Any]) -> dict[str, Any]:
+    """조회 응답(AnalysisOut)에서 계약대로 만든 목록 항목 기대값(BRIEF §5.2)."""
+    status = row.get("status")
+    result = row.get("result") if isinstance(row.get("result"), Mapping) else {}
+    summary = result.get("summary") if isinstance(result.get("summary"), Mapping) else {}
+    risk = summary.get("risk_level")
+    count = summary.get("document_count")
+    if status == "done" and _is_int(count) and count >= 1:
+        review = row.get("review")
+        state = "done" if isinstance(review, Mapping) and review.get("status") == "done" else "needed"
+    else:
+        state = "none"
+    documents = _documents(row)
+    documents.sort(key=lambda d: (str(d.get("created_at") or ""), str(d.get("id") or "")))
+    return {
+        "id": row.get("id"),
+        "name": row.get("name"),
+        "status": status,
+        "error": row.get("error"),
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+        "started_at": row.get("started_at"),
+        "documents": [{key: d.get(key) for key in ("filename", "size_bytes", "mime_type")} for d in documents],
+        "risk_level": risk if isinstance(risk, str) else None,
+        "review": state,
+    }
+
+
+def _check_list(run: Run, analysis_id: str, label: str) -> bool:
+    """GET /api/py/analyses — 모양(키·result 없음·순서)과 이 분석의 항목 = 조회 응답에서 만든 기대값. 다른 분석의 값은 출력하지 않는다."""
+    detail, row = _get(run, analysis_id)
+    if detail.status_code != 200 or not isinstance(row, Mapping):
+        _say(f"목록 확인({label}): 기대값을 만들 조회 실패 HTTP {detail.status_code}: 실패")
+        return False
+    expected = _list_expected(row)
+    response = run.call("GET", LIST_PATH)
+    try:
+        body = response.json()
+    except ValueError:
+        body = None
+    problems: list[str] = _documents_problems(row, "기대값을 만든 조회 응답의 documents")
+    items: list[Any] = []
+    if response.status_code != 200 or not isinstance(body, Mapping) or set(body) != {"analyses"} or not isinstance(body["analyses"], list):
+        problems.append(f"HTTP {response.status_code} · 응답 모양이 {{\"analyses\": [...]}} 가 아님")
+    else:
+        items = body["analyses"]
+    with_result = sum(1 for item in items if isinstance(item, Mapping) and "result" in item)
+    bad_items = sum(1 for item in items if not (isinstance(item, Mapping) and set(item) == LIST_ITEM_KEYS))
+    bad_docs = sum(
+        1
+        for item in items
+        if isinstance(item, Mapping)
+        and not (isinstance(item.get("documents"), list) and all(isinstance(d, Mapping) and set(d) == LIST_DOC_KEYS for d in item["documents"]))
+    )
+    if with_result:
+        problems.append(f"result 키가 있는 항목 {with_result}개")
+    if bad_items:
+        problems.append(f"키가 계약(10개)과 다른 항목 {bad_items}개")
+    if bad_docs:
+        problems.append(f"문서 키가 계약(filename·size_bytes·mime_type)과 다른 항목 {bad_docs}개")
+    order = [(_when(item.get("created_at")), str(item.get("id"))) for item in items if isinstance(item, Mapping)]
+    if any(moment is None for moment, _ in order):
+        problems.append("created_at 을 읽을 수 없는 항목이 있음")
+    elif any(later > earlier for earlier, later in zip(order, order[1:], strict=False)):
+        problems.append("created_at desc, id desc 순서가 아님")
+    mine = [item for item in items if isinstance(item, Mapping) and item.get("id") == analysis_id]
+    if len(mine) != 1:
+        problems.append(f"이 분석이 목록에 {len(mine)}번 있음(기대 1번)")
+    else:
+        differs = sorted(key for key in set(expected) | set(mine[0]) if mine[0].get(key) != expected.get(key))
+        if differs:
+            problems.append(f"이 분석의 항목이 조회 응답과 다름 {differs}")
+    item = mine[0] if len(mine) == 1 else {}
+    ok = not problems
+    _say(
+        f"목록 확인({label}): GET {LIST_PATH} HTTP {response.status_code} · {len(items)}건 · {len(response.content):,} bytes"
+        f" · result 키 있는 항목 {with_result} · 이 분석 status={item.get('status')} review={item.get('review')}"
+        f" risk_level={item.get('risk_level')} 문서 {len(_documents(item))}개: {'통과' if ok else '실패'}"
+    )
+    for problem in problems[:6]:
+        _say(f"    - {_short(problem)}")
+    return ok
+
+
+def _body(response: httpx.Response) -> Any:
+    try:
+        return response.json()
+    except ValueError:
+        return None
+
+
+def _retry(run: Run, analysis_id: str) -> tuple[httpx.Response, Any]:
+    """POST …/retry 본문 {"actor": "api_e2e"}(검토 동작과 같은 JSON 직렬화).
+
+    작업을 만들 수 있는 요청이라 보내기 전에 '시작 결과 미확인'을 적고(run.begin_start), 응답을 받으면 관찰한다(settle_start).
+    응답을 잃으면(예외가 그대로 올라감) 미확인이 남아 정리 단계가 그 분석을 다시 읽어 새 Upstage 파일까지 지운다."""
+    run.begin_start()
+    response = run.call(
+        "POST",
+        f"/api/py/analyses/{analysis_id}/retry",
+        content=_json_body({"actor": REVIEW_ACTOR}),
+        headers={"content-type": "application/json"},
+    )
+    body = _body(response)
+    run.settle_start(response.status_code, body)
+    return response, body
+
+
+def _refused(response: httpx.Response, status: int, detail: str) -> list[str]:
+    body = _body(response)
+    got = body.get("detail") if isinstance(body, Mapping) else None
+    return [] if response.status_code == status and got == detail else [f"HTTP {response.status_code} {_detail(response)}(기대 {status} {detail})"]
+
+
+def _documents(row: Any) -> list[Mapping[str, Any]]:
+    """응답의 documents 를 정규화 — 목록이 아니면 [], 객체가 아닌 항목은 뺀다(모양 판정은 _documents_problems)."""
+    documents = row.get("documents") if isinstance(row, Mapping) else None
+    return [d for d in documents if isinstance(d, Mapping)] if isinstance(documents, list) else []
+
+
+def _documents_problems(row: Any, where: str = "documents") -> list[str]:
+    """documents 가 목록이 아니거나 객체가 아닌 항목이 있으면 그 확인의 문제로(예외를 내지 않는다)."""
+    documents = row.get("documents") if isinstance(row, Mapping) else None
+    if not isinstance(documents, list):
+        return [f"{where} 가 목록이 아님({type(documents).__name__})"]
+    bad = sum(1 for d in documents if not isinstance(d, Mapping))
+    return [f"{where} 에 객체가 아닌 항목 {bad}개"] if bad else []
+
+
+def _file_ids(row: Mapping[str, Any]) -> list[str]:
+    return [str(d["upstage_file_id"]) for d in _documents(row) if d.get("upstage_file_id")]
+
+
+def _not_started_problems(row: Mapping[str, Any]) -> list[str]:
+    """시작하지 못한 실패(원본 없음): failed + 그 이유, Upstage 작업·file id·result 없음, review null."""
+    problems: list[str] = _documents_problems(row)
+    if row.get("status") != "failed":
+        problems.append(f"status {row.get('status')!r}(기대 failed)")
+    if row.get("error") != MSG_FILE_MISSING:
+        problems.append(f"error {_short(row.get('error'))!r}(기대 {MSG_FILE_MISSING!r})")
+    if row.get("upstage_job_id") is not None:
+        problems.append("upstage_job_id 가 있음(Upstage 작업을 만듦)")
+    if _file_ids(row):
+        problems.append("upstage_file_id 가 있음(Upstage 에 올림)")
+    if row.get("result") is not None:
+        problems.append("result 가 null 이 아님")
+    if row.get("review") is not None:
+        problems.append("review 가 null 이 아님(실패 분석은 검토 블록 없음)")
+    return problems
+
+
+def _check_delete(run: Run, analysis_id: str) -> bool:
+    """이번 실행이 만든 분석을 지우고 그 뒤 모든 경로가 404 인지 본다(BRIEF §5.3·§5.6).
+
+    지운 것이 확인되지 않으면(첫 DELETE 가 204·빈 본문이 아님, 또는 그 뒤 GET·/file·목록이 아직 있음을 보임) 상태를 바꾸는
+    확인('지운 분석 다시 분석' · 두 번째 DELETE)을 보내지 않고 실패로 끝낸다 — 남은 분석에 작업(크레딧)을 만들지 않게.
+    완료 표식(run.deleted)도 없음을 확인한 뒤에만 단다(아니면 finally 가 다시 지우고 확인한다)."""
+    _say("삭제 확인(이번 실행이 만든 분석):")
+    checks = _Checklist()
+    path = f"/api/py/analyses/{analysis_id}"
+    try:
+        first = run.call("DELETE", path)
+    except httpx.HTTPError as exc:  # 지웠는지 모른다 — 확인 실패로 끝내고 finally 가 다시 지운다
+        checks.report("DELETE → 204(본문 없음)", [f"연결 오류 {type(exc).__name__}"])
+        _say("  지워지지 않아 나머지 확인(다시 분석 404 등)을 보내지 않습니다")
+        return checks.summary("삭제 확인")
+    accepted = first.status_code == 204 and first.content == b""
+    checks.report("DELETE → 204(본문 없음)", [] if accepted else [f"HTTP {first.status_code} · 본문 {len(first.content)} bytes(기대 204 · 본문 없음)"])
+    if not accepted:
+        _say("  지워지지 않아 나머지 확인(다시 분석 404 등)을 보내지 않습니다")
+        return checks.summary("삭제 확인")
+    gone = checks.report("GET → 404", _refused(run.call("GET", path), 404, MSG_NOT_FOUND))
+    gone = checks.report("GET …/file → 404", _refused(run.call("GET", f"{path}/file"), 404, MSG_NOT_FOUND)) and gone
+    listed = run.call("GET", LIST_PATH)
+    body = _body(listed)
+    items = body.get("analyses") if isinstance(body, Mapping) else None
+    if listed.status_code != 200 or not isinstance(items, list):
+        problems = [f"목록 HTTP {listed.status_code}"]
+    else:
+        problems = [] if not any(isinstance(i, Mapping) and i.get("id") == analysis_id for i in items) else ["목록에 아직 있음"]
+    gone = checks.report("목록에 없음", problems, f"{len(items) if isinstance(items, list) else '?'}건") and gone
+    if not gone:
+        _say("  204 를 받았지만 지워진 것을 확인하지 못해 나머지 확인(다시 분석 404 등)을 보내지 않습니다")
+        return checks.summary("삭제 확인")
+    run.deleted = True  # 없음을 확인한 뒤에만
+    response, _ = _retry(run, analysis_id)
+    checks.report("지운 분석 다시 분석 → 404(Upstage 없음)", _refused(response, 404, MSG_NOT_FOUND))
+    checks.report("두 번째 DELETE → 404", _refused(run.call("DELETE", path), 404, MSG_NOT_FOUND))
+    return checks.summary("삭제 확인")
+
+
+def _retry_step(
+    run: Run,
+    checks: _Checklist,
+    name: str,
+    analysis_id: str,
+    created_at: Any,
+    previous_start: Any,
+    keys: set[str],
+    *,
+    started: bool,
+) -> Mapping[str, Any] | None:
+    """다시 분석 한 번. started=True 면 running·새 작업, False 면 원본 없음으로 다시 실패(조회와 같은 값)."""
+    response, body = _retry(run, analysis_id)  # 200 분석 건이면 _retry 가 이미 관찰했다(file id · 끝남)
+    if response.status_code != 200 or not isinstance(body, Mapping):
+        checks.report(name, [f"HTTP {response.status_code} {_detail(response)}(기대 200 분석 건)"])
+        return None
+    problems: list[str] = []
+    if set(body) != keys:
+        problems.append(f"응답 키가 시작·조회 응답과 다름 {sorted(set(body) ^ keys)}")
+    if body.get("created_at") != created_at:
+        problems.append("created_at 이 바뀜(요청 시각·분석 번호·목록 순서 기준)")
+    if not _after(body.get("started_at"), previous_start):
+        problems.append("started_at 이 앞 시작보다 뒤가 아님")
+    if body.get("upstage_status") is not None or body.get("poll_error") is not None:
+        problems.append("upstage_status·poll_error 가 null 이 아님")
+    if started:
+        problems += _documents_problems(body)
+        if body.get("status") != "running":
+            problems.append(f"status {body.get('status')!r}(기대 running) · error {_short(body.get('error'))!r}")
+        if not body.get("upstage_job_id"):
+            problems.append("upstage_job_id 없음(작업을 만들지 않음)")
+        if not _file_ids(body):
+            problems.append("upstage_file_id 없음(Upstage 에 올리지 않음)")
+        if body.get("error") is not None or body.get("result") is not None or body.get("review") is not None:
+            problems.append("error·result·review 가 null 이 아님")
+    else:
+        problems += _not_started_problems(body)
+        reread, again = _get(run, analysis_id)  # 실패 분석의 조회는 Upstage 를 부르지 않는다
+        if reread.status_code != 200 or again != body:
+            problems.append("다시 조회한 값이 다시 분석 응답과 다름")
+    note = f"status {body.get('status')} · 작업 {'있음' if body.get('upstage_job_id') else '없음'} · created_at 그대로 {body.get('created_at') == created_at}"
+    checks.report(name, problems, note)
+    return body
+
+
+def _check_retry_history(
+    run: Run, checks: _Checklist, analysis_id: str, reasons: list[Any], marks: list[Any], *, act: bool
+) -> None:
+    """done 뒤 검토 이력: [S1, retry 줄(사유 = 앞 실패 이유), S2] — 그리고 검토 동작 하나 뒤 [S1, H…, S2, H(n+1)]."""
+    response, row = _get(run, analysis_id)
+    if response.status_code != 200 or not isinstance(row, Mapping) or not isinstance(row.get("review"), Mapping):
+        checks.report("검토 이력 — S1 · 다시 분석 줄 · S2", [f"조회 HTTP {response.status_code} · review 가 객체가 아님"])
+        return
+    review = row["review"]
+    targets = _review_targets(row.get("result"))
+    s1, s2 = _system_lines(row, targets)
+    documents = _documents(row)
+    filename = documents[0].get("filename") if documents else None
+    target = _stored_target(filename if isinstance(filename, str) and _js_trim(filename) else ANALYSIS_TARGET)
+    retries = [
+        {
+            "id": f"H{number}",
+            "actor": REVIEW_ACTOR,
+            "kind": RETRY_KIND,
+            "target": target,
+            "change": RETRY_CHANGE,
+            "reason": _stored_text(reason if isinstance(reason, str) else "", REASON_MAX),
+        }
+        for number, reason in enumerate(reasons, 1)
+    ]
+    history = review.get("history") if isinstance(review.get("history"), list) else []
+    problems: list[str] = _documents_problems(row)
+    wants = [s1, *retries, s2]
+    if len(history) != len(wants):
+        problems.append(f"이력 {len(history)}줄(기대 S1 · 다시 분석 {len(retries)}줄 · S2 = {len(wants)}줄)")
+    else:
+        for line, want in zip(history, wants, strict=True):
+            problems += _line_problems(line, want, str(want["id"]))
+    times = [_when(line.get("at")) if isinstance(line, Mapping) else None for line in history]
+    if any(t is None for t in times):
+        problems.append("이력 at 을 읽을 수 없는 줄이 있음")
+    elif any(later < earlier for earlier, later in zip(times, times[1:], strict=False)):
+        problems.append("이력 at 이 줄어드는 곳이 있음")
+    for number, line in enumerate(history[1 : 1 + len(retries)], 1):
+        at = line.get("at") if isinstance(line, Mapping) else None
+        before, after = marks[number - 1], marks[number]
+        if not (_after(at, before) and not _after(at, after)):
+            problems.append(f"H{number} at 이 그 다시 분석의 앞 시작 뒤 · 새 시작 이전이 아님")
+    if review.get("version") != len(retries) or review.get("status") != "needed" or review.get("findings") != {}:
+        problems.append(f"version {review.get('version')!r}(기대 {len(retries)}) · status · findings 가 기본값이 아님")
+    checks.report(
+        f"검토 이력 — [S1, 다시 분석 {len(retries)}줄(사유 = 앞 실패 이유), S2] · at 이 줄지 않음",
+        problems,
+        f"이력 {len(history)}줄 · version {review.get('version')}",
+    )
+    if not act:
+        _say("  검토 동작 하나 뒤 이력 순서 확인 건너뜀(--no-review)")
+        return
+    if not targets:
+        checks.report("검토 동작 하나 뒤 이력 순서", ["검토 가능 항목 없음"])
+        return
+    flow = _ReviewFlow(run, analysis_id, row, checks)
+    a = targets[0]
+    flow.write(
+        f"set_status confirmed({a['num']}) — 새 줄은 S2 뒤",
+        {"type": "set_status", "finding_id": a["id"], "status": "confirmed", "reason": TEXT_CONFIRM},
+        ("confirm", f"{a['num']} {a['category']}", "미확인 → 확인함", TEXT_CONFIRM),
+        lambda r, _: flow.expect_finding(r, a, status="confirmed") + flow.touched_now(r, a),
+    )
+    response, last = _get(run, analysis_id)
+    last_review = last.get("review") if isinstance(last, Mapping) else None
+    lines = last_review.get("history") if isinstance(last_review, Mapping) and isinstance(last_review.get("history"), list) else []
+    ids = [line.get("id") if isinstance(line, Mapping) else None for line in lines]
+    want_ids = ["S1", *[r["id"] for r in retries], "S2", f"H{len(retries) + 1}"]
+    problems = [] if ids == want_ids else [f"이력 id 순서 {ids}(기대 {want_ids})"]
+    times = [_when(line.get("at")) if isinstance(line, Mapping) else None for line in lines]
+    if any(t is None for t in times) or any(later < earlier for earlier, later in zip(times, times[1:], strict=False)):
+        problems.append("이력 at 이 줄어들거나 읽을 수 없음")
+    checks.report(f"검토 동작 뒤 이력 — {want_ids} · at 이 줄지 않음", problems)
+
+
 def _check_upstage_files(run: Run, documents: list[Mapping[str, Any]]) -> bool | None:
     """(정상 종료 때) 서버가 Upstage 파일을 지웠는지(GET /files/{id} 404). 키가 없으면 None(확인 안 함)."""
     key = run.upstage_key()
@@ -1085,23 +1509,25 @@ def _reread_for_cleanup(run: Run) -> bool:
     if not isinstance(row, Mapping):
         run.log("정리: 분석을 다시 읽었지만 응답 모양이 다릅니다")
         return False
-    run.observe(row)
-    # 끝났으면 서버가 정리했고, file id 가 있으면 여기서 지운다. 둘 다 아니면 시작이 서버에서 아직 돌거나
-    # 응답이 일부만 왔을 수 있어 Upstage 에 파일이 남았는지 알 수 없다.
-    return run.terminal or bool(run.file_ids)
+    run.observe(row)  # 앞에서 모은 file id 는 그대로 두고 더한다
+    run.start_pending = False
+    # 끝났으면 서버가 정리했고, 지금 행에 file id 가 있으면 여기서 지운다. 둘 다 아니면 시작(다시 분석)이 서버에서 아직
+    # 돌거나 응답이 일부만 왔을 수 있어 Upstage 에 파일이 남았는지 알 수 없다(앞 실행의 file id 만으로는 판단하지 않는다).
+    return run.terminal or bool(_file_ids(row))
 
 
 def _cleanup(run: Run) -> bool:
     """모든 종료 경로의 finally — 이번 실행이 Upstage 에 남겼을 수 있는 파일을 지운다(404 = 성공).
 
     '시작 응답을 받았다'와 '정리에 필요한 file id 를 확보했다'는 다르다: 시작을 요청한 분석이 끝나지 않았고
-    file id 도 모르면(응답을 받았더라도) 분석을 한 번 다시 읽어 확보한다. 그래도 상태·파일 여부를 확인할 수
-    없으면 정리 성공으로 치지 않는다(False → 종료 코드 1). 정리를 못 해도 False.
+    file id 도 모르면(응답을 받았더라도) 분석을 한 번 다시 읽어 확보한다. /start·/retry 의 응답을 관찰하지 못했으면
+    (start_pending — 앞에서 끝난 것으로 보았어도, file id 를 이미 모았어도) 늘 다시 읽어 새 file id 를 더한다.
+    그래도 상태·파일 여부를 확인할 수 없으면 정리 성공으로 치지 않는다(False → 종료 코드 1). 정리를 못 해도 False.
     """
     if run.analysis_id is None or not run.start_requested:
         return True  # 시작하지 않았으면 Upstage 에 올린 것이 없다
     known = True
-    if not run.terminal and not run.file_ids:
+    if run.start_pending or (not run.terminal and not run.file_ids):
         known = _reread_for_cleanup(run)
         if not known:
             run.log("정리 확인 못 함: 시작한 분석이 Upstage 에 파일을 남겼는지 확인하지 못했습니다")
@@ -1134,6 +1560,200 @@ def _cleanup(run: Run) -> bool:
     return ok and known
 
 
+def _remove_created(run: Run) -> bool:
+    """finally — 이번 실행이 만든 분석을 지운다(기본). --keep·--fail-with-original 이면 남긴다. 204·404 = 성공."""
+    if run.analysis_id is None or not run.created:
+        return True
+    if run.deleted:
+        run.log("정리: 이번 실행이 만든 분석은 삭제 확인에서 지웠습니다(없음 확인)")
+        return True
+    if run.keep:
+        run.log(f"정리: 이번 실행이 만든 분석을 남깁니다: {run.analysis_id}")
+        return True
+    try:
+        response = run.call("DELETE", f"/api/py/analyses/{run.analysis_id}")
+    except httpx.HTTPError as exc:
+        run.log(f"정리 못 함: 이번 실행이 만든 분석을 지우지 못했습니다({type(exc).__name__}): {run.analysis_id}")
+        return False
+    if response.status_code == 404:
+        run.log("정리: 이번 실행이 만든 분석이 이미 없습니다(DELETE 404)")
+        return True
+    if response.status_code != 204:
+        run.log(f"정리 못 함: 이번 실행이 만든 분석을 지우지 못했습니다(HTTP {response.status_code} {_detail(response)}): {run.analysis_id}")
+        return False
+    # 204 만으로 지웠다고 적지 않는다 — 다시 읽어 없음(404)을 확인한다
+    try:
+        check = run.call("GET", f"/api/py/analyses/{run.analysis_id}")
+    except httpx.HTTPError as exc:
+        run.log(f"정리 못 함: DELETE 204 뒤 지워졌는지 확인하지 못했습니다({type(exc).__name__}): {run.analysis_id}")
+        return False
+    if check.status_code != 404:
+        run.log(f"정리 못 함: DELETE 204 를 받았지만 분석이 아직 있습니다(GET HTTP {check.status_code}): {run.analysis_id}")
+        return False
+    run.deleted = True
+    run.log("정리: 이번 실행이 만든 분석을 지웠습니다(DELETE 204 · 다시 읽어 404)")
+    return True
+
+
+def _poll(run: Run, args: argparse.Namespace, analysis_id: str, row: Any) -> Any:
+    """끝날 때까지 interval 마다 조회(상태가 바뀔 때만 한 줄). 시간 초과면 None."""
+    seen = (row["status"], row.get("upstage_status"), row.get("poll_error"))
+    deadline = time.monotonic() + args.timeout
+    while row["status"] not in TERMINAL:
+        if time.monotonic() > deadline:
+            run.log(f"시간 초과({args.timeout}s) — 마지막 상태 {row['status']}")
+            return None
+        time.sleep(args.interval)
+        polled = run.call("GET", f"/api/py/analyses/{analysis_id}")
+        if polled.status_code != 200:
+            run.log(f"조회 실패: HTTP {polled.status_code} {_detail(polled)}")
+            continue
+        row = polled.json()
+        run.observe(row)
+        state = (row["status"], row.get("upstage_status"), row.get("poll_error"))
+        if state != seen:
+            extra = f" upstage={row.get('upstage_status')}" if row.get("upstage_status") else ""
+            extra += f" poll_error={row['poll_error']!r}" if row.get("poll_error") else ""
+            run.log(f"조회: 상태={row['status']}{extra}")
+            seen = state
+    return row
+
+
+def _print_verdicts(run: Run) -> None:
+    """확인 묶음마다 한 줄 — 새 확인(목록·다시 분석·삭제)은 따로 모아 판정한다(고정 기대값 문제와 섞이지 않게)."""
+    if not run.verdicts:
+        return
+    _say("확인 요약:")
+    for name, passed, new in run.verdicts:
+        _say(f"  {'[새] ' if new else ''}{name}: {'통과' if passed else '실패'}")
+    news = [passed for _, passed, new in run.verdicts if new]
+    if news:
+        _say(f"새 확인(목록·다시 분석·삭제): {sum(news)}/{len(news)} 통과 — {'기대대로' if all(news) else '기대와 다름'}")
+
+
+def _delete_or_keep(run: Run, analysis_id: str) -> bool:
+    if run.keep:
+        _say("삭제 확인 건너뜀(--keep — 이번 실행이 만든 분석을 남김)")
+        return True
+    return run.verdict("삭제", _check_delete(run, analysis_id), new=True)
+
+
+def _flow_retry(
+    run: Run, args: argparse.Namespace, analysis_id: str, upload: Mapping[str, str], content: bytes, mime_type: str, row: Mapping[str, Any]
+) -> int:
+    """--retry-flow: 원본 없이 실패 → 원본 없이 다시 분석(다시 실패) → 같은 주소로 올림 → 다시 분석(성공) → done."""
+    _say(f"다시 분석 확인(이번 실행이 만든 분석에만 · actor {REVIEW_ACTOR}):")
+    checks = _Checklist()
+    keys = set(row)
+    created_at = row.get("created_at")
+    marks: list[Any] = [row.get("started_at")]  # 시작마다 started_at(처음 시작 → 다시 분석 1 → 다시 분석 2)
+    reasons: list[Any] = [row.get("error")]  # 다시 분석마다 그 앞 실패 이유
+    problems = _not_started_problems(row)
+    if _when(row.get("started_at")) is None:
+        problems.append("started_at 을 읽을 수 없음(시작 선점이 넣어야 함)")
+    checks.report("올리지 않고 시작 → failed '업로드된 파일을 찾을 수 없습니다'(Upstage 작업 없음)", problems)
+    run.verdict("목록(실패 분석)", _check_list(run, analysis_id, "실패 분석"), new=True)
+
+    body = _retry_step(run, checks, "원본 없이 다시 분석 → 다시 실패(같은 이유 · 작업 없음 · 조회와 같은 값)", analysis_id, created_at, marks[-1], keys, started=False)
+    if body is None or body.get("status") != "failed":
+        checks.summary("다시 분석 확인")
+        run.verdict("다시 분석", False, new=True)
+        _print_verdicts(run)
+        return EXIT_FAIL
+    marks.append(body.get("started_at"))
+    reasons.append(body.get("error"))
+
+    uploaded = _upload(run, upload, content, mime_type)
+    checks.report("만들 때 받은 같은 서명 업로드 주소로 원본 올리기", [] if uploaded else ["올리기 실패"])
+    body = _retry_step(run, checks, "원본을 올린 뒤 다시 분석 → running(새 작업)", analysis_id, created_at, marks[-1], keys, started=True) if uploaded else None
+    if body is None or body.get("status") != "running":
+        checks.summary("다시 분석 확인")
+        run.verdict("다시 분석", False, new=True)
+        _print_verdicts(run)
+        return EXIT_FAIL
+    marks.append(body.get("started_at"))
+    job = body.get("upstage_job_id")
+    run.log(f"다시 분석 시작: 상태={body.get('status')} job={job}")
+
+    response, _ = _retry(run, analysis_id)
+    problems = _refused(response, 409, MSG_BUSY)
+    reread, latest = _get(run, analysis_id)  # 분석 중이면 Upstage 상태를 한 번 확인한다(작업 만들기 아님)
+    row = body
+    if reread.status_code == 200 and isinstance(latest, Mapping):
+        run.observe(latest)
+        row = latest
+        if latest.get("upstage_job_id") != job or latest.get("started_at") != marks[-1]:
+            problems.append("작업 id·started_at 이 바뀜(새 작업을 만듦)")
+        if latest.get("status") not in ("running", "done"):
+            problems.append(f"status {latest.get('status')!r}(기대 running 또는 done)")
+    else:
+        problems.append(f"다시 조회 HTTP {reread.status_code}")
+    checks.report("분석 중에 다시 분석 → 409 '이미 분석하고 있습니다.'(작업·started_at 그대로)", problems)
+
+    final = _poll(run, args, analysis_id, row)
+    if final is None:
+        checks.summary("다시 분석 확인")
+        run.verdict("다시 분석", False, new=True)
+        _print_verdicts(run)
+        return EXIT_FAIL
+    _say(f"분석 id: {analysis_id}")
+    _say(f"job id: {final.get('upstage_job_id')}")
+    _say(f"최종 상태: {final['status']}")
+    problems = [] if final["status"] == "done" and isinstance(final.get("review"), Mapping) else [f"status {final['status']!r} · review 객체 아님"]
+    if final.get("created_at") != created_at:
+        problems.append("완료 행의 created_at 이 처음과 다름(요청 시각·분석 번호·목록 순서 기준)")
+    if final.get("started_at") != marks[-1]:
+        problems.append("완료 행의 started_at 이 마지막 다시 분석 때 값과 다름(경과·걸린 시간 기준)")
+    problems += _documents_problems(final)
+    checks.report(
+        "다시 분석한 분석이 done(검토할 수 있음) · created_at 그대로 · started_at = 마지막 다시 분석",
+        problems,
+        f"created_at 그대로 {final.get('created_at') == created_at} · started_at = 마지막 다시 분석 {final.get('started_at') == marks[-1]}",
+    )
+    done = final["status"] == "done"
+    ok = done
+    if done:
+        # 고정 기대값(done 확인)이 어긋나도 아래 새 확인은 따로 돌린다(섞이지 않게)
+        ok = run.verdict("done 확인(요약·화면용 결과 고정 기대값·응답 크기)", _verify_done(run, analysis_id))
+        ok = run.verdict("원본 파일", _check_file(run, analysis_id, content)) and ok
+        _check_retry_history(run, checks, analysis_id, reasons, marks, act=not args.no_review)
+    retry_ok = run.verdict("다시 분석", checks.summary("다시 분석 확인"), new=True)
+    if done:
+        ok = run.verdict("목록", _check_list(run, analysis_id, "다시 분석한 완료 분석"), new=True) and ok
+    files_ok = _check_upstage_files(run, _documents(final))
+    if files_ok is False:
+        ok = run.verdict("Upstage 파일 지움", False)
+    ok = _delete_or_keep(run, analysis_id) and retry_ok and ok and all(passed for _, passed, _ in run.verdicts)
+    _print_verdicts(run)
+    _say(f"결과: {'기대대로' if ok else '기대와 다름'} (다시 분석 확인)")
+    return EXIT_OK if ok else EXIT_FAIL
+
+
+def _flow_fail_with_original(
+    run: Run, analysis_id: str, upload: Mapping[str, str], content: bytes, mime_type: str, row: Mapping[str, Any]
+) -> int:
+    """--fail-with-original: 원본 없이 실패시킨 뒤 같은 주소로 원본을 올리고 다시 분석하지 않고 남긴다(Upstage 0번)."""
+    _say("실패 분석 만들기(원본은 올려 두고 다시 분석하지 않음 · Upstage 작업 없음 · 지우지 않음):")
+    checks = _Checklist()
+    checks.report("올리지 않고 시작 → failed '업로드된 파일을 찾을 수 없습니다'(Upstage 작업 없음)", _not_started_problems(row))
+    run.verdict("목록(실패 분석)", _check_list(run, analysis_id, "실패 분석"), new=True)
+    uploaded = _upload(run, upload, content, mime_type)
+    checks.report("만들 때 받은 같은 서명 업로드 주소로 원본 올리기", [] if uploaded else ["올리기 실패"])
+    if uploaded:
+        run.verdict("원본 파일(올린 뒤)", _check_file(run, analysis_id, content))
+    response, latest = _get(run, analysis_id)
+    problems = (
+        _not_started_problems(latest) if response.status_code == 200 and isinstance(latest, Mapping) else [f"조회 HTTP {response.status_code}"]
+    )
+    checks.report("다시 분석하지 않고 남김 — failed 그대로(작업 없음)", problems)
+    ok = run.verdict("실패 분석 만들기", checks.summary("실패 분석 만들기")) and all(passed for _, passed, _ in run.verdicts)
+    _print_verdicts(run)
+    _say(f"분석 id: {analysis_id}")
+    _say("남김: 화면에서 다시 분석할 실패 분석입니다(목록·상세의 '삭제' 또는 DELETE /api/py/analyses/{id} 로 지움)")
+    _say(f"결과: {'기대대로' if ok else '기대와 다름'} (실패 분석 만들기)")
+    return EXIT_OK if ok else EXIT_FAIL
+
+
 def _flow(run: Run, args: argparse.Namespace) -> int:
     file_path = (ROOT / args.file) if not Path(args.file).is_absolute() else Path(args.file)
     filename = file_path.name
@@ -1144,7 +1764,13 @@ def _flow(run: Run, args: argparse.Namespace) -> int:
     _say(f"대상: {args.base_url} · 파일 {filename}({mime_type}) · {role} {content_path.name} {len(content):,} bytes")
     if args.analysis_id:
         return _flow_existing(run, args, args.analysis_id, content)
-    _say(f"기대: {args.expect}" + (" · 올리지 않음" if args.skip_upload else "") + (" · 시작하지 않음" if args.no_start else ""))
+    mode = " · 다시 분석 확인(--retry-flow)" if args.retry_flow else " · 실패 분석 만들기(--fail-with-original)" if args.fail_with_original else ""
+    _say(
+        f"기대: {'done' if args.retry_flow else 'failed' if args.fail_with_original else args.expect}{mode}"
+        + (" · 올리지 않음" if args.skip_upload else "")
+        + (" · 시작하지 않음" if args.no_start else "")
+        + (" · 끝나도 지우지 않음" if run.keep else "")
+    )
 
     # 1. health
     health = run.call("GET", "/api/py/health")
@@ -1165,6 +1791,7 @@ def _flow(run: Run, args: argparse.Namespace) -> int:
     upload = payload["upload"]
     analysis_id = analysis["id"]
     run.analysis_id = analysis_id
+    run.created = True  # 끝에 지울 대상(--keep 이면 남김)
     t_queued = time.monotonic()
     leaked = [k for k in ("agent_id", "storage_path") if k in created.text]
     run.log(f"만들기: HTTP 201 id={analysis_id} 상태={analysis['status']} 이름={analysis['name']!r}")
@@ -1173,8 +1800,10 @@ def _flow(run: Run, args: argparse.Namespace) -> int:
         run.log(f"  응답에 들어가면 안 되는 키: {leaked}")
         return EXIT_FAIL
 
-    # 3. 올리기
-    if args.skip_upload:
+    # 3. 올리기(--retry-flow·--fail-with-original 은 먼저 올리지 않고 시작해 실패시킨다)
+    if args.retry_flow or args.fail_with_original:
+        run.log("올리기 건너뜀(원본 없이 먼저 시작 — 같은 서명 주소로 나중에 올린다)")
+    elif args.skip_upload:
         run.log("올리기 건너뜀(--skip-upload)")
     elif not _upload(run, upload, content, mime_type):
         return EXIT_FAIL
@@ -1183,38 +1812,26 @@ def _flow(run: Run, args: argparse.Namespace) -> int:
         _say(f"분석 id: {analysis_id}")
         return EXIT_OK
 
-    # 4. 시작
-    run.start_requested = True
+    # 4. 시작 — 작업을 만들 수 있는 요청: 응답을 관찰하기 전에는 시작 결과 미확인(잃으면 정리가 다시 읽는다)
+    run.begin_start()
     started = run.call("POST", f"/api/py/analyses/{analysis_id}/start")
+    run.settle_start(started.status_code, _body(started))
     if started.status_code != 200:
         run.log(f"시작 실패: HTTP {started.status_code} {_detail(started)}")
         return EXIT_FAIL
     row = started.json()
     run.start_row_received = True
-    run.observe(row)
     t_running = time.monotonic() if row["status"] == "running" else None
     run.log(f"시작: HTTP 200 상태={row['status']} job={row.get('upstage_job_id')}" + (f" 오류={row['error']!r}" if row.get("error") else ""))
+    if args.retry_flow:
+        return _flow_retry(run, args, analysis_id, upload, content, mime_type, row)
+    if args.fail_with_original:
+        return _flow_fail_with_original(run, analysis_id, upload, content, mime_type, row)
 
     # 5. 조회
-    seen = (row["status"], row.get("upstage_status"), row.get("poll_error"))
-    deadline = time.monotonic() + args.timeout
-    while row["status"] not in TERMINAL:
-        if time.monotonic() > deadline:
-            run.log(f"시간 초과({args.timeout}s) — 마지막 상태 {row['status']}")
-            return EXIT_FAIL
-        time.sleep(args.interval)
-        polled = run.call("GET", f"/api/py/analyses/{analysis_id}")
-        if polled.status_code != 200:
-            run.log(f"조회 실패: HTTP {polled.status_code} {_detail(polled)}")
-            continue
-        row = polled.json()
-        run.observe(row)
-        state = (row["status"], row.get("upstage_status"), row.get("poll_error"))
-        if state != seen:
-            extra = f" upstage={row.get('upstage_status')}" if row.get("upstage_status") else ""
-            extra += f" poll_error={row['poll_error']!r}" if row.get("poll_error") else ""
-            run.log(f"조회: 상태={row['status']}{extra}")
-            seen = state
+    row = _poll(run, args, analysis_id, row)
+    if row is None:
+        return EXIT_FAIL
     t_end = time.monotonic()
 
     # 6. 결과
@@ -1224,24 +1841,27 @@ def _flow(run: Run, args: argparse.Namespace) -> int:
     ok = row["status"] == args.expect
     if row["status"] == "done":
         # 끝난 분석을 다시 읽어 확인한다(done 조회는 Upstage 를 부르지 않는다)
-        ok = _verify_done(run, analysis_id) and ok
-        ok = _check_file(run, analysis_id, content) and ok
+        ok = run.verdict("done 확인(요약·화면용 결과 고정 기대값·응답 크기)", _verify_done(run, analysis_id)) and ok
+        ok = run.verdict("원본 파일", _check_file(run, analysis_id, content)) and ok
         if args.no_review:
             _say("검토 동작 확인 건너뜀(--no-review)")
         else:
             # 이번 실행이 만든 분석이 done 이 된 뒤에만 검토 동작을 보낸다
-            ok = _check_reviews(run, analysis_id) and ok
+            ok = run.verdict("검토 동작", _check_reviews(run, analysis_id)) and ok
+        ok = run.verdict("목록", _check_list(run, analysis_id, "완료 분석"), new=True) and ok
     else:
         _say(f"오류 문구: {row.get('error')!r}")
         ok = ok and bool(row.get("error"))
 
-    files_ok = _check_upstage_files(run, row.get("documents") or [])
+    files_ok = _check_upstage_files(run, _documents(row))
     if files_ok is False:
-        ok = False
+        ok = run.verdict("Upstage 파일 지움", False)
+    ok = _delete_or_keep(run, analysis_id) and ok
 
     if t_running is not None and row["status"] == "done":
         total = t_end - t_queued
         _say(f"queued → running → done: {total:.1f}s ({'3분 안' if total <= WITHIN_SECONDS else '3분 넘음'})")
+    _print_verdicts(run)
     _say(f"결과: {'기대대로' if ok else '기대와 다름'} (기대 {args.expect})")
     return EXIT_OK if ok else EXIT_FAIL
 
@@ -1275,6 +1895,7 @@ def run_e2e(args: argparse.Namespace, *, transport: httpx.BaseTransport | None =
     run = Run(args, env, transport=transport)
     code = EXIT_FAIL
     cleaned = False
+    removed = False
     try:
         try:
             code = _flow(run, args)
@@ -1285,14 +1906,27 @@ def run_e2e(args: argparse.Namespace, *, transport: httpx.BaseTransport | None =
         except Exception as exc:
             _say(f"예상 못 한 오류: {_short(f'{type(exc).__name__}: {exc}')}")
     finally:
+        interrupted = False
         try:
             cleaned = _cleanup(run)
         except KeyboardInterrupt:
+            interrupted = True
             _say("정리 중 중단됨(Ctrl+C) — Upstage 파일을 지웠는지 확인하지 못했습니다")
         except Exception as exc:
             _say(f"정리 중 오류: {_short(type(exc).__name__)} — Upstage 파일을 지웠는지 확인하지 못했습니다")
+        # 이번 실행이 만든 분석 지우기(기본) — 정리 중 Ctrl+C 면 멈춘다(지우지 않음)
+        if interrupted:
+            if run.created and not run.deleted and run.analysis_id:
+                _say(f"정리 중 중단돼 이번 실행이 만든 분석을 지우지 않았습니다: {run.analysis_id}")
+        else:
+            try:
+                removed = _remove_created(run)
+            except KeyboardInterrupt:
+                _say("정리 중 중단됨(Ctrl+C) — 이번 실행이 만든 분석을 지웠는지 확인하지 못했습니다")
+            except Exception as exc:
+                _say(f"정리 중 오류: {_short(type(exc).__name__)} — 이번 실행이 만든 분석을 지웠는지 확인하지 못했습니다")
         run.http.close()
-    if not cleaned:
+    if not (cleaned and removed):
         _say("정리를 끝내지 못해 실패로 끝냅니다")
         return EXIT_FAIL
     return code
@@ -1320,7 +1954,34 @@ def main(argv: list[str] | None = None, *, transport: httpx.BaseTransport | None
         action="store_true",
         help="검토 동작 확인을 끈다(기본은 새 분석이 done 이 되면 검토 동작을 보내 확인)",
     )
+    parser.add_argument(
+        "--retry-flow",
+        action="store_true",
+        help="다시 분석 확인: 원본 없이 시작해 실패 → 원본 없이 다시 분석(다시 실패) → 같은 서명 주소로 올림 → 다시 분석 → done(Upstage 1번)",
+    )
+    parser.add_argument(
+        "--fail-with-original",
+        action="store_true",
+        help="원본 없이 시작해 실패시킨 뒤 같은 서명 주소로 원본을 올리고 다시 분석하지 않고 남긴다(화면 확인용, Upstage 0번)",
+    )
+    parser.add_argument("--keep", action="store_true", help="이번 실행이 만든 분석을 끝에 지우지 않는다(기본은 지움)")
     args = parser.parse_args(argv)
+    if args.retry_flow and args.fail_with_original:
+        parser.error("--retry-flow 와 --fail-with-original 은 함께 쓸 수 없습니다")
+    if args.retry_flow or args.fail_with_original:
+        flag = "--retry-flow" if args.retry_flow else "--fail-with-original"
+        clashes = [
+            name
+            for name, given in (
+                ("--analysis-id", args.analysis_id is not None),
+                ("--no-start", args.no_start),
+                ("--content-file", args.content_file is not None),
+                ("--expect failed", args.expect != "done"),
+            )
+            if given
+        ]
+        if clashes:
+            parser.error(f"{flag} 는 {', '.join(clashes)} 와 함께 쓸 수 없습니다(--skip-upload 는 같은 뜻이라 무시)")
     try:
         return run_e2e(args, transport=transport)
     except KeyboardInterrupt:  # 정리 바깥(설정 읽기 등)에서의 중단

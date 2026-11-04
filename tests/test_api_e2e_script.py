@@ -9,6 +9,10 @@
 #  검토 동작 확인(review-actions): POST 를 실제 review_action_out 으로 처리해 — 흐름 전체 통과(단계 21·쓰기 13·analyses 불변),
 #  예상과 다른 응답(409 자리에 200·이력 문구 다름·changed 다름) → 종료 코드 1, --no-review → review-actions 요청 없음,
 #  --analysis-id → 읽기만(review-actions 요청 없음 · 모양 확인), review null → 종료 코드 1.
+#  공유 목록·삭제·다시 분석(shared-analyses): 가짜 API(FakeApi — 목록은 실제 list_out, 삭제는 FakeStore cascade)로 목록 확인·
+#  삭제 확인·기본 삭제(정상·비정상 종료·--no-start)·--keep·실패 경로(목록 계약 위반·지워지지 않는 삭제·삭제 502·연결 오류),
+#  실제 FastAPI 앱(shared_ctx.install — FakeStore + 가짜 Upstage 서버)으로 --retry-flow(통과·고정 기대값과 따로 판정·옛 이력 순서·
+#  틀린 사유·원본 없이 작업을 만든 응답·--keep)·--fail-with-original·기본 흐름 삭제·분석 중 시간 초과 뒤 삭제, 인자 충돌.
 # ==========================================================================
 
 from __future__ import annotations
@@ -16,7 +20,9 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -24,12 +30,14 @@ from unittest.mock import patch
 import httpx
 import pytest
 from api_fakes import FAKE_UPSTAGE_KEY, FakeStore, FakeUpstageServer
-from fake_findings import VALUES, stored_result
+from fake_findings import VALUES, build_findings_response, stored_result
 from fake_tokens import fake_jwt
 from fastapi.testclient import TestClient
 
 from imask_backend.analyses import ApiError, analysis_out
+from imask_backend.manage import list_out
 from imask_backend.reviews import analysis_read_out, parse_action, parse_json, review_action_out
+from imask_backend.store import StoreError
 from imask_backend.textsafe import escaped_json_bytes, has_unpaired_surrogates
 from imask_backend.upstage import UpstageClient
 
@@ -46,6 +54,8 @@ UPDATED_AT = "2026-11-03T06:42:20.213505+00:00"
 REVIEW_PATH = f"/api/py/analyses/{ANALYSIS_ID}/review-actions"
 REVIEW_STEPS = 21  # 처음 조회 1 + 동작 19(쓰기 13 · changed false 1 · 거절 5) + 마지막 확인 1
 REVIEW_WRITES = 13
+MSG_NOT_FOUND = "분석 건을 찾을 수 없습니다."
+REMOVED = "정리: 이번 실행이 만든 분석을 지웠습니다(DELETE 204 · 다시 읽어 404)"  # 끝 정리 — 204 뒤 다시 읽어 없음 확인
 
 
 def load_script() -> Any:
@@ -102,6 +112,8 @@ class FakeApi:
         tamper: Callable[[dict[str, Any], bool], None] | None = None,
         review_store: bool = True,
         review_override: Callable[[FakeApi, dict[str, Any], int], httpx.Response | None] | None = None,
+        delete_mode: str | int = "ok",
+        list_override: Callable[[dict[str, Any]], dict[str, Any] | None] | None = None,
     ) -> None:
         self.start_mode = start_mode
         self.poll_mode = poll_mode
@@ -116,6 +128,10 @@ class FakeApi:
         self.review_store = review_store
         self.review_override = review_override
         self.review_posts: list[dict[str, Any]] = []
+        # 삭제(shared-analyses): ok = 204 뒤 모든 경로 404 · noop = 204 인데 지우지 않음 · gone = 처음부터 404 · 숫자 = 그 상태
+        self.delete_mode = delete_mode
+        self.deleted = False
+        self.list_override = list_override  # 목록 응답 본문을 고쳐 계약 위반을 주입한다
         self.store = FakeStore()
         self.store.analyses[ANALYSIS_ID] = {
             "id": ANALYSIS_ID,
@@ -169,6 +185,25 @@ class FakeApi:
             return httpx.Response(exc.status_code, json={"detail": exc.detail})
         return _json_response(200, out)
 
+    def _delete(self) -> httpx.Response:
+        if self.delete_mode == "connect":
+            raise httpx.ConnectError("delete lost")
+        if isinstance(self.delete_mode, int):
+            return httpx.Response(self.delete_mode, json={"detail": "분석을 지우지 못했습니다. 잠시 후 다시 시도해 주세요."})
+        if self.deleted or self.delete_mode == "gone":
+            return httpx.Response(404, json={"detail": MSG_NOT_FOUND})
+        if self.delete_mode == "ok":
+            self.deleted = True
+            self.store.delete_analysis(ANALYSIS_ID)  # 문서·검토 행 cascade
+        return httpx.Response(204)
+
+    def _list(self) -> httpx.Response:
+        """GET /api/py/analyses — FakeStore 에 넣은 분석으로 실제 목록 로직(list_out)이 만든 응답."""
+        body = list_out(self.store, 100)
+        if self.list_override is not None:
+            body = self.list_override(body) or body
+        return _json_response(200, body)
+
     def _reread(self) -> httpx.Response:
         if self.reread_mode == "connect":
             raise httpx.ConnectError("down again")
@@ -186,6 +221,12 @@ class FakeApi:
             assert request.url.params.get("token") == DOWNLOAD_TOKEN
             return httpx.Response(200, content=self.file_content)
         assert "x-demo-code" not in request.headers  # 접근 코드 없음(2026-11-03 없앰)
+        if method == "DELETE" and path == f"/api/py/analyses/{ANALYSIS_ID}":
+            return self._delete()
+        if self.deleted and path.startswith(f"/api/py/analyses/{ANALYSIS_ID}"):
+            return httpx.Response(404, json={"detail": MSG_NOT_FOUND})  # 지운 뒤(조회·원본·다시 분석·검토 동작)
+        if method == "GET" and path == "/api/py/analyses":
+            return self._list()
         if method == "GET" and path == f"/api/py/analyses/{ANALYSIS_ID}/file":
             if self.file_status != 200:
                 return httpx.Response(self.file_status, json={"detail": "원본 파일을 찾을 수 없습니다."})
@@ -285,8 +326,9 @@ def test_lost_start_response_rereads_and_deletes(script: Any, capsys: Any) -> No
     upstage.files[FILE_ID] = ("x.pdf", b"")
     code = _run(script, api, upstage, [])
     assert code == 1
-    rereads = [r for r in api.requests if r.method == "GET" and r.url.path.endswith(ANALYSIS_ID)]
-    assert len(rereads) == 1
+    first_delete = next(i for i, r in enumerate(api.requests) if r.method == "DELETE")
+    rereads = [r for r in api.requests[:first_delete] if r.method == "GET" and r.url.path.endswith(ANALYSIS_ID)]
+    assert len(rereads) == 1  # 정리의 다시 읽기(그 뒤 GET 은 끝 삭제의 없음 확인)
     assert upstage.deleted == [FILE_ID]
     assert "연결 오류: ReadTimeout" in capsys.readouterr().out
 
@@ -570,16 +612,19 @@ def _integrated(
     lose_start_response: bool = False,
     fail_first_poll: bool = True,
     fail_cleanup_read: bool = False,
+    keep: bool = True,
 ):
     """실제 app(TestClient) → e2e. 브라우저 업로드만 FakeStore 에 직접 넣고, Upstage 는 진짜 클라이언트 + 가짜 서버.
 
     fail_final_read: 시작의 마지막 DB 다시 읽기 실패(서버 대체 행). fail_first_poll: 첫 조회 연결 오류.
     lose_start_response: 서버는 시작을 끝냈지만 e2e 는 응답을 못 받음(그 뒤 GET 은 정리의 다시 읽기).
     fail_cleanup_read: 정리의 다시 읽기도 끊김.
+    keep: True 면 --keep(저장된 행을 테스트가 본다), False 면 기본 — 끝에 그 분석을 DELETE 로 지운다.
+    서버 삭제의 Upstage 정리(get_upstage_cleanup)는 따로 둔 가짜 서버(cleanup_server)로 간다(e2e 정리 횟수와 섞이지 않게).
     """
     from api_fakes import FAKE_ENV, FakeStore
 
-    from api.index import app, get_store, get_upstage
+    from api.index import app, get_store, get_upstage, get_upstage_cleanup
     from imask_backend.settings import get_settings, load_settings
 
     settings = load_settings(FAKE_ENV)
@@ -590,11 +635,16 @@ def _integrated(
     server_client = UpstageClient.from_settings(
         settings.upstage(), extra_secrets=settings.secrets(), transport=httpx.MockTransport(upstage.handle)
     )
+    cleanup_server = FakeUpstageServer()
+    cleanup_client_of_server = UpstageClient.from_settings(
+        settings.upstage(), extra_secrets=settings.secrets(), transport=httpx.MockTransport(cleanup_server.handle)
+    )
     starts: list[dict[str, Any]] = []
     gets = {"n": 0}
     app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_upstage] = lambda: lambda: server_client
+    app.dependency_overrides[get_upstage_cleanup] = lambda: lambda: cleanup_client_of_server
     try:
         with TestClient(app) as api_client:
 
@@ -627,10 +677,11 @@ def _integrated(
                 patch.object(script, "_upload", browser_upload),
                 patch.object(script, "UpstageClient", cleanup_client),
             ):
-                code = script.main(["--interval", "0"], transport=httpx.MockTransport(bridge))
+                code = script.main(["--interval", "0", *(["--keep"] if keep else [])], transport=httpx.MockTransport(bridge))
     finally:
         app.dependency_overrides.clear()
         server_client.close()
+        cleanup_client_of_server.close()
     return code, store, upstage, starts, gets["n"]
 
 
@@ -687,7 +738,7 @@ def _done_upstage() -> FakeUpstageServer:
 
 def test_review_flow_passes_against_real_review_logic(script: Any, capsys: Any) -> None:
     api = FakeApi(poll_mode="done")
-    assert _run(script, api, _done_upstage(), []) == 0
+    assert _run(script, api, _done_upstage(), ["--keep"]) == 0  # 저장된 검토 행을 본다(지우지 않음)
     out = capsys.readouterr().out
     assert "[실패]" not in out
     assert f"검토 동작 확인: {REVIEW_STEPS}/{REVIEW_STEPS} 통과 · 쓴 동작 {REVIEW_WRITES}건 — 기대대로" in out
@@ -793,7 +844,7 @@ def test_unexpected_review_response_fails(script: Any, capsys: Any, override: An
 
 def test_no_review_sends_no_review_actions(script: Any, capsys: Any) -> None:
     api = FakeApi(poll_mode="done")
-    assert _run(script, api, _done_upstage(), ["--no-review"]) == 0
+    assert _run(script, api, _done_upstage(), ["--no-review", "--keep"]) == 0
     assert _review_requests(api) == []
     assert api.store.reviews == {}
     out = capsys.readouterr().out
@@ -846,7 +897,7 @@ def test_review_null_fails(script: Any, capsys: Any, existing: bool) -> None:
 
 def _run_through_real_app(script: Any, api: FakeApi) -> tuple[int, list[dict[str, Any]], list[str]]:
     """조회·검토 동작을 실제 FastAPI 앱(TestClient)으로 — api/index.py 경로·본문 읽기(65,536 바이트 한도·413)·_json_out·
-    오류 모양까지 지난다. 만들기·시작·파일은 FakeApi 그대로. → (종료 코드, 검토 POST 마다 {type, bytes, status}, Upstage 생성 기록)"""
+    오류 모양까지 지난다. 만들기·시작·파일은 FakeApi 그대로. --keep 으로 돌린다(저장된 검토 행을 본다). → (종료 코드, 검토 POST 마다 {type, bytes, status}, Upstage 생성 기록)"""
     from api_fakes import FAKE_ENV
 
     from api.index import app, get_store, get_upstage
@@ -890,7 +941,7 @@ def _run_through_real_app(script: Any, api: FakeApi) -> tuple[int, list[dict[str
                 return UpstageClient(api_key, base_url, transport=httpx.MockTransport(upstage.handle), **kwargs)
 
             with patch.object(script, "_read_env", return_value=env), patch.object(script, "UpstageClient", client_factory):
-                code = script.main(["--skip-upload", "--interval", "0"], transport=httpx.MockTransport(handle))
+                code = script.main(["--skip-upload", "--interval", "0", "--keep"], transport=httpx.MockTransport(handle))
     finally:
         app.dependency_overrides.clear()
     return code, posts, built
@@ -963,7 +1014,7 @@ SPECIAL_KEYS = [
 @pytest.mark.parametrize(("new_key", "stored_target"), [c[1:] for c in SPECIAL_KEYS], ids=[c[0] for c in SPECIAL_KEYS])
 def test_special_extraction_keys_pass_review_checks(script: Any, capsys: Any, new_key: str, stored_target: str) -> None:
     api = _api_with_first_key(new_key)
-    code = _run(script, api, _done_upstage(), [])
+    code = _run(script, api, _done_upstage(), ["--keep"])
     out = capsys.readouterr().out
     assert "[실패]" not in out, out[-3000:]
     assert f"검토 동작 확인: {REVIEW_STEPS}/{REVIEW_STEPS} 통과 · 쓴 동작 {REVIEW_WRITES}건 — 기대대로" in out
@@ -1120,3 +1171,781 @@ def test_real_app_body_over_limit_is_still_413(script: Any, capsys: Any) -> None
     assert "HTTP 413 요청 본문이 너무 큽니다." in out
     assert "— 기대와 다름" in out
     assert api.store.reviews.get(ANALYSIS_ID, {}).get("version", 0) < REVIEW_WRITES
+
+
+# --- 공유 목록·삭제·다시 분석(shared-analyses) — 가짜 API ------------------------------------------
+
+
+def _methods(api: FakeApi, method: str, suffix: str = "") -> list[httpx.Request]:
+    return [r for r in api.requests if r.method == method and r.url.path.endswith(f"/api/py/analyses{suffix}")]
+
+
+def _api_deletes(api: FakeApi) -> list[httpx.Request]:
+    return [r for r in api.requests if r.method == "DELETE"]
+
+
+def test_default_done_flow_checks_list_then_deletes(script: Any, capsys: Any) -> None:
+    api = FakeApi(poll_mode="done")
+    assert _run(script, api, _done_upstage(), []) == 0
+    out = capsys.readouterr().out
+    assert "[실패]" not in out, out[-3000:]
+    assert "목록 확인(완료 분석): GET /api/py/analyses HTTP 200 · 1건 · " in out
+    assert "· result 키 있는 항목 0 · 이 분석 status=done review=needed risk_level=상 문서 1개: 통과" in out
+    assert "삭제 확인: 6/6 통과 — 기대대로" in out
+    assert "  [새] 목록: 통과" in out and "  [새] 삭제: 통과" in out
+    assert "새 확인(목록·다시 분석·삭제): 2/2 통과 — 기대대로" in out
+    assert "정리: 이번 실행이 만든 분석은 삭제 확인에서 지웠습니다(없음 확인)" in out
+    # 마지막 검토 POST 뒤: 목록 확인(조회 + 목록) → 삭제 확인(DELETE → GET → /file → 목록 → retry → DELETE)
+    last_review = max(i for i, r in enumerate(api.requests) if r.url.path == REVIEW_PATH)
+    tail = [(r.method, r.url.path.replace(f"/api/py/analyses/{ANALYSIS_ID}", "{id}")) for r in api.requests[last_review + 1 :]]
+    assert tail == [
+        ("GET", "{id}"),  # 마지막 거절(501자 글)의 다시 읽기
+        ("GET", "{id}"),  # 검토 동작 확인의 마지막 조회
+        ("GET", "{id}"),  # 목록 기대값을 만들 조회
+        ("GET", "/api/py/analyses"),
+        ("DELETE", "{id}"),
+        ("GET", "{id}"),
+        ("GET", "{id}/file"),
+        ("GET", "/api/py/analyses"),
+        ("POST", "{id}/retry"),
+        ("DELETE", "{id}"),
+    ]
+    assert api.store.analyses == {} and api.store.documents == {} and api.store.reviews == {}  # cascade
+
+
+def test_keep_leaves_the_analysis(script: Any, capsys: Any) -> None:
+    api = FakeApi(poll_mode="done")
+    assert _run(script, api, _done_upstage(), ["--keep"]) == 0
+    assert _api_deletes(api) == []
+    assert ANALYSIS_ID in api.store.analyses
+    out = capsys.readouterr().out
+    assert "삭제 확인 건너뜀(--keep — 이번 실행이 만든 분석을 남김)" in out
+    assert f"정리: 이번 실행이 만든 분석을 남깁니다: {ANALYSIS_ID}" in out
+    assert "새 확인(목록·다시 분석·삭제): 1/1 통과 — 기대대로" in out
+
+
+def _item(body: dict[str, Any]) -> dict[str, Any] | None:
+    """목록 안의 이 분석(지운 뒤의 목록이면 None — 삭제 확인의 목록 조회에는 손대지 않는다)."""
+    found = [i for i in body["analyses"] if i["id"] == ANALYSIS_ID]
+    return found[0] if found else None
+
+
+def _list_missing(body: dict[str, Any]) -> dict[str, Any]:
+    return {"analyses": []}
+
+
+def _list_with_result(body: dict[str, Any]) -> dict[str, Any]:
+    if (item := _item(body)) is not None:
+        item["result"] = {"summary": {}}
+    return body
+
+
+def _list_wrong_review(body: dict[str, Any]) -> dict[str, Any]:
+    if (item := _item(body)) is not None:
+        item["review"] = "done"
+    return body
+
+
+def _list_wrong_risk(body: dict[str, Any]) -> dict[str, Any]:
+    if (item := _item(body)) is not None:
+        item["risk_level"] = None
+    return body
+
+
+def _list_doc_extra_key(body: dict[str, Any]) -> dict[str, Any]:
+    if (item := _item(body)) is not None:
+        item["documents"][0]["storage_path"] = "analyses/x/document.pdf"
+    return body
+
+
+def _list_twice(body: dict[str, Any]) -> dict[str, Any]:
+    if (item := _item(body)) is not None:
+        body["analyses"].append(copy.deepcopy(item))
+    return body
+
+
+def _list_out_of_order(body: dict[str, Any]) -> dict[str, Any]:
+    if (item := _item(body)) is not None:
+        older = {**copy.deepcopy(item), "id": "00000000-0000-4000-8000-0000000000ab", "created_at": "2026-01-01T00:00:00+00:00"}
+        body["analyses"].insert(0, older)
+    return body
+
+
+def _list_envelope(body: dict[str, Any]) -> dict[str, Any]:
+    return {**body, "next": None}
+
+
+@pytest.mark.parametrize(
+    ("override", "message"),
+    [
+        (_list_missing, "이 분석이 목록에 0번 있음(기대 1번)"),
+        (_list_with_result, "result 키가 있는 항목 1개"),
+        (_list_wrong_review, "이 분석의 항목이 조회 응답과 다름 ['review']"),
+        (_list_wrong_risk, "이 분석의 항목이 조회 응답과 다름 ['risk_level']"),
+        (_list_doc_extra_key, "문서 키가 계약(filename·size_bytes·mime_type)과 다른 항목 1개"),
+        (_list_twice, "이 분석이 목록에 2번 있음(기대 1번)"),
+        (_list_out_of_order, "created_at desc, id desc 순서가 아님"),
+        (_list_envelope, '응답 모양이 {"analyses": [...]} 가 아님'),
+    ],
+    ids=["missing", "result_key", "review", "risk_level", "doc_key", "twice", "order", "envelope"],
+)
+def test_list_contract_problems_fail_separately(script: Any, capsys: Any, override: Any, message: str) -> None:
+    api = FakeApi(poll_mode="done", list_override=override)
+    assert _run(script, api, _done_upstage(), []) == 1
+    out = capsys.readouterr().out
+    assert message in out
+    assert out.split("목록 확인(완료 분석):", 1)[1].split("\n", 1)[0].endswith(": 실패")
+    # 고정 기대값·검토 동작 확인은 그대로 통과 — 새 확인만 따로 실패로 보인다
+    assert "  done 확인(요약·화면용 결과 고정 기대값·응답 크기): 통과" in out
+    assert "  검토 동작: 통과" in out
+    assert "  [새] 목록: 실패" in out
+    assert "새 확인(목록·다시 분석·삭제): " in out and "— 기대와 다름" in out
+    assert "결과: 기대와 다름" in out
+    assert "예상 못 한 오류" not in out
+
+
+def test_delete_that_does_not_delete_fails(script: Any, capsys: Any) -> None:
+    # V-T3-1 m3 · M1: 204 인데 지우지 않음 → 없음 확인 실패 → 다시 분석 · 두 번째 DELETE 를 보내지 않고, 완료 표식도 달지 않아
+    # finally 가 다시 지우고 확인한다 — 그래도 남으면 정리 실패 + 분석 id(종료 1)
+    api = FakeApi(poll_mode="done", delete_mode="noop")
+    assert _run(script, api, _done_upstage(), []) == 1
+    out = capsys.readouterr().out
+    assert "  [통과] 01. DELETE → 204(본문 없음)" in out
+    assert "  [실패] 02. GET → 404" in out
+    assert "  [실패] 03. GET …/file → 404" in out
+    assert "  [실패] 04. 목록에 없음" in out and "목록에 아직 있음" in out
+    deletion = out.split("삭제 확인(이번 실행이 만든 분석):", 1)[1]
+    assert "] 05." not in deletion and "] 06." not in deletion
+    assert _methods(api, "POST", f"/{ANALYSIS_ID}/retry") == []
+    assert "  [새] 삭제: 실패" in out
+    assert "삭제 확인에서 지웠습니다" not in out
+    assert f"정리 못 함: DELETE 204 를 받았지만 분석이 아직 있습니다(GET HTTP 200): {ANALYSIS_ID}" in out
+    assert "정리를 끝내지 못해 실패로 끝냅니다" in out
+    assert len(_api_deletes(api)) == 2 and ANALYSIS_ID in api.store.analyses
+
+
+def test_delete_502_is_retried_at_the_end_and_fails(script: Any, capsys: Any) -> None:
+    api = FakeApi(poll_mode="done", delete_mode=502)
+    assert _run(script, api, _done_upstage(), []) == 1
+    out = capsys.readouterr().out
+    assert "  [실패] 01. DELETE → 204(본문 없음)" in out
+    assert "지워지지 않아 나머지 확인(다시 분석 404 등)을 보내지 않습니다" in out
+    assert _methods(api, "POST", f"/{ANALYSIS_ID}/retry") == []  # V-T3-1 M1 — 남은 분석에 다시 분석을 보내지 않는다
+    # finally 에서 한 번 더 지우려 하고, 못 지우면 정리 실패(종료 코드 1)
+    assert "정리 못 함: 이번 실행이 만든 분석을 지우지 못했습니다(HTTP 502 분석을 지우지 못했습니다." in out
+    assert "정리를 끝내지 못해 실패로 끝냅니다" in out
+    assert len(_api_deletes(api)) == 2  # 삭제 확인의 첫 DELETE + 정리(두 번째 DELETE 확인은 보내지 않음)
+
+
+@pytest.mark.parametrize(
+    ("mode", "args", "code", "message", "deletes"),
+    [
+        ("ok", [], 0, REMOVED, 1),
+        ("gone", [], 0, "정리: 이번 실행이 만든 분석이 이미 없습니다(DELETE 404)", 1),
+        (502, [], 1, "정리 못 함: 이번 실행이 만든 분석을 지우지 못했습니다(HTTP 502", 1),
+        ("connect", [], 1, "정리 못 함: 이번 실행이 만든 분석을 지우지 못했습니다(ConnectError)", 1),
+        ("ok", ["--keep"], 0, "정리: 이번 실행이 만든 분석을 남깁니다", 0),
+    ],
+    ids=["deleted", "already_gone", "http_502", "connect_error", "keep"],
+)
+def test_no_start_run_is_deleted_at_the_end(
+    script: Any, capsys: Any, mode: str | int, args: list[str], code: int, message: str, deletes: int
+) -> None:
+    api = FakeApi(delete_mode=mode)
+    upstage = FakeUpstageServer()
+    assert _run(script, api, upstage, ["--no-start", *args]) == code
+    assert len(_api_deletes(api)) == deletes
+    assert upstage.requests == []
+    out = capsys.readouterr().out
+    assert message in out
+    assert ("정리를 끝내지 못해 실패로 끝냅니다" in out) == (code == 1)
+
+
+@pytest.mark.parametrize(
+    ("poll_mode", "extra_args"),
+    [("running", ["--timeout", "0"]), ("interrupt", []), ("connect", [])],
+    ids=["timeout", "keyboard_interrupt", "connection_error"],
+)
+def test_abnormal_exit_also_deletes_the_created_analysis(script: Any, capsys: Any, poll_mode: str, extra_args: list[str]) -> None:
+    api = FakeApi(poll_mode=poll_mode)
+    upstage = FakeUpstageServer()
+    upstage.files[FILE_ID] = ("x.pdf", b"")
+    assert _run(script, api, upstage, extra_args) == 1
+    assert upstage.deleted == [FILE_ID]  # Upstage 파일 정리 뒤
+    assert len(_api_deletes(api)) == 1  # 그 분석을 지운다
+    out = capsys.readouterr().out
+    assert out.index("정리: Upstage 파일 1개 삭제 요청 완료") < out.index(REMOVED)
+
+
+def test_ctrl_c_during_cleanup_does_not_delete(script: Any, capsys: Any) -> None:
+    api = FakeApi(poll_mode="running")
+    upstage = FakeUpstageServer()
+    upstage.files[FILE_ID] = ("x.pdf", b"")
+    upstage.errors[("DELETE", "file")] = KeyboardInterrupt()
+    assert _run(script, api, upstage, ["--timeout", "0"]) == 1
+    assert _api_deletes(api) == []
+    assert f"정리 중 중단돼 이번 실행이 만든 분석을 지우지 않았습니다: {ANALYSIS_ID}" in capsys.readouterr().out
+
+
+def test_analysis_id_mode_never_deletes(script: Any) -> None:
+    api = FakeApi(poll_mode="done")
+    assert _run(script, api, FakeUpstageServer(), ["--analysis-id", ANALYSIS_ID]) == 0
+    assert _api_deletes(api) == [] and _methods(api, "GET") == []  # 목록도 부르지 않는다(기존 동작 그대로)
+
+
+# --- 계약 기대값(백엔드 함수를 쓰지 않고 따로 만든 것) ------------------------------------------
+
+
+def _detail_row(**overrides: Any) -> dict[str, Any]:
+    stamp = "2026-11-04T00:00:00+00:00"
+    base = {
+        "id": "a",
+        "name": "n",
+        "status": "done",
+        "error": None,
+        "created_at": stamp,
+        "updated_at": "2026-11-04T00:01:00+00:00",
+        "started_at": "2026-11-04T00:00:01+00:00",
+        "result": {"summary": {"risk_level": "중", "document_count": 2}},
+        "documents": [
+            {"id": "d2", "filename": "b.pdf", "size_bytes": 2, "mime_type": "application/pdf", "upstage_file_id": "f", "created_at": stamp},
+            {"id": "d1", "filename": "a.png", "size_bytes": 1, "mime_type": "image/png", "upstage_file_id": None, "created_at": stamp},
+        ],
+        "review": {"status": "needed"},
+    }
+    return {**base, **overrides}
+
+
+@pytest.mark.parametrize(
+    ("overrides", "risk", "review"),
+    [
+        ({}, "중", "needed"),
+        ({"review": {"status": "done"}}, "중", "done"),
+        ({"review": None}, "중", "needed"),  # 검토 기록을 못 읽은 상세 — 목록은 서류 수로 needed
+        ({"result": {"summary": {"risk_level": "상", "document_count": 0}}}, "상", "none"),
+        ({"result": {"summary": {"risk_level": 3, "document_count": True}}}, None, "none"),
+        ({"result": {"summary": {"document_count": 1.0}}}, None, "none"),
+        ({"status": "failed", "result": None, "review": None}, None, "none"),
+        ({"status": "running", "result": None}, None, "none"),
+        ({"status": "partial"}, "중", "none"),
+    ],
+    ids=["done_needed", "done_done", "review_null", "count_0", "bool_count", "float_count", "failed", "running", "partial"],
+)
+def test_list_expected_follows_the_contract(script: Any, overrides: dict[str, Any], risk: Any, review: str) -> None:
+    item = script._list_expected(_detail_row(**overrides))
+    assert set(item) == script.LIST_ITEM_KEYS
+    assert (item["risk_level"], item["review"]) == (risk, review)
+    # 문서는 만든 순(created_at, 같으면 id) · 키 셋만
+    assert item["documents"] == [
+        {"filename": "a.png", "size_bytes": 1, "mime_type": "image/png"},
+        {"filename": "b.pdf", "size_bytes": 2, "mime_type": "application/pdf"},
+    ]
+
+
+def test_stored_reason_limit(script: Any) -> None:
+    assert script._stored_text("x" * 500, 500) == "x" * 500
+    assert script._stored_text("x" * 501, 500) == "x" * 499 + ELLIPSIS
+    assert script._stored_text("a" + NUL + chr(0xDC00), 500) == "a" + FFFD * 2
+
+
+# --- 실제 FastAPI 앱 + FakeStore + 가짜 Upstage 서버(shared_ctx) ------------------------------------
+
+SUPABASE_HOST = "fake-project.supabase.co"  # FakeStore 서명 다운로드 주소의 호스트
+SIGN_PREFIX = "/storage/v1/object/sign/documents/"
+
+
+def _app_run(
+    script: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    args: list[str],
+    *,
+    response: dict[str, Any] | None = None,
+    complete: bool = True,
+    tamper: Callable[[httpx.Request, int, Any], Any] | None = None,
+    configure: Callable[[Any], None] | None = None,
+    intercept: Callable[[httpx.Request], httpx.Response | None] | None = None,
+) -> tuple[int, Any, list[tuple[str, str, int]]]:
+    """e2e → 실제 app(TestClient). 저장소는 FakeStore, Upstage 는 진짜 클라이언트 + 가짜 서버(삭제 정리 포함 — 네트워크 없음).
+
+    브라우저 업로드는 FakeStore 객체에 넣고, 서명 다운로드 주소는 그 객체를 준다. complete=True 면 조회가 곧바로 완료를 본다.
+    tamper(요청, 상태, 본문) 가 값을 돌려주면 그 본문으로 바꿔 e2e 에 준다(예상과 다른 응답 주입 — 예외를 던지면 응답 유실).
+    configure(ctx) 는 TestClient 를 열기 전에 저장소·가짜 Upstage 를 고친다. intercept(요청) 가 응답을 돌려주면(또는 예외를 던지면)
+    앱에 보내지 않고 그것을 쓴다(서버까지 가지 않은 실패·지워지지 않는 204 흉내).
+    다시 분석·검토 POST 앞에는 20ms 쉰다 — Windows 시계 해상도에서도 started_at·이력 at 이 앞 시각과 같아지지 않게."""
+    from shared_ctx import install
+
+    from api.index import app
+
+    ctx = install(monkeypatch)
+    if response is not None:
+        ctx.server.full_response = response
+    if complete:
+        ctx.server.last_status = "completed"
+    if configure is not None:
+        configure(ctx)
+    seen: list[tuple[str, str, int]] = []
+    try:
+        with TestClient(app) as client:
+            ctx.client = client
+
+            def bridge(request: httpx.Request) -> httpx.Response:
+                if request.url.host == SUPABASE_HOST:  # 서명 다운로드(사용자 지정 헤더 없이)
+                    data = ctx.store.objects.get(request.url.path.split(SIGN_PREFIX, 1)[1])
+                    return httpx.Response(200 if data is not None else 404, content=data or b"")
+                if request.method == "POST" and request.url.path.endswith(("/retry", "/review-actions")):
+                    time.sleep(0.02)
+                if intercept is not None:
+                    stubbed = intercept(request)
+                    if stubbed is not None:
+                        seen.append((request.method, request.url.path, stubbed.status_code))
+                        return stubbed
+                answer = client.request(
+                    request.method, request.url.path, params=request.url.params, headers=dict(request.headers), content=request.content
+                )
+                seen.append((request.method, request.url.path, answer.status_code))
+                content = answer.content
+                if tamper is not None and content:
+                    changed = tamper(request, answer.status_code, json.loads(content))
+                    if changed is not None:
+                        content = json.dumps(changed, ensure_ascii=False).encode("utf-8")
+                headers = {"content-type": answer.headers.get("content-type", "application/json")}
+                if "cache-control" in answer.headers:
+                    headers["cache-control"] = answer.headers["cache-control"]
+                return httpx.Response(answer.status_code, content=content, headers=headers)
+
+            def browser_upload(_run: Any, upload: dict[str, str], content: bytes, _mime: str) -> bool:
+                ctx.store.objects[upload["path"]] = content
+                return True
+
+            def script_upstage(api_key: str, base_url: str, **kwargs: Any) -> UpstageClient:
+                return UpstageClient(api_key, base_url, transport=httpx.MockTransport(ctx.server.handle), **kwargs)
+
+            env = {"UPSTAGE_API_KEY": FAKE_UPSTAGE_KEY}
+            with (
+                patch.object(script, "_read_env", return_value=env),
+                patch.object(script, "_upload", browser_upload),
+                patch.object(script, "UpstageClient", script_upstage),
+            ):
+                code = script.main(["--interval", "0", *args], transport=httpx.MockTransport(bridge))
+    finally:
+        app.dependency_overrides.clear()
+    return code, ctx, seen
+
+
+def _retry_posts(seen: list[tuple[str, str, int]]) -> list[int]:
+    return [status for method, path, status in seen if method == "POST" and path.endswith("/retry")]
+
+
+def test_retry_flow_through_real_app_passes_and_deletes(script: Any, monkeypatch: pytest.MonkeyPatch, capsys: Any) -> None:
+    code, ctx, seen = _app_run(script, monkeypatch, ["--retry-flow"], response=build_findings_response())
+    out = capsys.readouterr().out
+    assert "[실패]" not in out, out[-4000:]
+    assert code == 0
+    # Upstage: 원본 없이 시작·다시 분석은 0번, 올린 뒤 다시 분석에서 올리기 1 · 작업 만들기 1
+    assert len(ctx.server.job_bodies) == 1
+    assert len(ctx.server.calls("POST", "files")) == 1
+    # 다시 분석 POST: 원본 없음(200 failed) → 올린 뒤(200 running) → 분석 중(409) → 지운 뒤(404)
+    assert _retry_posts(seen) == [200, 200, 409, 404]
+    assert "다시 분석 확인: " in out and " 통과 — 기대대로" in out
+    assert "검토 이력 — [S1, 다시 분석 2줄(사유 = 앞 실패 이유), S2] · at 이 줄지 않음 — 이력 4줄 · version 2" in out
+    assert "검토 동작 뒤 이력 — ['S1', 'H1', 'H2', 'S2', 'H3'] · at 이 줄지 않음" in out
+    assert "목록 확인(실패 분석): " in out and "이 분석 status=failed review=none risk_level=None 문서 1개: 통과" in out
+    assert "목록 확인(다시 분석한 완료 분석): " in out and "이 분석 status=done review=needed risk_level=상 문서 1개: 통과" in out
+    assert "새 확인(목록·다시 분석·삭제): 4/4 통과 — 기대대로" in out
+    assert "  done 확인(요약·화면용 결과 고정 기대값·응답 크기): 통과" in out
+    assert ctx.store.analyses == {} and ctx.store.objects == {} and ctx.store.reviews == {}  # 지움(원본·검토 행 포함)
+
+
+def test_retry_flow_keep_stores_retry_lines_with_previous_reasons(script: Any, monkeypatch: pytest.MonkeyPatch, capsys: Any) -> None:
+    code, ctx, seen = _app_run(script, monkeypatch, ["--retry-flow", "--keep"], response=build_findings_response())
+    out = capsys.readouterr().out
+    assert code == 0, out[-4000:]
+    assert [m for m, _, _ in seen if m == "DELETE"] == []
+    (row,) = ctx.store.analyses.values()
+    assert row["status"] == "done" and row["started_at"] > row["created_at"]
+    history = ctx.store.reviews[row["id"]]["history"]
+    assert [line["kind"] for line in history] == ["retry", "retry", "confirm"]
+    assert [line["reason"] for line in history[:2]] == [script.MSG_FILE_MISSING] * 2
+    assert {line["change"] for line in history[:2]} == {"같은 파일로 다시 분석 요청"}
+    assert "삭제 확인 건너뜀(--keep" in out
+
+
+def test_retry_flow_judges_fixed_expectations_separately(script: Any, monkeypatch: pytest.MonkeyPatch, capsys: Any) -> None:
+    # 가짜 서버의 기본 응답(서류 6 · 추출 키 하나)은 고정 기대값(탐지 29 등)과 다르다 — 새 확인은 따로 통과로 보인다
+    code, ctx, _ = _app_run(script, monkeypatch, ["--retry-flow"])
+    out = capsys.readouterr().out
+    assert code == 1
+    assert "  done 확인(요약·화면용 결과 고정 기대값·응답 크기): 실패" in out
+    assert "  [새] 다시 분석: 통과" in out and "  [새] 삭제: 통과" in out
+    assert "새 확인(목록·다시 분석·삭제): 4/4 통과 — 기대대로" in out
+    assert ctx.store.analyses == {}
+
+
+def _old_history_order(request: httpx.Request, status: int, body: Any) -> Any:
+    # 예전 순서 [S1, S2, 저장된 줄…] 로 돌려준다(retry 줄이 S2 뒤)
+    review = body.get("review") if isinstance(body, dict) else None
+    if request.method == "GET" and isinstance(review, dict) and len(review["history"]) >= 4:
+        lines = review["history"]
+        system = [line for line in lines if line["id"] in ("S1", "S2")]
+        review["history"] = system + [line for line in lines if line["id"] not in ("S1", "S2")]
+        return body
+    return None
+
+
+def _wrong_retry_reason(request: httpx.Request, status: int, body: Any) -> Any:
+    review = body.get("review") if isinstance(body, dict) else None
+    if request.method == "GET" and isinstance(review, dict) and len(review["history"]) == 4:
+        review["history"][1]["reason"] = "다른 이유"
+        return body
+    return None
+
+
+def _job_without_original(request: httpx.Request, status: int, body: Any) -> Any:
+    # 원본 없이 다시 분석한 응답이 작업을 만든 것처럼(running · job id)
+    if request.url.path.endswith("/retry") and status == 200 and body.get("status") == "failed":
+        return {**body, "status": "running", "error": None, "upstage_job_id": "job_unexpected"}
+    return None
+
+
+@pytest.mark.parametrize(
+    ("tamper", "message"),
+    [
+        (_old_history_order, "H1 id: 'S2' (기대 'H1')"),
+        (_wrong_retry_reason, "H1 reason: '다른 이유'"),
+        (_job_without_original, "upstage_job_id 가 있음(Upstage 작업을 만듦)"),
+    ],
+    ids=["old_history_order", "wrong_reason", "job_without_original"],
+)
+def test_retry_flow_problems_fail(script: Any, monkeypatch: pytest.MonkeyPatch, capsys: Any, tamper: Any, message: str) -> None:
+    code, ctx, _ = _app_run(script, monkeypatch, ["--retry-flow"], response=build_findings_response(), tamper=tamper)
+    out = capsys.readouterr().out
+    assert code == 1
+    assert message in out, out[-4000:]
+    assert "  [새] 다시 분석: 실패" in out
+    assert "다시 분석 확인: " in out and "— 기대와 다름" in out
+    assert ctx.store.analyses == {}  # 실패해도 끝에 지운다
+
+
+def test_retry_flow_output_has_no_signed_token(script: Any, monkeypatch: pytest.MonkeyPatch, capsys: Any) -> None:
+    tokens: list[str] = []
+
+    def record(request: httpx.Request, status: int, body: Any) -> Any:
+        if request.method == "POST" and request.url.path == "/api/py/analyses" and status == 201:
+            tokens.append(body["upload"]["token"])
+        return None
+
+    _app_run(script, monkeypatch, ["--retry-flow"], response=build_findings_response(), tamper=record)
+    out = capsys.readouterr().out
+    assert tokens and tokens[0][:24] not in out
+    assert FAKE_UPSTAGE_KEY not in out
+
+
+def test_fail_with_original_leaves_a_retryable_failed_analysis(script: Any, monkeypatch: pytest.MonkeyPatch, capsys: Any) -> None:
+    code, ctx, seen = _app_run(script, monkeypatch, ["--fail-with-original"])
+    out = capsys.readouterr().out
+    assert "[실패]" not in out, out[-3000:]
+    assert code == 0
+    assert ctx.server.requests == [] and ctx.server.job_bodies == []  # Upstage 0번
+    assert [m for m, _, _ in seen if m == "DELETE"] == [] and _retry_posts(seen) == []
+    (row,) = ctx.store.analyses.values()
+    assert (row["status"], row["error"], row["upstage_job_id"]) == ("failed", script.MSG_FILE_MISSING, None)
+    (doc,) = ctx.store.docs_of(row["id"])
+    assert ctx.store.objects[doc["storage_path"]] == BUNDLE  # 같은 서명 주소로 올린 원본
+    assert f"분석 id: {row['id']}" in out and "남김: 화면에서 다시 분석할 실패 분석입니다" in out
+    assert "올린 내용과 sha256 일치" in out
+
+
+def test_default_flow_through_real_app_lists_and_deletes(script: Any, monkeypatch: pytest.MonkeyPatch, capsys: Any) -> None:
+    code, ctx, seen = _app_run(script, monkeypatch, [], response=build_findings_response())
+    out = capsys.readouterr().out
+    assert "[실패]" not in out, out[-3000:]
+    assert code == 0
+    assert len(ctx.server.job_bodies) == 1
+    assert [s for m, _, s in seen if m == "DELETE"] == [204, 404]
+    assert "새 확인(목록·다시 분석·삭제): 2/2 통과 — 기대대로" in out
+    assert ctx.store.analyses == {} and ctx.store.objects == {} and ctx.store.reviews == {}
+
+
+def test_running_analysis_is_deleted_after_a_timeout(script: Any, monkeypatch: pytest.MonkeyPatch, capsys: Any) -> None:
+    # 분석 중에 끝나도(시간 초과) 그 분석을 지운다 — 삭제는 상태와 상관없다
+    code, ctx, seen = _app_run(script, monkeypatch, ["--timeout", "0"], complete=False)
+    out = capsys.readouterr().out
+    assert code == 1
+    assert len(ctx.server.job_bodies) == 1
+    assert [s for m, _, s in seen if m == "DELETE"] == [204]
+    assert ctx.store.analyses == {} and ctx.store.objects == {}
+    assert REMOVED in out
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["--retry-flow", "--fail-with-original"],
+        ["--retry-flow", "--analysis-id", ANALYSIS_ID],
+        ["--retry-flow", "--no-start"],
+        ["--fail-with-original", "--content-file", "x.bin"],
+        ["--retry-flow", "--expect", "failed"],
+    ],
+    ids=["both_modes", "analysis_id", "no_start", "content_file", "expect_failed"],
+)
+def test_conflicting_flags_are_rejected(script: Any, capsys: Any, args: list[str]) -> None:
+    with pytest.raises(SystemExit) as exc:
+        script.main(args)
+    assert exc.value.code == 2
+    assert "함께 쓸 수 없습니다" in capsys.readouterr().err
+
+
+# --- V-T3-1 수정(T3-fix1): 삭제 실패 뒤 다시 분석 금지 · 다시 분석 응답 유실 정리 · 완료 시각 판정 · documents 모양 ---------
+
+
+def _first_job_fails(ctx: Any) -> None:
+    """첫 작업 만들기만 503 — 원본이 버킷에 있는 failed 분석을 만든다(다시 분석하면 실제로 작업이 생기는 상태)."""
+    original = ctx.server.handle
+    calls = [0]
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path.endswith("/responses"):
+            calls[0] += 1
+            if calls[0] == 1:
+                request.read()
+                ctx.server.requests.append(request)
+                return httpx.Response(503, json={"error": {"message": "synthetic transient failure"}})
+        return original(request)
+
+    ctx.server.handle = handle
+
+
+def _broken_remove(ctx: Any) -> None:
+    _first_job_fails(ctx)
+
+    def fail(paths: Any) -> None:
+        raise StoreError("synthetic remove failure")
+
+    ctx.store.remove_objects = fail
+
+
+def _row_never_deleted(ctx: Any) -> None:
+    # 행 지우기가 매번 0행이고 행이 바뀐 것처럼 보여(3번 모두 짐) 409. 원본도 남겨 둔다(다시 분석하면 작업이 생기는 상태).
+    _first_job_fails(ctx)
+    ctx.store.remove_objects = lambda paths: None
+
+    def never(analysis_id: str, *, expect_updated_at: str | None = None) -> int:
+        row = ctx.store.analyses[analysis_id]
+        row["updated_at"] = datetime.now(UTC).isoformat()
+        return 0
+
+    ctx.store.delete_analysis = never
+
+
+def _delete_connect_error(request: httpx.Request) -> httpx.Response | None:
+    if request.method == "DELETE":
+        raise httpx.ConnectError("synthetic delete lost")
+    return None
+
+
+def _delete_noop_204(request: httpx.Request) -> httpx.Response | None:
+    return httpx.Response(204) if request.method == "DELETE" else None
+
+
+@pytest.mark.parametrize(
+    ("configure", "intercept", "first_status"),
+    [
+        (_broken_remove, None, 502),
+        (_row_never_deleted, None, 409),
+        (_first_job_fails, _delete_connect_error, None),
+        (_first_job_fails, _delete_noop_204, 204),
+    ],
+    ids=["delete_502", "delete_409", "delete_connect_error", "delete_204_not_deleted"],
+)
+def test_unconfirmed_delete_sends_no_retry(
+    script: Any, monkeypatch: pytest.MonkeyPatch, capsys: Any, configure: Any, intercept: Any, first_status: int | None
+) -> None:
+    # V-T3-1 M1: 원본이 있는 failed 분석에서 지운 것이 확인되지 않으면 '지운 분석 다시 분석' 을 보내지 않는다(작업 0)
+    code, ctx, seen = _app_run(script, monkeypatch, ["--expect", "failed"], complete=False, configure=configure, intercept=intercept)
+    out = capsys.readouterr().out
+    assert code == 1
+    assert "최종 상태: failed" in out
+    (row,) = ctx.store.analyses.values()  # 지워지지 않았다
+    (doc,) = ctx.store.docs_of(row["id"])
+    assert doc["storage_path"] in ctx.store.objects  # 원본이 남았다(다시 분석하면 실제로 작업이 생기는 상태)
+    assert _retry_posts(seen) == []
+    assert len(ctx.server.calls("POST", "responses")) == 1  # 처음의 실패한 작업 만들기뿐
+    assert len(ctx.server.calls("POST", "files")) == 1
+    assert set(ctx.server.files) - set(ctx.server.deleted) == set()
+    assert "  [새] 삭제: 실패" in out and "삭제 확인에서 지웠습니다" not in out
+    assert "정리를 끝내지 못해 실패로 끝냅니다" in out and row["id"] in out.split("정리 못 함:", 1)[1]
+    if first_status is not None:
+        assert [s for m, _, s in seen if m == "DELETE"] == [first_status, first_status]  # 삭제 확인 + 정리(두 번째 DELETE 확인 없음)
+
+
+def _lose_second_retry(kind: str) -> Callable[[httpx.Request, int, Any], Any]:
+    count = [0]
+
+    def tamper(request: httpx.Request, status: int, body: Any) -> Any:
+        if request.method == "POST" and request.url.path.endswith("/retry") and status == 200:
+            count[0] += 1
+            if count[0] == 2:  # 원본을 올린 뒤의 다시 분석 — 서버는 작업을 만들었고 응답만 잃는다
+                if kind == "interrupt":
+                    raise KeyboardInterrupt
+                raise (httpx.ReadTimeout if kind == "timeout" else httpx.ConnectError)("synthetic lost retry response")
+        return None
+
+    return tamper
+
+
+@pytest.mark.parametrize("kind", ["timeout", "connect", "interrupt"])
+def test_lost_retry_response_still_cleans_upstage_files(script: Any, monkeypatch: pytest.MonkeyPatch, capsys: Any, kind: str) -> None:
+    # V-T3-1 M2: 앞의 원본 없는 실패(끝남)를 믿지 않고 정리 단계가 다시 읽어 새 file id 를 지운다(--keep 이라 분석은 남음)
+    code, ctx, seen = _app_run(
+        script, monkeypatch, ["--retry-flow", "--keep"], response=build_findings_response(), complete=False, tamper=_lose_second_retry(kind)
+    )
+    out = capsys.readouterr().out
+    assert code == 1
+    assert len(ctx.server.job_bodies) == 1 and len(ctx.server.calls("POST", "files")) == 1
+    assert set(ctx.server.files) - set(ctx.server.deleted) == set(), out[-2000:]
+    assert "정리: Upstage 파일 1개 삭제 요청 완료" in out and "정리 확인 못 함" not in out
+    (row,) = ctx.store.analyses.values()
+    assert row["status"] == "running"  # --keep — 분석·원본은 남긴다
+    assert "정리: 이번 실행이 만든 분석을 남깁니다" in out
+    # 정리의 다시 읽기는 응답을 잃은 다시 분석 뒤에 있다
+    last_retry = max(i for i, (m, p, _) in enumerate(seen) if m == "POST" and p.endswith("/retry"))
+    assert any(m == "GET" and p == f"/api/py/analyses/{row['id']}" for m, p, _ in seen[last_retry + 1 :])
+
+
+def test_lost_retry_response_without_keep_cleans_files_then_deletes(script: Any, monkeypatch: pytest.MonkeyPatch, capsys: Any) -> None:
+    code, ctx, _ = _app_run(
+        script, monkeypatch, ["--retry-flow"], response=build_findings_response(), complete=False, tamper=_lose_second_retry("timeout")
+    )
+    out = capsys.readouterr().out
+    assert code == 1
+    assert set(ctx.server.files) - set(ctx.server.deleted) == set()
+    assert ctx.store.analyses == {} and ctx.store.objects == {}
+    assert REMOVED in out
+
+
+def test_settle_start_keeps_pending_unless_observed_or_refused(script: Any) -> None:
+    run = script.Run(script.argparse.Namespace(base_url="http://127.0.0.1:8200"), {})
+    try:
+        run.observe({"status": "failed", "documents": []})
+        assert run.terminal
+        run.begin_start()
+        assert run.start_requested and run.start_pending
+        for status in (500, 502, 503):
+            run.settle_start(status, {"detail": "x"})
+            assert run.start_pending  # 서버가 작업을 만들었을 수 있다
+        run.settle_start(200, ["not", "an", "object"])
+        assert run.start_pending
+        for status in (400, 404, 409, 413):
+            run.begin_start()
+            run.settle_start(status, {"detail": "x"})
+            assert not run.start_pending  # 작업을 만들지 않는 거절
+        run.begin_start()
+        run.settle_start(200, {"status": "running", "documents": [{"upstage_file_id": "file_new"}]})
+        assert not run.start_pending and not run.terminal and list(run.file_ids) == ["file_new"]
+    finally:
+        run.http.close()
+
+
+@pytest.mark.parametrize(
+    ("field", "message"),
+    [
+        ("started_at", "완료 행의 started_at 이 마지막 다시 분석 때 값과 다름"),
+        ("created_at", "완료 행의 created_at 이 처음과 다름"),
+    ],
+)
+def test_changed_times_at_completion_fail_the_retry_check(
+    script: Any, monkeypatch: pytest.MonkeyPatch, capsys: Any, field: str, message: str
+) -> None:
+    # V-T3-1 m1: 분석 중 확인은 그대로 통과하고, 완료된 응답들에서만 시각이 바뀌면 '다시 분석' 확인 실패 · 종료 1
+    done_reads = [0]
+
+    def change(request: httpx.Request, status: int, body: Any) -> Any:
+        if isinstance(body, dict) and body.get("status") == "done" and "id" in body:
+            done_reads[0] += 1
+            if done_reads[0] == 1:  # 분석 중 다시 분석 409 뒤의 다시 읽기 — 분석 중 그대로 보이게
+                return {**body, "status": "running", "result": None, "review": None}
+            return {**body, field: "2020-01-01T00:00:00+00:00"}
+        return None
+
+    code, ctx, _ = _app_run(script, monkeypatch, ["--retry-flow"], response=build_findings_response(), tamper=change)
+    out = capsys.readouterr().out
+    assert code == 1
+    assert "  [통과] 05. 분석 중에 다시 분석" in out
+    assert message in out
+    assert "  [새] 다시 분석: 실패" in out
+    assert ctx.store.analyses == {}
+
+
+BAD_DOCUMENTS = [7, "x", {"filename": "a.pdf"}, None, [7, {"filename": "a.pdf"}]]
+BAD_IDS = ["number", "string", "object", "null", "bad_item"]
+
+
+@pytest.mark.parametrize("documents", BAD_DOCUMENTS, ids=BAD_IDS)
+def test_malformed_list_documents_fail_without_exception(
+    script: Any, monkeypatch: pytest.MonkeyPatch, capsys: Any, documents: Any
+) -> None:
+    def tamper(request: httpx.Request, status: int, body: Any) -> Any:
+        if request.method == "GET" and request.url.path == "/api/py/analyses" and body["analyses"]:
+            body["analyses"][0]["documents"] = documents
+            return body
+        return None
+
+    code, ctx, _ = _app_run(script, monkeypatch, [], response=build_findings_response(), tamper=tamper)
+    out = capsys.readouterr().out
+    assert "예상 못 한 오류" not in out, out[-2000:]
+    assert code == 1
+    assert "확인 요약:" in out and "  [새] 목록: 실패" in out and "  [새] 삭제: 통과" in out
+    assert ctx.store.analyses == {}
+
+
+@pytest.mark.parametrize("documents", BAD_DOCUMENTS, ids=BAD_IDS)
+def test_malformed_retry_documents_fail_without_exception(
+    script: Any, monkeypatch: pytest.MonkeyPatch, capsys: Any, documents: Any
+) -> None:
+    def tamper(request: httpx.Request, status: int, body: Any) -> Any:
+        if request.method == "POST" and request.url.path.endswith("/retry") and status == 200:
+            return {**body, "documents": documents}
+        return None
+
+    code, ctx, _ = _app_run(script, monkeypatch, ["--retry-flow"], response=build_findings_response(), tamper=tamper)
+    out = capsys.readouterr().out
+    assert "예상 못 한 오류" not in out, out[-2000:]
+    assert code == 1
+    assert "확인 요약:" in out and "  [새] 다시 분석: 실패" in out
+    assert "documents 가 목록이 아님" in out or "documents 에 객체가 아닌 항목" in out
+    assert set(ctx.server.files) - set(ctx.server.deleted) == set()
+    assert ctx.store.analyses == {}
+
+
+@pytest.mark.parametrize("documents", [7, [7]], ids=["number", "bad_item"])
+def test_malformed_read_documents_fail_without_exception(
+    script: Any, monkeypatch: pytest.MonkeyPatch, capsys: Any, documents: Any
+) -> None:
+    def tamper(request: httpx.Request, status: int, body: Any) -> Any:
+        if request.method == "GET" and request.url.path.count("/") == 4 and status == 200 and isinstance(body, dict) and "status" in body:
+            return {**body, "documents": documents}  # GET /api/py/analyses/{id}
+        return None
+
+    code, ctx, _ = _app_run(script, monkeypatch, ["--retry-flow"], response=build_findings_response(), tamper=tamper)
+    out = capsys.readouterr().out
+    assert "예상 못 한 오류" not in out, out[-2000:]
+    assert code == 1
+    assert "확인 요약:" in out and "  [새] 다시 분석: 실패" in out and "  [새] 목록: 실패" in out
+    assert set(ctx.server.files) - set(ctx.server.deleted) == set()
+    assert ctx.store.analyses == {}
+
+
+def test_observe_keeps_valid_file_ids_from_malformed_documents(script: Any) -> None:
+    run = script.Run(script.argparse.Namespace(base_url="http://127.0.0.1:8200"), {})
+    try:
+        for documents in (7, "x", {"upstage_file_id": "file_obj"}, None):
+            run.observe({"status": "running", "documents": documents})
+        assert list(run.file_ids) == []
+        run.observe({"status": "running", "documents": [7, None, {"upstage_file_id": ""}, {"upstage_file_id": "file_ok"}]})
+        assert list(run.file_ids) == ["file_ok"] and not run.terminal
+        assert script._documents({"documents": 7}) == [] and script._documents("x") == []
+        assert script._documents_problems({"documents": 7}) == ["documents 가 목록이 아님(int)"]
+        assert script._documents_problems({"documents": [7, {}]}) == ["documents 에 객체가 아닌 항목 1개"]
+        assert script._documents_problems({"documents": []}) == []
+    finally:
+        run.http.close()

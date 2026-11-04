@@ -116,7 +116,13 @@ Upstage 결과는 실행마다 조금 다를 수 있습니다(예: 빈 신청인
 
 - 미션 2 제출 JSON 은 Studio 화면의 워크플로우 ⋯ → **워크플로우 설정 내보내기** 로 받습니다. 저장소 JSON 은 Studio API 의 step 형식이라 화면 내보내기와 꼴이 다릅니다.
 - 같은 조직에서 **가져오기** 를 하면 지금 워크플로우를 덮어씁니다(버전 기록은 남습니다).
-- 저장소 JSON 은 실제 Studio 설정(번호 1)과 같습니다 — 읽기 전용 조회로 step 마다 비교했습니다.
+- 저장소 JSON 은 실제 Studio 설정(번호 1)과 같습니다. 비교·다시 만들기는 `scripts/studio_workflow.py`(키는 `.env`, 출력에 키·전체 id 없음, `diff` 는 같으면 0, `create` 는 `--yes` 가 없으면 할 일만 출력):
+
+```
+python scripts/studio_workflow.py diff --agent final_imask_workflow --config 1 workflows/final_imask_workflow.json
+python scripts/studio_workflow.py show --agent final_imask_workflow
+python scripts/studio_workflow.py create workflows/final_imask_workflow.json --agent <새 이름> --yes
+```
 
 ## 알려진 한계
 

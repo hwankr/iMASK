@@ -18,7 +18,7 @@
 #  done 확인(T1 findings-api): 요약(서류·추출 = 알려진 모양 6·5 또는 5·4 · 상) + 화면용 결과 — 알려진 모양 둘 중 하나와
 #    정확히 같은 수(위임장 따로: documents 6(extracted 5·other 1)·findings 29·boxes 있는 항목 28 / 위임장 합침:
 #    documents 5(extracted 4·other 1)·findings 26·boxes 26 — 모양을 섞지 않음, EXPECTED_SHAPES),
-#    other 에 other_guide·extracted 에 validation, overall 상/권장_조치·
+#    other 에 other_guide·extracted 에 validation(옛 워크플로우만 — 최종 흐름은 아래 bundle_check verdict), overall 상/권장_조치·
 #    risk 분포(허용 값·risk_source 와 맞는지만 — unrated 를 강제하지 않음)·계약 키·id 중복·document_index·
 #    boxes 0~1, 기본 응답에 stages·response 없음, 응답 크기(기본 GET vs ?include=stages GET 바이트 — 기본이 작아야 함).
 #    검토사항(result.items, review-items BRIEF §5.3): 계약 모양(키·순서·타입·R-nn 1부터 연속·id 중복 없음·보이는 서류·쪽 범위·
@@ -26,7 +26,15 @@
 #    기대값**과 정확히 같음(nolocation = 위치 없는 보이는 탐지 항목 · lowconf = 서류마다 신뢰도 low 묶음·NUMS · other = 기타 서류,
 #    id·number·type·document_index·page·finding_id·고정 글·근거 label·page·finding_ids·finding_id). 검증 checks 는 응답에 없어
 #    missing 항목은 계산할 수 없다 — 보이는 서류의 validation 이 모두 green(또는 null)일 때만 missing 0개를 기대하고, 아니면
-#    '새 모양'으로 실패를 알린다(숫자를 느슨하게 하지 않는다 — _expected_items).
+#    '새 모양'으로 실패를 알린다(숫자를 느슨하게 하지 않는다 — _expected_items). 검토사항 키 맨 뒤 link_id(연결 종류 mismatch·
+#    weaklink 만 그 서류를 대상으로 하는 links[] id, 그 밖 null).
+#  최종 흐름 워크플로우(final_imask_workflow — final-flow T3 A, _print_final): 결과 키 links·decision·bundle_check 가 있는지(없음 ≠ null)와 계약 모양
+#    (키·순서·허용 값·L-nn 연속·link:<기준>:<대상>·연결 서류가 보이는 서류·쪽·탐지 항목·fields 80자·글 = state 고정 문구 + 이름표·
+#    조사, decision 키 5개, bundle_check {verdict, checks[키 7개]}). bundle_check 가 객체면 최종 흐름 — 서류 validation 은 null 이어도
+#    되고 대신 verdict(green·yellow·red)가 있어야 하며, 알려진 모양(위임장 따로 + 연결 4개 모두 linked · verdict green)과 같아야 한다.
+#    검토사항 기대값은 verdict green 이고 모든 연결이 linked 일 때만 묶음·연결 항목(missing·bundle·absent·mismatch·weaklink) 0개,
+#    아니면 '새 모양'. bundle_check 가 null 이면 옛 워크플로우 — links [] · decision null 이어야 한다. 출력은 개수·상태·키 이름만
+#    (받은 값은 허용 enum 글자만 그대로, 그 밖 숫자·bool·객체·목록·모르는 글자는 '<int>' 같은 타입 표기 — _kind).
 #    원본 파일: GET /analyses/{id}/file 200·키 {url, mime_type, filename} → url 로(사용자 지정 헤더 없이) 받아 올린 내용과
 #    sha256 비교. 원문 값(value·masked)·서명 URL 은 출력하지 않는다(개수·분포·바이트 수만).
 #  검토 동작 확인(review-actions, 기본 켬): **이번 실행이 만든 분석이 done 이 된 뒤에만** POST /analyses/{id}/review-actions 를
@@ -148,8 +156,17 @@ WITHIN_SECONDS = 180  # queued → running → done 기대 시간(3분)
 # 합친다(서류 5) — 2026-11-03~04 실제 실행에서 두 모양이 모두 나왔다. 수는 둘 중 한 모양과 **정확히** 같아야 한다
 # (느슨하게 보지 않는다 — 새 모양이 나오면 실패로 보이고, 확인한 뒤 이 표에 더한다).
 EXPECTED_SHAPES: tuple[dict[str, Any], ...] = (
-    # 3쪽 소득 정보 하나는 위치(page)를 못 찾아 좌표가 없다(boxes 28)
-    {"name": "위임장 따로", "documents": 6, "kinds": {"extracted": 5, "other": 1}, "findings": 29, "boxed": 28},
+    # 3쪽 소득 정보 하나는 위치(page)를 못 찾아 좌표가 없다(boxes 28). 최종 흐름 워크플로우(final_imask_workflow — 2026-11-04
+    # 실제 응답 A_smoke)도 이 모양이고, 그때는 연결 4개 모두 linked · 묶음 검증 green(final)
+    {
+        "name": "위임장 따로",
+        "documents": 6,
+        "kinds": {"extracted": 5, "other": 1},
+        "findings": 29,
+        "boxed": 28,
+        "final": {"links": 4, "verdict": "green"},
+    },
+    # 최종 흐름에서는 아직 보지 못한 모양(final 없음 — 나오면 '새 모양'으로 실패)
     {"name": "위임장 합침", "documents": 5, "kinds": {"extracted": 4, "other": 1}, "findings": 26, "boxed": 26},
 )
 EXPECTED_RISK = "상"
@@ -208,7 +225,7 @@ TEXT_ITEM_RESOLVE = "api_e2e 검토사항 해결"
 TEXT_ITEM_RESOLVE_AGAIN = "api_e2e 검토사항 다시 해결"
 
 # 검토사항 계약(review-items BRIEF §5.2·§5.3·§5.5·§5.6). 백엔드 imask_backend.items·reviews 를 쓰지 않고 따로 적는다.
-ITEM_KEYS = ("id", "number", "type", "document_index", "page", "finding_id", "title", "desc", "next", "evidence")
+ITEM_KEYS = ("id", "number", "type", "document_index", "page", "finding_id", "title", "desc", "next", "evidence", "link_id")
 ITEM_EVIDENCE_KEYS = ("label", "page", "finding_ids", "finding_id")
 ITEM_TYPES = {  # 화면 src/display/rules.ts RTYPE 의 키 → 라벨(이력 target '{번호} {라벨}')
     "unreadable": "판독 불가",
@@ -229,13 +246,36 @@ ITEM_NOLOCATION = ("원문 위치가 없는 탐지 항목", "{num} {name} — �
 ITEM_LOWCONF = ("인식 신뢰도가 낮은 항목 {n}건", "{nums}의 값이 틀렸을 수 있습니다.", "원본과 값을 비교해 확인해 주세요.")
 ITEM_OTHER = (
     "기타 서류로 분류된 문서",
-    "워크플로우가 대출 서류 5종에 해당하지 않는 기타 서류로 분류했습니다.",
+    "워크플로우가 지원 서류 종류에 해당하지 않는 기타 서류로 분류했습니다.",
     "원본에 개인정보가 있는지 직접 확인해 주세요.",
 )
 ITEM_OPEN_LABEL = "{p}쪽 열기"
 ITEM_VALUES_LABEL = "{p}쪽 값 보기"
 MSG_ITEM_NOT_FOUND = "검토사항을 찾을 수 없습니다."
 MSG_ITEM_STATE_CHANGED = "검토사항 상태가 바뀌었습니다. 새로 고친 뒤 다시 시도해 주세요."
+LINK_ITEM_TYPES = ("mismatch", "weaklink")  # link_id 가 문자열인 종류(연결 재료) — 그 밖은 null
+
+# 최종 흐름 워크플로우 결과 계약(final-flow T3 A — links·decision·bundle_check). 백엔드 함수를 쓰지 않고 따로 적는다.
+# 옛 워크플로우(묶음_검증 없음)는 links [] · decision null · bundle_check null.
+LINK_KEYS = ("id", "number", "status", "state", "title", "field", "label", "docs", "basis", "missing", "check")
+LINK_DOC_KEYS = ("document_index", "page", "fields", "finding_ids")
+LINK_STATUS = {"linked": "confirmed", "unmatched": "check", "insufficient": "check"}  # state → status
+LINK_STATES = tuple(LINK_STATUS)
+LINK_MAX_FIELDS = 80  # docs[].fields(코드 포인트)
+LINK_NEXT = "같은 고객의 서류인지 원본에서 확인해 주세요."
+LINK_TEXT = {  # state → (basis, missing, check) — {label}{p} = 이름표(40 코드 포인트)·주격 조사
+    "linked": (("두 서류의 {label}{p} 같습니다.",), "", "두 서류를 함께 보관·전달할 때 열람 권한을 확인해 주세요."),
+    "unmatched": ((), "두 서류의 {label}{p} 다릅니다.", LINK_NEXT),
+    "insufficient": ((), "비교할 {label}{p} 없습니다.", LINK_NEXT),
+}
+DECISION_KEYS = ("risk_level", "document_types", "sensitive_categories", "review_reasons", "reason")
+DECISION_LIST_KEYS = ("document_types", "sensitive_categories", "review_reasons")
+DECISION_RISKS = ("상", "중", "하", "검토 필요")
+BUNDLE_KEYS = ("verdict", "checks")
+BUNDLE_CHECK_KEYS = ("id", "name", "severity", "status", "field", "label", "group")
+BUNDLE_VERDICTS = ("green", "yellow", "red")
+BUNDLE_SEVERITIES = ("error", "warning")
+BUNDLE_STATUSES = ("pass", "fail", "absent", "unknown")
 
 # 내보내기 기록 계약(log_export — live-report BRIEF §5.6·§5.8 백엔드 문구). 백엔드 함수를 쓰지 않고 따로 적는다.
 EXPORT_KIND = "export"
@@ -583,7 +623,9 @@ def _print_view(result: Mapping[str, Any]) -> bool:
     guides = sum(1 for d in others if d.get("other_guide"))
     validations = sum(1 for d in extracted if d.get("validation"))
     shape = _known_shape(len(documents), kinds)
-    docs_ok = shape is not None and guides == len(others) and validations == len(extracted)
+    # 추출 서류마다 validation 은 옛 워크플로우(bundle_check null)만 — 최종 흐름은 검증이 묶음 하나(bundle_check verdict, _print_final)
+    final = _is_final(result)
+    docs_ok = shape is not None and guides == len(others) and (final or validations == len(extracted))
     boxed = sum(1 for f in findings if f.get("boxes"))
     # 탐지 수 · 위치 있는 항목 수는 서류 모양과 **같은 모양**의 값이어야 한다(모양을 섞지 않는다)
     counts_ok = shape is not None and len(findings) == shape["findings"] and boxed == shape["boxed"]
@@ -593,7 +635,8 @@ def _print_view(result: Mapping[str, Any]) -> bool:
     _say("화면용 결과(documents·findings·overall):")
     _say(
         f"  documents: {len(documents)} · kind {kinds} · other_guide 있음 {guides}/{len(others)}"
-        f" · validation 있음 {validations}/{len(extracted)} (알려진 모양: {shape['name'] if shape else '없음'}): {_mark(docs_ok)}"
+        f" · validation 있음 {validations}/{len(extracted)}{'(최종 흐름 — 묶음 검증으로 봄)' if final else ''}"
+        f" (알려진 모양: {shape['name'] if shape else '없음'}): {_mark(docs_ok)}"
     )
     _say(f"  findings: {len(findings)} · boxes 있는 항목 {boxed} (기대 {want}): {_mark(counts_ok)}")
     _say(f"  risk 분포: {dict(Counter(str(f.get('risk')) for f in findings))}")
@@ -612,6 +655,245 @@ def _print_view(result: Mapping[str, Any]) -> bool:
     for problem in problems[:10]:
         _say(f"    - {_short(problem)}")
     return docs_ok and counts_ok and overall_ok and not problems
+
+
+# --- 최종 흐름 결과(links·decision·bundle_check) 확인 — final-flow T3 A ----------------------------------
+# 계약 모양은 따로 적어 확인한다(백엔드 imask_backend.items·findings 를 쓰지 않음). 출력은 개수·상태·키 이름만 —
+# 연결 제목·fields·판정 글·규칙 이름 같은 받은 글자는 출력하지 않는다(허용 목록의 상태 글자만).
+
+
+FINAL_RESULT_KEYS = ("links", "decision", "bundle_check")  # 조회 응답 result 에 늘 있어야 하는 키(값은 null·[] 일 수 있음)
+LINK_STATUSES = tuple(dict.fromkeys(LINK_STATUS.values()))  # confirmed · check
+
+
+def _kind(value: Any, allowed: tuple[str, ...] = ()) -> str:
+    """최종 흐름 진단 출력용 — 허용 목록의 enum 글자만 그대로, null 은 'null', 그 밖(숫자·bool·객체·목록·모르는 글자)은
+    값 없는 타입 표기 '<int>'·'<bool>'·'<str>' …(받은 값은 어떤 꼴이든 출력하지 않는다)."""
+    if isinstance(value, str) and value in allowed:
+        return value
+    return "null" if value is None else f"<{type(value).__name__}>"
+
+
+def _is_final(result: Mapping[str, Any]) -> bool:
+    """최종 흐름 워크플로우 결과인지 — bundle_check 가 객체(묶음_검증 단계가 있음). 옛 워크플로우는 null."""
+    return isinstance(result.get("bundle_check"), Mapping)
+
+
+def _result_shape(result: Mapping[str, Any]) -> dict[str, Any] | None:
+    """화면용 결과의 서류 수 · kind 분포가 알려진 모양(EXPECTED_SHAPES) 중 하나면 그 모양."""
+    documents = [d for d in result.get("documents") or [] if isinstance(d, Mapping)]
+    return _known_shape(len(documents), dict(Counter(str(d.get("kind")) for d in documents)))
+
+
+def _particle(label: str) -> str:
+    """주격 조사(T3 글의 {P}) — 마지막 글자가 한글 음절이면 받침 있음 '이'·없음 '가', 그 밖(영문·숫자·'…' 등) '이(가)'."""
+    last = ord(label[-1]) if label else 0
+    if 0xAC00 <= last <= 0xD7A3:
+        return "이" if (last - 0xAC00) % 28 else "가"
+    return "이(가)"
+
+
+def _own_finding_ids(result: Mapping[str, Any], spans: Mapping[int, Any]) -> dict[int, set[str]]:
+    """보이는 서류마다 그 서류의 탐지 항목 id(문자열만)."""
+    own: dict[int, set[str]] = {index: set() for index in spans}
+    findings = result.get("findings")
+    for f in findings if isinstance(findings, list) else []:
+        index = f.get("document_index") if isinstance(f, Mapping) else None
+        if _is_int(index) and index in own and isinstance(f.get("id"), str):
+            own[index].add(f["id"])
+    return own
+
+
+def _link_problems(links: Any, result: Mapping[str, Any]) -> list[str]:
+    """result.links 의 계약 모양(값은 출력하지 않고 'links[n].키' 위치만): 키·순서, L-nn 1부터 연속, id 겹치지 않음·
+    'link:<기준>:<대상>', state→status, 두 서류가 보이는 서류(기준 서류는 모두 같음)·쪽이 그 서류 범위 안·finding_ids 가 그 서류의
+    탐지 항목(0~1개)·fields 1~80 코드 포인트, 글(basis·missing·check)이 state 의 고정 문구 + 이름표(label 40자)·조사와 정확히 같음."""
+    if not isinstance(links, list):
+        return ["result.links 가 목록이 아님"]
+    spans = {d["index"]: (d["page_start"], max(d["page_start"], d["page_end"])) for d in _visible_docs(result.get("documents"))}
+    own = _own_finding_ids(result, spans)
+    problems: list[str] = []
+    anchors: set[int] = set()
+    for n, link in enumerate(links):
+        where = f"links[{n}]"
+        if not isinstance(link, Mapping) or list(link) != list(LINK_KEYS):
+            problems.append(f"{where}: 키·순서가 계약과 다름")
+            continue
+        state, label, basis = link["state"], link["label"], link["basis"]
+        known = isinstance(state, str) and state in LINK_STATUS
+        checks = [
+            (known and link["status"] == LINK_STATUS[state], "state·status"),
+            (all(isinstance(link[k], str) and link[k] != "" for k in ("title", "field", "label", "check")), "title·field·label·check"),
+            (isinstance(link["missing"], str), "missing"),
+            (isinstance(basis, list) and all(isinstance(b, str) for b in basis), "basis"),
+        ]
+        if known and isinstance(label, str) and label:
+            name = _clip_name(label)
+            want_basis, want_missing, want_check = LINK_TEXT[state]
+            fill = {"label": name, "p": _particle(name)}
+            same = (
+                basis == [b.format(**fill) for b in want_basis]
+                and link["missing"] == want_missing.format(**fill)
+                and link["check"] == want_check
+            )
+            checks.append((same, "글(basis·missing·check)"))
+        docs, indexes = link["docs"], []
+        if not isinstance(docs, list) or len(docs) != 2:
+            checks.append((False, "docs(서류 2개)"))
+            docs = []
+        for m, doc in enumerate(docs):
+            at = f"docs[{m}]"
+            if not isinstance(doc, Mapping) or list(doc) != list(LINK_DOC_KEYS):
+                checks.append((False, f"{at}: 키·순서"))
+                continue
+            index, ids, fields = doc["document_index"], doc["finding_ids"], doc["fields"]
+            visible = _is_int(index) and index in spans
+            span, mine = (spans[index], own[index]) if visible else ((0, -1), set())
+            checks += [
+                (visible, f"{at}.document_index(보이는 서류)"),
+                (_is_int(doc["page"]) and span[0] <= doc["page"] <= span[1], f"{at}.page(서류 쪽 범위)"),
+                (isinstance(fields, str) and 0 < len(fields) <= LINK_MAX_FIELDS, f"{at}.fields(1~80자)"),
+                (
+                    isinstance(ids, list) and len(ids) <= 1 and all(isinstance(i, str) and i in mine for i in ids),
+                    f"{at}.finding_ids(그 서류의 탐지 항목)",
+                ),
+            ]
+            if visible:
+                indexes.append(index)
+        if len(indexes) == 2:
+            checks.append((indexes[0] != indexes[1] and link["id"] == f"link:{indexes[0]}:{indexes[1]}", "id(link:<기준>:<대상>)"))
+            anchors.add(indexes[0])
+        problems += [f"{where}.{name}" for passed, name in checks if not passed]
+    numbers = [link.get("number") if isinstance(link, Mapping) else None for link in links]
+    if numbers != [f"L-{n:02d}" for n in range(1, len(links) + 1)]:
+        problems.append("links number 가 L-01 부터 이어지지 않음")
+    ids = [link.get("id") for link in links if isinstance(link, Mapping) and isinstance(link.get("id"), str)]
+    if len(set(ids)) != len(ids):
+        problems.append("links id 가 겹침")
+    if len(anchors) > 1:
+        problems.append("links 기준 서류가 둘 이상")
+    return problems
+
+
+def _decision_problems(decision: Any) -> list[str]:
+    """result.decision — null 또는 위험도_판정 키 5개(순서 그대로): risk_level 허용 값·null, 목록 키는 문자열 목록·null, reason 글·null."""
+    if decision is None:
+        return []
+    if not isinstance(decision, Mapping) or list(decision) != list(DECISION_KEYS):
+        return ["decision: 키·순서가 계약과 다름"]
+    checks = [
+        (decision["risk_level"] is None or (isinstance(decision["risk_level"], str) and decision["risk_level"] in DECISION_RISKS), "risk_level"),
+        (decision["reason"] is None or isinstance(decision["reason"], str), "reason"),
+    ]
+    for key in DECISION_LIST_KEYS:
+        value = decision[key]
+        checks.append((value is None or (isinstance(value, list) and all(isinstance(v, str) for v in value)), key))
+    return [f"decision.{name}" for passed, name in checks if not passed]
+
+
+def _bundle_problems(bundle: Any) -> list[str]:
+    """result.bundle_check — null 또는 {verdict, checks[키 7개]}: verdict 허용 값·null, 규칙 id·name 글, severity·status 허용 값,
+    field·label·group 글·null(field 가 null 이면 label 도 null), 규칙 id 겹치지 않음. 규칙의 서류별 결과(documents)는 없다."""
+    if bundle is None:
+        return []
+    if not isinstance(bundle, Mapping) or list(bundle) != list(BUNDLE_KEYS):
+        return ["bundle_check: 키·순서가 계약과 다름"]
+    verdict, checks = bundle["verdict"], bundle["checks"]
+    problems = [] if verdict is None or (isinstance(verdict, str) and verdict in BUNDLE_VERDICTS) else ["bundle_check.verdict"]
+    if not isinstance(checks, list):
+        return [*problems, "bundle_check.checks 가 목록이 아님"]
+    for n, check in enumerate(checks):
+        where = f"bundle_check.checks[{n}]"
+        if not isinstance(check, Mapping) or list(check) != list(BUNDLE_CHECK_KEYS):
+            problems.append(f"{where}: 키·순서가 계약과 다름")
+            continue
+        severity, status = check["severity"], check["status"]
+        rows = [
+            (all(isinstance(check[k], str) and check[k] != "" for k in ("id", "name")), "id·name"),
+            (severity is None or (isinstance(severity, str) and severity in BUNDLE_SEVERITIES), "severity"),
+            (isinstance(status, str) and status in BUNDLE_STATUSES, "status"),
+            (all(check[k] is None or isinstance(check[k], str) for k in ("field", "label", "group")), "field·label·group"),
+            (check["field"] is not None or check["label"] is None, "label(field 가 null 이면 null)"),
+        ]
+        problems += [f"{where}.{name}" for passed, name in rows if not passed]
+    ids = [c.get("id") for c in checks if isinstance(c, Mapping) and isinstance(c.get("id"), str)]
+    if len(set(ids)) != len(ids):
+        problems.append("bundle_check 규칙 id 가 겹침")
+    return problems
+
+
+def _final_problems(result: Mapping[str, Any]) -> list[str]:
+    """세 키가 **있는지**(없음 ≠ null) + 있는 키의 계약 모양 + 옛 워크플로우(bundle_check null)면 links [] · decision null."""
+    problems = [f"결과 키 {key} 가 없음(null 과 다름)" for key in FINAL_RESULT_KEYS if key not in result]
+    if "links" in result:
+        problems += _link_problems(result["links"], result)
+    if "decision" in result:
+        problems += _decision_problems(result["decision"])
+    if "bundle_check" in result:
+        problems += _bundle_problems(result["bundle_check"])
+    if not _is_final(result):
+        if "links" in result and result["links"] != []:
+            problems.append("옛 워크플로우(bundle_check null)인데 links 가 [] 가 아님")
+        if "decision" in result and result["decision"] is not None:
+            problems.append("옛 워크플로우(bundle_check null)인데 decision 이 null 이 아님")
+    return problems
+
+
+def _print_final(result: Mapping[str, Any]) -> bool:
+    """links·decision·bundle_check — 계약 모양, 최종 흐름이면 묶음 검증 verdict 가 있고 알려진 모양(연결 수·모두 linked·verdict)과
+    같음. 출력은 개수·상태 분포·키 이름만 — 받은 값은 허용 enum 글자만 그대로, 그 밖은 _kind 의 타입 표기(값 없음).
+    개수·길이는 목록·문자열임을 확인한 값에서만 센다."""
+    links, decision, bundle = result.get("links"), result.get("decision"), result.get("bundle_check")
+    final = _is_final(result)
+    rows = [link for link in links if isinstance(link, Mapping)] if isinstance(links, list) else []
+    _say("최종 흐름 결과(links·decision·bundle_check):")
+    _say(f"  워크플로우: {'최종 흐름(bundle_check 있음)' if final else '옛 워크플로우(bundle_check null)'}")
+    absent = [key for key in FINAL_RESULT_KEYS if key not in result]
+    if absent:
+        _say(f"  결과 키 없음: {absent}")
+    states = dict(Counter(_kind(link.get("state"), LINK_STATES) for link in rows))
+    statuses = dict(Counter(_kind(link.get("status"), LINK_STATUSES) for link in rows))
+    _say(f"  links: {len(rows) if isinstance(links, list) else _kind(links)} · state {states} · status {statuses}")
+    if isinstance(decision, Mapping):
+        reason = decision.get("reason")
+        parts = [f"risk_level={_kind(decision.get('risk_level'), DECISION_RISKS)}"]
+        for key in DECISION_LIST_KEYS:
+            value = decision.get(key)
+            parts.append(f"{key} {len(value)}개" if isinstance(value, list) else f"{key} {_kind(value)}")
+        parts.append(f"reason {len(reason)}자" if isinstance(reason, str) else f"reason {_kind(reason)}")
+        _say(f"  decision: {' · '.join(parts)}")
+    else:
+        _say(f"  decision: {_kind(decision)}")
+    verdict = bundle.get("verdict") if isinstance(bundle, Mapping) else None
+    if isinstance(bundle, Mapping):
+        raw_checks = bundle.get("checks")
+        checks = [c for c in raw_checks if isinstance(c, Mapping)] if isinstance(raw_checks, list) else []
+        check_states = dict(Counter(_kind(c.get("status"), BUNDLE_STATUSES) for c in checks))
+        severities = dict(Counter(_kind(c.get("severity"), BUNDLE_SEVERITIES) for c in checks))
+        count = len(checks) if isinstance(raw_checks, list) else _kind(raw_checks)
+        _say(f"  bundle_check: verdict={_kind(verdict, BUNDLE_VERDICTS)} · 규칙 {count} · status {check_states} · severity {severities}")
+    else:
+        _say(f"  bundle_check: {_kind(bundle)}")
+    problems = _final_problems(result)
+    _say(
+        "  계약 모양(키·순서·허용 값·L-nn·연결 서류·쪽·글, 옛 워크플로우면 links []·decision null): "
+        f"{'맞음' if not problems else f'문제 {len(problems)}개'}"
+    )
+    for problem in problems[:10]:
+        _say(f"    - {_short(problem)}")
+    if not final:
+        return not problems
+    verdict_ok = isinstance(verdict, str) and verdict in BUNDLE_VERDICTS
+    _say(f"  묶음 검증 verdict 있음(서류별 validation 대신): {_mark(verdict_ok)}")
+    shape = _result_shape(result)
+    want = shape.get("final") if shape else None
+    linked = sum(1 for link in rows if link.get("state") == "linked")
+    if want is None:
+        _say("  알려진 모양(최종 흐름): 없음 — 새 모양: 불일치")
+        return False
+    shape_ok = len(rows) == want["links"] == linked and verdict == want["verdict"]
+    _say(f"  알려진 모양(최종 흐름 — 연결 {want['links']}개 모두 linked · 묶음 검증 {want['verdict']}): {_mark(shape_ok)}")
+    return not problems and verdict_ok and shape_ok
 
 
 # --- 검토사항(result.items) 확인 — review-items BRIEF §5.3 ---------------------------------------
@@ -659,15 +941,29 @@ def _item_want(
         "desc": desc,
         "next": next_step,
         "evidence": evidence[:ITEM_MAX_EVIDENCE],
+        "link_id": None,  # 연결 재료(mismatch·weaklink)만 문자열 — 기대값을 계산하는 모양에서는 늘 없다
     }
 
 
 def _expected_items(result: Mapping[str, Any]) -> tuple[list[dict[str, Any]] | None, str]:
-    """계약대로 따로 계산한 result.items 기대값(서류 순서 → nolocation·lowconf·other → 재료 안 순서). 계산할 수 없으면 (None, 이유)."""
+    """계약대로 따로 계산한 result.items 기대값(서류 순서 → nolocation·lowconf·other → 재료 안 순서). 계산할 수 없으면 (None, 이유).
+
+    최종 흐름(bundle_check 있음)의 묶음 재료(missing·bundle·absent — 묶음_검증, mismatch·weaklink — 서류_대조)는 묶음 검증이 green 이고
+    모든 연결이 linked 일 때만 0개로 기대한다(그 밖은 규칙별 서류 결과가 응답에 없어 계산할 수 없다 — '새 모양')."""
     visible = _visible_docs(result.get("documents"))
     not_green = sum(1 for doc in visible if not _validation_green(doc.get("validation")))
     if not_green:
         return None, f"새 모양 — 검증 결과가 green 이 아닌 서류 {not_green}개(checks 를 볼 수 없어 missing 항목을 계산할 수 없음)"
+    bundle = result.get("bundle_check")
+    if isinstance(bundle, Mapping):
+        links = result.get("links") if isinstance(result.get("links"), list) else []
+        unlinked = sum(1 for link in links if not (isinstance(link, Mapping) and link.get("state") == "linked"))
+        if bundle.get("verdict") != "green" or unlinked:
+            verdict = _kind(bundle.get("verdict"), BUNDLE_VERDICTS)
+            return None, (
+                f"새 모양 — 최종 흐름 묶음 검증 {verdict} · linked 아닌 연결 {unlinked}개"
+                "(missing·bundle·absent·mismatch·weaklink 항목을 계산할 수 없음)"
+            )
     spans: dict[int, tuple[int, int, int]] = {}  # index → (서류 순번, page_start, 화면 쪽 범위 끝)
     for number, doc in enumerate(visible, 1):
         start = doc["page_start"]
@@ -734,18 +1030,39 @@ def _expected_items(result: Mapping[str, Any]) -> tuple[list[dict[str, Any]] | N
     return out, ""
 
 
+def _link_targets(links: Any) -> dict[str, Any]:
+    """result.links 의 연결 id → 대상 서류 index(docs[1].document_index — 모양이 틀린 줄은 None)."""
+    out: dict[str, Any] = {}
+    for link in links if isinstance(links, list) else []:
+        if not isinstance(link, Mapping) or not isinstance(link.get("id"), str):
+            continue
+        docs = link.get("docs")
+        target = docs[1] if isinstance(docs, list) and len(docs) == 2 and isinstance(docs[1], Mapping) else {}
+        out.setdefault(link["id"], target.get("document_index"))
+    return out
+
+
+def _link_id_ok(item: Mapping[str, Any], link_targets: Mapping[str, Any]) -> bool:
+    """검토사항의 link_id(final-flow T3 B): mismatch·weaklink 는 같은 결과 links[] 의 id 이고 그 연결의 대상 서류가 이 항목의 서류,
+    그 밖 종류는 null."""
+    link_id, kind = item.get("link_id"), item.get("type")
+    if not (isinstance(kind, str) and kind in LINK_ITEM_TYPES):
+        return link_id is None
+    if not isinstance(link_id, str) or link_id not in link_targets:
+        return False
+    target = link_targets[link_id]
+    return _is_int(target) and _is_int(item.get("document_index")) and target == item["document_index"]
+
+
 def _items_shape_problems(items: Any, result: Mapping[str, Any]) -> list[str]:
     """result.items 의 계약 모양(값은 출력하지 않고 'items[n].키' 위치만): 키·순서·타입, R-nn 1부터 연속, id 겹치지 않음,
-    document_index 가 보이는 서류, page·근거 page 가 그 서류 화면 쪽 범위 안, finding_id·finding_ids 가 그 서류의 탐지 항목."""
+    document_index 가 보이는 서류, page·근거 page 가 그 서류 화면 쪽 범위 안, finding_id·finding_ids 가 그 서류의 탐지 항목,
+    link_id 가 연결 종류(mismatch·weaklink)만 그 서류를 대상으로 하는 연결 id(그 밖 null)."""
     if not isinstance(items, list):
         return ["result.items 가 목록이 아님"]
     spans = {d["index"]: (d["page_start"], max(d["page_start"], d["page_end"])) for d in _visible_docs(result.get("documents"))}
-    own: dict[int, set[str]] = {index: set() for index in spans}
-    findings = result.get("findings")
-    for f in findings if isinstance(findings, list) else []:
-        index = f.get("document_index") if isinstance(f, Mapping) else None
-        if _is_int(index) and index in own and isinstance(f.get("id"), str):
-            own[index].add(f["id"])
+    own = _own_finding_ids(result, spans)
+    link_targets = _link_targets(result.get("links"))
     problems: list[str] = []
     for n, item in enumerate(items):
         where = f"items[{n}]"
@@ -766,6 +1083,7 @@ def _items_shape_problems(items: Any, result: Mapping[str, Any]) -> list[str]:
             ((kind == "nolocation") == isinstance(finding_id, str), "finding_id(nolocation 만 있음)"),
             (all(isinstance(item[k], str) and item[k] != "" for k in ("title", "desc", "next")), "title·desc·next"),
             (isinstance(item["evidence"], list) and len(item["evidence"]) <= ITEM_MAX_EVIDENCE, "evidence(목록·20개 이하)"),
+            (_link_id_ok(item, link_targets), "link_id(연결 종류만 그 서류의 연결 id · 그 밖 null)"),
         ]
         problems += [f"{where}.{name}" for passed, name in checks if not passed]
         for m, ev in enumerate(item["evidence"] if isinstance(item["evidence"], list) else []):
@@ -837,7 +1155,8 @@ def _print_items(result: Mapping[str, Any]) -> bool:
         return False
     differs = _items_compare(got, want)
     _say(
-        f"  따로 계산한 기대값(documents·findings → nolocation·lowconf·other, 검증 모두 green·null → missing 0): "
+        f"  따로 계산한 기대값(documents·findings → nolocation·lowconf·other, 검증 모두 green·null → missing 0"
+        f"{', 최종 흐름 묶음 검증 green·모두 linked → 묶음·연결 항목 0' if _is_final(result) else ''}): "
         f"{len(want)}개 · 종류 {_kinds(want)}: {_mark(not differs)}"
     )
     for problem in differs[:10]:
@@ -864,6 +1183,7 @@ def _verify_done(run: Run, analysis_id: str) -> bool:
     result = row.get("result") if isinstance(row.get("result"), Mapping) else {}
     ok = _print_summary(result)
     ok = _print_view(result) and ok
+    ok = _print_final(result) and ok
     ok = _print_items(result) and ok
 
     staged, staged_row = _get(run, analysis_id, {"include": "stages"})

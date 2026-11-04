@@ -9,11 +9,17 @@
    고정 자료 fixtures/final-flow-result.json = 최종 흐름 워크플로우 결과를 손으로 만든 것(스펙 T3 A·B 계약 모양 — 값은 지어낸 것):
    서류 5개(자동이체 신청서 · FATCA/CRS 본인확인서 · 소득 증빙(2쪽) · 위임장 · 기타), 탐지 7개(위치 없음 2), 검토사항 8개
    (missing · nolocation · lowconf · mismatch(link_id) · weaklink(link_id) · other), 연결 3개(check 2 · confirmed 1), decision, bundle_check.
-   백엔드 출력과 맞추는 시험은 통합 단계(T5)가 한다.
+   키 · 꼴은 백엔드 실제 출력과 같다(tests/test_final_flow_fixture_sync.py).
+   고정 자료 fixtures/final-flow-{C,D,E}.json = 최종 흐름 고정 응답(tests/fixtures/final_flow/)을 **백엔드가 만든** 조회 응답 result 그대로
+   (tests/test_final_flow_fixture_sync.py 가 바이트까지 같은지 지킨다 — 손으로 고치지 않는다):
+   C 불일치(mismatch · linked) · D 빈 신청인(weaklink · missing) · E 팀원 서식(linked 2 · other).
    ========================================================================== */
 
 import type { AnalysisListItemOut, AnalysisOut, DocumentOut } from './client';
 import doneResultFixture from './fixtures/done-result.json';
+import finalFlowCFixture from './fixtures/final-flow-C.json';
+import finalFlowDFixture from './fixtures/final-flow-D.json';
+import finalFlowEFixture from './fixtures/final-flow-E.json';
 import finalFlowResultFixture from './fixtures/final-flow-result.json';
 import itemsResultFixture from './fixtures/items-result.json';
 
@@ -102,6 +108,13 @@ export function itemsResult(): Record<string, unknown> {
 /** 최종 흐름 워크플로우 결과(fixtures/final-flow-result.json — 손으로 만든 모양) — 깊은 복사본 */
 export function finalFlowResult(): Record<string, unknown> {
   return structuredClone(finalFlowResultFixture) as unknown as Record<string, unknown>;
+}
+
+const FINAL_FLOW_RUNS = { C: finalFlowCFixture, D: finalFlowDFixture, E: finalFlowEFixture } as const;
+
+/** 백엔드가 고정 응답으로 만든 최종 흐름 결과(fixtures/final-flow-{C,D,E}.json) — 깊은 복사본 */
+export function finalFlowRun(key: keyof typeof FINAL_FLOW_RUNS): Record<string, unknown> {
+  return structuredClone(FINAL_FLOW_RUNS[key]) as unknown as Record<string, unknown>;
 }
 
 /** AnalysisOut */

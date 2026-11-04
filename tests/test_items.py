@@ -108,7 +108,7 @@ def test_merged_workflow_shape_items() -> None:
     assert items[3]["evidence"] == [{**OPEN_FIRST, "page": 6}]
     assert (items[3]["title"], items[3]["desc"], items[3]["next"]) == (
         "기타 서류로 분류된 문서",
-        "워크플로우가 대출 서류 5종에 해당하지 않는 기타 서류로 분류했습니다.",
+        "워크플로우가 지원 서류 종류에 해당하지 않는 기타 서류로 분류했습니다.",
         "원본에 개인정보가 있는지 직접 확인해 주세요.",
     )
 

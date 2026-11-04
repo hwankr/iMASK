@@ -3,7 +3,7 @@
 #  자료: tests/fixtures/final_flow/ — 실제 응답 5건(A_smoke 6서류·B_blank_autotransfer 빈 서식 2서류·
 #  C_mismatch 3서류·D_blank_applicant 신청인 성명 빈 2서류·E_team_forms 팀원 서식 4서류, 값은 모두 합성, 에이전트 id 는
 #  <AGENT>, Upstage id 는 자리표시자)과 설정 원본(config.json, API step 형식). D·E 는 final-flow T3 에서 더함.
-#  - 서류 종류 표가 설정의 분류 oneOf·경로와 같은지, 기존 5개 이름이 화면 DOC_TYPE_NAMES 와 같은지
+#  - 서류 종류 표가 설정의 분류 oneOf·경로와 같은지, 14개 이름이 화면 DOC_TYPE_NAMES 와 모두 같은지
 #  - 다섯 응답의 summarize·build_view(계약 모양 그대로, 묶음_검증이 서류별 validation 에 붙지 않음)
 #  - read_bundle_checks·read_links·read_decision 의 기대값과 서류 번호가 findings 와 같은지, 값이 결과에 없는지
 #  - 옛 응답은 None, 응답 경계 강건성(모양·한도·서로게이트·깊은 중첩·선형 시간·예외 안전망)
@@ -161,13 +161,14 @@ def screen_doc_type_names() -> dict[str, str]:
     return dict(re.findall(r"(\w+): '([^']*)'", block.group(1)))
 
 
-def test_existing_doc_type_names_match_screen():
-    # 기존 5개 + Other 는 늘 화면에 있다. 화면이 새 코드 이름을 더해도(final-flow T4) 같은 코드는 같은 이름이어야 한다
+def test_doc_type_names_match_screen_exactly():
+    # 분류 코드 14개 모두 화면 DOC_TYPE_NAMES 와 같은 이름(final-flow T5). 화면에만 있는 키는 서류 kind 'other'(소문자 —
+    # 코드가 아니라 기타 서류의 kind)뿐이고 이름은 'Other' 와 같다
     screen = screen_doc_type_names()
-    shared = [code for code in FINAL_DOC_TYPES if code in screen]
-    assert {"loan_application", "consent_form", "income_proof", "power_of_attorney", "debt_transaction", "Other"} <= set(shared)
-    for code in shared:
-        assert FINAL_DOC_TYPES[code][0] == screen[code], code
+    backend = {code: name for code, (name, _group) in FINAL_DOC_TYPES.items()}
+    assert len(backend) == 14
+    assert {code: name for code, name in screen.items() if code != "other"} == backend
+    assert screen["other"] == backend["Other"]
 
 
 def test_doc_type_names_are_short_and_unique():

@@ -23,6 +23,9 @@
 #  삭제 확인·기본 삭제(정상·비정상 종료·--no-start)·--keep·실패 경로(목록 계약 위반·지워지지 않는 삭제·삭제 502·연결 오류),
 #  실제 FastAPI 앱(shared_ctx.install — FakeStore + 가짜 Upstage 서버)으로 --retry-flow(통과·고정 기대값과 따로 판정·옛 이력 순서·
 #  틀린 사유·원본 없이 작업을 만든 응답·--keep)·--fail-with-original·기본 흐름 삭제·분석 중 시간 초과 뒤 삭제, 인자 충돌.
+#  최종 흐름(final-flow T5): 실제 응답 5건(tests/fixtures/final_flow/)으로 — 스모크 묶음은 서류 validation 없이(묶음 검증 green ·
+#  연결 4 linked) 끝까지 통과, 나머지 넷은 계약 모양은 맞고 '새 모양'으로 실패, links·decision·bundle_check·link_id 계약 위반
+#  16가지 → 종료 코드 1(받은 글자 미출력), 옛 워크플로우는 validation 이 계속 필요하고 links []·decision null, 조사 = 백엔드.
 # ==========================================================================
 
 from __future__ import annotations
@@ -115,6 +118,7 @@ class FakeApi:
     start_file=False 면 성공한 시작 응답에 file id 가 없다(서버 대체 행에서 빠진 경우와 같은 모양).
     poll_mode 가 interrupt·connect 면 흐름이 첫 GET 에서 끝나므로, 그 뒤의 GET 은 정리 단계의 다시 읽기다.
     reread_mode: file(running + file id) · nofile(running, file id 없음) · connect(연결 오류) · http500
+    result 를 주면 done 분석의 저장된 result 로 그것을 쓴다(기본 DONE_RESULT — 최종 흐름 시험은 FINAL_RESULT).
     done 응답과 검토 동작(POST review-actions)은 FakeStore 에 넣은 done 분석으로 **실제 백엔드 로직**
     (analysis_read_out·review_action_out)이 만든다. review_store=False 면 done 응답의 review 가 null(검토 기록을 못 읽음).
     review_override(api, 본문, 몇 번째 POST) 가 응답을 돌려주면 그것을 쓴다(예상과 다른 응답 주입).
@@ -135,6 +139,7 @@ class FakeApi:
         review_override: Callable[[FakeApi, dict[str, Any], int], httpx.Response | None] | None = None,
         delete_mode: str | int = "ok",
         list_override: Callable[[dict[str, Any]], dict[str, Any] | None] | None = None,
+        result: dict[str, Any] | None = None,
     ) -> None:
         self.start_mode = start_mode
         self.poll_mode = poll_mode
@@ -160,7 +165,7 @@ class FakeApi:
             "status": "done",
             "agent_id": None,
             "upstage_job_id": "job_e2e",
-            "result": copy.deepcopy(DONE_RESULT),
+            "result": copy.deepcopy(DONE_RESULT if result is None else result),  # 저장된 result(기본 = 옛 워크플로우 가짜 응답)
             "error": None,
             "created_at": CREATED_AT,
             "updated_at": UPDATED_AT,
@@ -2834,8 +2839,11 @@ def test_readme_result_example_is_a_consistent_response(script: Any) -> None:
     assert want is not None, reason
     assert script._items_compare(example["items"], want) == []
     assert json.dumps(build_items(example["documents"], example["findings"]), ensure_ascii=False) == json.dumps(example["items"], ensure_ascii=False)
-    assert_view({key: example[key] for key in ("documents", "findings", "overall", "items")})
+    assert_view({key: example[key] for key in ("documents", "findings", "overall", "items", "links", "decision", "bundle_check")})
     assert [i["type"] for i in example["items"]] == ["lowconf"]
+    # 옛 워크플로우 예시 — 최종 흐름 키는 빈 값(final-flow T5), 스크립트의 세 키 검사도 지난다
+    assert (example["links"], example["decision"], example["bundle_check"]) == ([], None, None)
+    assert script._final_problems(example) == []
 
 
 def _status_sentinel(review: dict[str, Any]) -> None:
@@ -2869,3 +2877,359 @@ def test_review_block_values_are_not_printed(script: Any, capsys: Any, mutate: A
         assert SENTINEL not in out, args
         assert message in out, args
         assert api.review_posts == []
+
+
+# --- 최종 흐름 워크플로우 결과(final-flow T5) — links·decision·bundle_check, 서류 validation 대신 묶음 검증 -------------
+# 고정 응답(tests/fixtures/final_flow/ — 실제 응답 5건, 값은 합성)을 build_result(설정 "1")로 저장 꼴로 만들어 FakeStore 에 넣고
+# 실제 조회 로직으로 응답한다. 스모크 묶음(A_smoke)은 알려진 모양(위임장 따로 + 연결 4 linked · green)이라 끝까지 통과하고,
+# 나머지 넷은 계약 모양은 맞지만 '새 모양'(묶음·연결 검토사항을 계산할 수 없음)으로 실패한다. 받은 글자는 출력하지 않는다.
+
+FINAL_FIXTURES = ROOT / "tests" / "fixtures" / "final_flow"
+FINAL_RUNS = ("A_smoke", "B_blank_autotransfer", "C_mismatch", "D_blank_applicant", "E_team_forms")
+LINK_NEXT = "같은 고객의 서류인지 원본에서 확인해 주세요."
+
+
+def _final_result(run: str = "A_smoke") -> dict[str, Any]:
+    from imask_backend.analyses import build_result
+
+    return build_result(json.loads((FINAL_FIXTURES / f"{run}.json").read_bytes().decode("utf-8")), "1")
+
+
+FINAL_RESULT = _final_result()
+
+
+def _final_view(run: str = "A_smoke") -> dict[str, Any]:
+    from imask_backend.analyses import result_out
+
+    return result_out(_final_result(run))
+
+
+def _final_texts(run: str = "A_smoke") -> list[str]:
+    """출력에 나오면 안 되는 받은 글자 — 탐지 value·masked, 연결 제목·fields·글, 판정 글·목록, 규칙 이름(3자 이상만)."""
+    view = _final_view(run)
+    texts = [f["value"] for f in view["findings"]] + [f["masked"] for f in view["findings"]]
+    for link in view["links"]:
+        texts += [link["title"], *link["basis"], link["missing"], link["check"], *(d["fields"] for d in link["docs"])]
+    decision = view["decision"] or {}
+    texts += [decision.get("reason") or "", *(decision.get("sensitive_categories") or []), *(decision.get("review_reasons") or [])]
+    texts += [check["name"] for check in (view["bundle_check"] or {}).get("checks", [])]
+    return [t for t in texts if isinstance(t, str) and len(t) >= 3]
+
+
+def _assert_no_final_texts(out: str, run: str = "A_smoke") -> None:
+    texts = _final_texts(run)
+    assert texts
+    assert [n for n, t in enumerate(texts) if t in out] == []  # 위치만(값은 메시지에 넣지 않는다)
+
+
+def test_final_flow_smoke_passes_the_full_flow(script: Any, capsys: Any) -> None:
+    # 최종 흐름 스모크 묶음: 서류 validation 은 모두 null 이지만 묶음 검증 green · 연결 4 linked → done 확인·검토 동작·목록·삭제 통과
+    api = FakeApi(poll_mode="done", result=FINAL_RESULT)
+    code = _run(script, api, _done_upstage(), [])
+    out = capsys.readouterr().out
+    assert code == 0, [line for line in out.splitlines() if "불일치" in line or "실패" in line]
+    assert "validation 있음 0/5(최종 흐름 — 묶음 검증으로 봄) (알려진 모양: 위임장 따로): 일치" in out
+    assert "findings: 29 · boxes 있는 항목 28 (기대 29 · 28): 일치" in out
+    assert "워크플로우: 최종 흐름(bundle_check 있음)" in out
+    assert "links: 4 · state {'linked': 4} · status {'confirmed': 4}" in out
+    assert "decision: risk_level=상 · document_types 5개 · sensitive_categories 5개 · review_reasons 0개 · reason " in out
+    assert "bundle_check: verdict=green · 규칙 5 · status {'pass': 5} · severity {'error': 1, 'warning': 4}" in out
+    assert "계약 모양(키·순서·허용 값·L-nn·연결 서류·쪽·글, 옛 워크플로우면 links []·decision null): 맞음" in out
+    assert "묶음 검증 verdict 있음(서류별 validation 대신): 일치" in out
+    assert "알려진 모양(최종 흐름 — 연결 4개 모두 linked · 묶음 검증 green): 일치" in out
+    assert "최종 흐름 묶음 검증 green·모두 linked → 묶음·연결 항목 0): 6개 · 종류 {'lowconf': 4, 'nolocation': 1, 'other': 1}: 일치" in out
+    assert f"검토 동작 확인: {REVIEW_STEPS}/{REVIEW_STEPS} 통과 · 쓴 동작 {REVIEW_WRITES}건 — 기대대로" in out
+    assert "결과: 기대대로" in out
+    _assert_no_final_texts(out)
+
+
+def test_final_flow_smoke_analysis_id_mode_only_reads(script: Any, capsys: Any) -> None:
+    api = FakeApi(poll_mode="done", result=FINAL_RESULT)
+    assert _run(script, api, FakeUpstageServer(), ["--analysis-id", ANALYSIS_ID]) == 0
+    assert [r for r in api.requests if r.method != "GET"] == []
+    out = capsys.readouterr().out
+    assert "결과: 기대대로 (기존 분석 확인)" in out
+    _assert_no_final_texts(out)
+
+
+@pytest.mark.parametrize("run", FINAL_RUNS[1:])
+def test_other_final_flow_results_are_a_new_shape(script: Any, capsys: Any, run: str) -> None:
+    # 실제 응답 B~E: 세 키·검토사항(link_id 포함) 계약 모양은 맞지만, 묶음 검증이 green 이 아니거나 linked 아닌 연결이 있어
+    # 검토사항 기대값을 계산할 수 없다('새 모양') — 숫자를 느슨하게 하지 않는다
+    api = FakeApi(poll_mode="done", result=_final_result(run))
+    assert _run(script, api, FakeUpstageServer(), ["--analysis-id", ANALYSIS_ID]) == 1
+    out = capsys.readouterr().out
+    assert "계약 모양(키·순서·허용 값·L-nn·연결 서류·쪽·글, 옛 워크플로우면 links []·decision null): 맞음" in out
+    assert "계약 모양(키·순서·타입·R-nn 연속·id 중복 없음·서류·쪽·탐지 항목 참조): 맞음" in out
+    assert "따로 계산한 기대값: 계산할 수 없음 — 새 모양 — 최종 흐름 묶음 검증 " in out
+    assert "결과: 기대와 다름" in out
+    _assert_no_final_texts(out, run)
+
+
+@pytest.mark.parametrize("run", FINAL_RUNS)
+def test_script_contract_checks_accept_every_real_final_flow_result(script: Any, run: str) -> None:
+    # 스크립트가 따로 적은 계약(links 글·link_id·decision·bundle_check)이 백엔드 실제 출력 다섯 가지와 맞는다
+    view = _final_view(run)
+    assert script._final_problems(view) == []
+    assert script._items_shape_problems(view["items"], view) == []
+    want, reason = script._expected_items(view)
+    if run == "A_smoke":
+        assert want is not None and script._items_compare(view["items"], want) == []
+    else:
+        assert want is None and reason.startswith("새 모양 — 최종 흐름 묶음 검증 ")
+
+
+def test_old_workflow_still_needs_a_validation_for_every_extracted_document(script: Any, capsys: Any) -> None:
+    def _drop_validation(result: dict[str, Any], _include: bool) -> None:
+        result["documents"][0]["validation"] = None
+
+    api = FakeApi(poll_mode="done", tamper=_drop_validation)
+    assert _run(script, api, FakeUpstageServer(), ["--analysis-id", ANALYSIS_ID]) == 1
+    out = capsys.readouterr().out
+    assert "validation 있음 4/5 (알려진 모양: 위임장 따로): 불일치" in out
+    assert "워크플로우: 옛 워크플로우(bundle_check null)" in out
+
+
+def _link_unmatched(result: dict[str, Any], _include: bool) -> None:
+    link = result["links"][1]
+    link.update(state="unmatched", status="check", basis=[], missing="두 서류의 신청인 성명이 다릅니다.", check=LINK_NEXT)
+
+
+def _bundle_yellow(result: dict[str, Any], _include: bool) -> None:
+    result["bundle_check"]["verdict"] = "yellow"
+
+
+def _bundle_no_verdict(result: dict[str, Any], _include: bool) -> None:
+    result["bundle_check"]["verdict"] = None
+
+
+def _link_text(result: dict[str, Any], _include: bool) -> None:
+    result["links"][0]["basis"] = ["두 서류의 신청인 성명은 같습니다."]
+
+
+def _link_key_order(result: dict[str, Any], _include: bool) -> None:
+    link = result["links"][0]
+    result["links"][0] = {"number": link.pop("number"), **link}
+
+
+def _link_number(result: dict[str, Any], _include: bool) -> None:
+    result["links"][1]["number"] = "L-05"
+
+
+def _link_fields(result: dict[str, Any], _include: bool) -> None:
+    result["links"][0]["docs"][0]["fields"] = "가" * 81
+
+
+def _link_page(result: dict[str, Any], _include: bool) -> None:
+    result["links"][0]["docs"][1]["page"] = 99
+
+
+def _link_finding(result: dict[str, Any], _include: bool) -> None:
+    result["links"][0]["docs"][1]["finding_ids"] = list(result["links"][0]["docs"][0]["finding_ids"])  # 다른 서류의 탐지 항목
+
+
+def _link_id_on_lowconf(result: dict[str, Any], _include: bool) -> None:
+    result["items"][0]["link_id"] = result["links"][0]["id"]
+
+
+def _decision_keys(result: dict[str, Any], _include: bool) -> None:
+    result["decision"].pop("reason")
+
+
+def _decision_risk(result: dict[str, Any], _include: bool) -> None:
+    result["decision"]["risk_level"] = SENTINEL
+
+
+def _decision_list(result: dict[str, Any], _include: bool) -> None:
+    result["decision"]["review_reasons"] = [SENTINEL, 3]
+
+
+def _bundle_status(result: dict[str, Any], _include: bool) -> None:
+    result["bundle_check"]["checks"][0]["status"] = SENTINEL
+
+
+def _bundle_keys(result: dict[str, Any], _include: bool) -> None:
+    result["bundle_check"]["documents"] = []
+
+
+def _bundle_label(result: dict[str, Any], _include: bool) -> None:
+    result["bundle_check"]["checks"][0].update(field=None, label=SENTINEL)
+
+
+FINAL_TAMPERS = [
+    (_bundle_yellow, "새 모양 — 최종 흐름 묶음 검증 yellow · linked 아닌 연결 0개"),
+    (_link_unmatched, "새 모양 — 최종 흐름 묶음 검증 green · linked 아닌 연결 1개"),
+    (_bundle_no_verdict, "묶음 검증 verdict 있음(서류별 validation 대신): 불일치"),
+    (_link_text, "links[0].글(basis·missing·check)"),
+    (_link_key_order, "links[0]: 키·순서가 계약과 다름"),
+    (_link_number, "links number 가 L-01 부터 이어지지 않음"),
+    (_link_fields, "links[0].docs[0].fields(1~80자)"),
+    (_link_page, "links[0].docs[1].page(서류 쪽 범위)"),
+    (_link_finding, "links[0].docs[1].finding_ids(그 서류의 탐지 항목)"),
+    (_link_id_on_lowconf, "items[0].link_id(연결 종류만 그 서류의 연결 id · 그 밖 null)"),
+    (_decision_keys, "decision: 키·순서가 계약과 다름"),
+    (_decision_risk, "decision.risk_level"),
+    (_decision_list, "decision.review_reasons"),
+    (_bundle_status, "bundle_check.checks[0].status"),
+    (_bundle_keys, "bundle_check: 키·순서가 계약과 다름"),
+    (_bundle_label, "bundle_check.checks[0].label(field 가 null 이면 null)"),
+]
+
+
+@pytest.mark.parametrize(("tamper", "message"), FINAL_TAMPERS, ids=[t.__name__.strip("_") for t, _ in FINAL_TAMPERS])
+def test_final_flow_contract_problems_fail(script: Any, capsys: Any, tamper: Any, message: str) -> None:
+    api = FakeApi(poll_mode="done", result=FINAL_RESULT, tamper=tamper)
+    assert _run(script, api, FakeUpstageServer(), ["--analysis-id", ANALYSIS_ID]) == 1
+    out = capsys.readouterr().out
+    assert message in out
+    assert "결과: 기대와 다름" in out
+    assert SENTINEL not in out
+    _assert_no_final_texts(out)
+
+
+def _old_with_decision(result: dict[str, Any], _include: bool) -> None:
+    result["decision"] = {key: None for key in ("risk_level", "document_types", "sensitive_categories", "review_reasons", "reason")}
+
+
+def _old_with_links(result: dict[str, Any], _include: bool) -> None:
+    result["links"] = _final_view()["links"][:1]
+
+
+@pytest.mark.parametrize(
+    ("tamper", "message"),
+    [
+        (_old_with_decision, "옛 워크플로우(bundle_check null)인데 decision 이 null 이 아님"),
+        (_old_with_links, "옛 워크플로우(bundle_check null)인데 links 가 [] 가 아님"),
+    ],
+    ids=["decision", "links"],
+)
+def test_old_workflow_must_have_empty_final_keys(script: Any, capsys: Any, tamper: Any, message: str) -> None:
+    api = FakeApi(poll_mode="done", tamper=tamper)
+    assert _run(script, api, FakeUpstageServer(), ["--analysis-id", ANALYSIS_ID]) == 1
+    out = capsys.readouterr().out
+    assert message in out
+    _assert_no_values(out)
+
+
+def test_final_shape_is_only_known_for_the_split_attorney_shape(script: Any) -> None:
+    split = script._known_shape(6, {"extracted": 5, "other": 1})
+    merged = script._known_shape(5, {"extracted": 4, "other": 1})
+    assert split["final"] == {"links": 4, "verdict": "green"}
+    assert "final" not in merged  # 최종 흐름에서 아직 보지 못한 모양 — 나오면 '새 모양'
+
+
+def test_particle_agrees_with_backend_subject_particle(script: Any) -> None:
+    from imask_backend.items import clip_name, subject_particle
+
+    cases = ["신청인 성명", "이메일 주소", "applicant_name", "제3자 성명", "주소…", "값(가)", "ㄱ", "가" * 50, "", "성명 1"]
+    cases += [chr(c) for c in range(0xAC00, 0xD7A4, 97)]
+    for text in cases:
+        assert script._particle(script._clip_name(text)) == subject_particle(clip_name(text)), len(text)
+        assert script._clip_name(text) == clip_name(text)
+
+
+# --- 수정 1회차(V-T5-1 M1·m1): 최종 흐름 진단에 받은 값이 나오지 않음 · 세 키가 있어야 함(없음 ≠ null) -------------------
+# 잘못된 타입의 값(숫자·bool·객체·목록·모르는 글자)을 10개 칸(decision 5 · 연결 state·status · verdict · 규칙 status·severity)과
+# 최상위 decision·bundle_check 에 넣어도 그 값의 글자가 stdout·stderr 에 없다(종료 코드와 별개). bool 은 'True' 가 다른 줄에도
+# 있으므로 그 자리의 타입 표기 '<bool>' 로 본다.
+
+LEAK_INT = int("9" * 13)
+LEAK_FLOAT = 7654321.125
+LEAK_TEXT = "새는값-FINAL-7Q"
+LEAK_VALUES = {
+    "int": (LEAK_INT, [str(LEAK_INT)]),
+    "float": (LEAK_FLOAT, ["7654321"]),
+    "bool": (True, []),
+    "dict": ({LEAK_TEXT + "키": LEAK_TEXT + "값"}, [LEAK_TEXT]),
+    "list": ([LEAK_TEXT, LEAK_INT], [LEAK_TEXT, str(LEAK_INT)]),
+    "str": (LEAK_TEXT, [LEAK_TEXT]),
+}
+
+
+def _put(path: str) -> Callable[[dict[str, Any], Any], None]:
+    """'decision.risk_level'·'links[0].state'·'bundle_check.checks[0].status'·'decision' 같은 자리에 값을 넣는 함수."""
+
+    def put(result: dict[str, Any], value: Any) -> None:
+        parts = path.replace("[0]", ".0").split(".")
+        target: Any = result
+        for part in parts[:-1]:
+            target = target[int(part)] if part.isdigit() else target[part]
+        target[parts[-1]] = value
+
+    return put
+
+
+LEAK_FIELDS = [
+    "decision.risk_level",
+    "decision.document_types",
+    "decision.sensitive_categories",
+    "decision.review_reasons",
+    "decision.reason",
+    "links[0].state",
+    "links[0].status",
+    "bundle_check.verdict",
+    "bundle_check.checks[0].status",
+    "bundle_check.checks[0].severity",
+    "decision",
+    "bundle_check",
+]
+
+
+@pytest.mark.parametrize("kind", sorted(LEAK_VALUES))
+@pytest.mark.parametrize("field", LEAK_FIELDS)
+def test_final_flow_diagnostics_never_print_received_values(script: Any, capsys: Any, field: str, kind: str) -> None:
+    value, needles = LEAK_VALUES[kind]
+    put = _put(field)
+    api = FakeApi(poll_mode="done", result=FINAL_RESULT, tamper=lambda result, _include: put(result, copy.deepcopy(value)))
+    code = _run(script, api, FakeUpstageServer(), ["--analysis-id", ANALYSIS_ID])
+    captured = capsys.readouterr()
+    printed = captured.out + captured.err
+    assert [n for n, needle in enumerate(needles) if needle in printed] == []  # 위치만(값은 메시지에 넣지 않는다)
+    if kind == "bool":
+        assert "<bool>" in printed
+    if kind != "str":  # 글자는 그 칸에 맞는 값일 수 있다(reason 등) — 그 밖 타입은 모두 계약 위반
+        assert code == 1
+
+
+def test_kind_shows_only_allowed_enums(script: Any) -> None:
+    allowed = ("green", "yellow", "red")
+    assert script._kind("green", allowed) == "green"
+    assert script._kind("purple", allowed) == "<str>"
+    assert script._kind(None, allowed) == "null"
+    assert [script._kind(v, allowed) for v in (LEAK_INT, LEAK_FLOAT, True, {"a": 1}, ["green"])] == ["<int>", "<float>", "<bool>", "<dict>", "<list>"]
+
+
+@pytest.mark.parametrize("key", ["links", "decision", "bundle_check"])
+def test_old_result_without_a_final_key_fails(script: Any, capsys: Any, key: str) -> None:
+    # 옛 결과: decision·bundle_check 의 null 은 정상이지만 키가 아예 없으면 계약 회귀
+    api = FakeApi(poll_mode="done", tamper=lambda result, _include: result.pop(key))
+    assert _run(script, api, FakeUpstageServer(), ["--analysis-id", ANALYSIS_ID]) == 1
+    out = capsys.readouterr().out
+    assert f"결과 키 {key} 가 없음(null 과 다름)" in out
+    assert f"결과 키 없음: ['{key}']" in out
+
+
+def test_old_result_with_explicit_null_final_keys_passes(script: Any, capsys: Any) -> None:
+    api = FakeApi(poll_mode="done")
+    assert (api.read_done()["result"]["decision"], api.read_done()["result"]["bundle_check"]) == (None, None)
+    assert _run(script, api, FakeUpstageServer(), ["--analysis-id", ANALYSIS_ID]) == 0
+    out = capsys.readouterr().out
+    assert "결과 키 없음" not in out and "decision: null" in out and "bundle_check: null" in out
+
+
+@pytest.mark.parametrize("key", ["links", "decision", "bundle_check"])
+def test_final_result_without_a_final_key_fails(script: Any, capsys: Any, key: str) -> None:
+    api = FakeApi(poll_mode="done", result=FINAL_RESULT, tamper=lambda result, _include: result.pop(key))
+    assert _run(script, api, FakeUpstageServer(), ["--analysis-id", ANALYSIS_ID]) == 1
+    assert f"결과 키 {key} 가 없음(null 과 다름)" in capsys.readouterr().out
+
+
+def test_final_result_with_explicit_null_decision_passes(script: Any, capsys: Any) -> None:
+    # 판정 키를 못 읽은 최종 흐름(decision null)은 계약 안 — 키를 지운 것(위)과 다르다
+    def _null_decision(result: dict[str, Any], _include: bool) -> None:
+        result["decision"] = None
+
+    api = FakeApi(poll_mode="done", result=FINAL_RESULT, tamper=_null_decision)
+    assert _run(script, api, FakeUpstageServer(), ["--analysis-id", ANALYSIS_ID]) == 0
+    out = capsys.readouterr().out
+    assert "decision: null" in out and "결과 키 없음" not in out

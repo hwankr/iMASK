@@ -1,0 +1,1112 @@
+{
+  "format": "imask-upstage-v1",
+  "job": {
+    "id": "job_FIXTUREC",
+    "status": "completed",
+    "config_id": "1",
+    "created_at": 1793785734,
+    "usage": {
+      "input_tokens": 36611,
+      "output_tokens": 2504,
+      "total_tokens": 39115
+    }
+  },
+  "summary": {
+    "stage_names": [
+      "step_1_parse",
+      "step_2_classify",
+      "Information Extract - 추출_신청서",
+      "Information Extract - 추출_확인서",
+      "Information Extract - 추출_증빙",
+      "병합-1",
+      "Match - 서류_대조",
+      "Validate - 묶음_검증",
+      "Instruct - 위험도_판정",
+      "Instruct - 검토_안내"
+    ],
+    "stage_counts": {
+      "step_1_parse": 1,
+      "step_2_classify": 1,
+      "Information Extract - 추출_신청서": 1,
+      "Information Extract - 추출_확인서": 1,
+      "Information Extract - 추출_증빙": 1,
+      "병합-1": 1,
+      "Match - 서류_대조": 1,
+      "Validate - 묶음_검증": 1,
+      "Instruct - 위험도_판정": 1,
+      "Instruct - 검토_안내": 1
+    },
+    "document_count": 3,
+    "document_types": [
+      "loan_application",
+      "consent_form",
+      "income_proof"
+    ],
+    "extracted_document_count": 3,
+    "risk_level": "검토 필요",
+    "final_stage": "검토_안내",
+    "other_document_count": null
+  },
+  "documents": [
+    {
+      "index": 0,
+      "type": "loan_application",
+      "page_start": 1,
+      "page_end": 1,
+      "kind": "extracted",
+      "other_guide": null,
+      "validation": null
+    },
+    {
+      "index": 1,
+      "type": "consent_form",
+      "page_start": 2,
+      "page_end": 2,
+      "kind": "extracted",
+      "other_guide": null,
+      "validation": null
+    },
+    {
+      "index": 2,
+      "type": "income_proof",
+      "page_start": 3,
+      "page_end": 3,
+      "kind": "extracted",
+      "other_guide": null,
+      "validation": null
+    }
+  ],
+  "findings": [
+    {
+      "id": "0:applicant_name",
+      "document_index": 0,
+      "field": "applicant_name",
+      "category": "이름",
+      "label": "신청인 성명",
+      "subject": "신청인",
+      "mapping_status": "ok",
+      "value": "김하늘",
+      "masked": "김*늘",
+      "exposure": "전체 노출",
+      "risk": "unrated",
+      "risk_source": null,
+      "risk_reason": null,
+      "page": 1,
+      "boxes": [
+        [
+          {
+            "x": 0.3551,
+            "y": 0.1757
+          },
+          {
+            "x": 0.4134,
+            "y": 0.1755
+          },
+          {
+            "x": 0.4135,
+            "y": 0.1908
+          },
+          {
+            "x": 0.3552,
+            "y": 0.191
+          }
+        ]
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "0:applicant_rrn",
+      "document_index": 0,
+      "field": "applicant_rrn",
+      "category": "고유식별정보",
+      "label": "주민등록번호",
+      "subject": "신청인",
+      "mapping_status": "ok",
+      "value": "950312-2345678",
+      "masked": "950312-2******",
+      "exposure": "전체 노출",
+      "risk": "unrated",
+      "risk_source": null,
+      "risk_reason": null,
+      "page": 1,
+      "boxes": [
+        [
+          {
+            "x": 0.353,
+            "y": 0.214
+          },
+          {
+            "x": 0.5071,
+            "y": 0.2133
+          },
+          {
+            "x": 0.5073,
+            "y": 0.2266
+          },
+          {
+            "x": 0.3531,
+            "y": 0.2273
+          }
+        ]
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "0:applicant_phone",
+      "document_index": 0,
+      "field": "applicant_phone",
+      "category": "연락처·이메일",
+      "label": "전화번호",
+      "subject": "신청인",
+      "mapping_status": "ok",
+      "value": "010-4821-7730",
+      "masked": "010-****-7730",
+      "exposure": "전체 노출",
+      "risk": "unrated",
+      "risk_source": null,
+      "risk_reason": null,
+      "page": 1,
+      "boxes": [
+        [
+          {
+            "x": 0.3528,
+            "y": 0.2503
+          },
+          {
+            "x": 0.4931,
+            "y": 0.2497
+          },
+          {
+            "x": 0.4932,
+            "y": 0.263
+          },
+          {
+            "x": 0.353,
+            "y": 0.2636
+          }
+        ]
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "0:applicant_address",
+      "document_index": 0,
+      "field": "applicant_address",
+      "category": "주소",
+      "label": "주소",
+      "subject": "신청인",
+      "mapping_status": "ok",
+      "value": "부산광역시 해운대구 센텀중앙로 55, 302동 1104호",
+      "masked": "부산광역시 해운대구 ***** **, **** *****",
+      "exposure": "전체 노출",
+      "risk": "unrated",
+      "risk_source": null,
+      "risk_reason": null,
+      "page": 1,
+      "boxes": [
+        [
+          {
+            "x": 0.3544,
+            "y": 0.2851
+          },
+          {
+            "x": 0.4531,
+            "y": 0.2847
+          },
+          {
+            "x": 0.4533,
+            "y": 0.3005
+          },
+          {
+            "x": 0.3545,
+            "y": 0.3009
+          }
+        ],
+        [
+          {
+            "x": 0.462,
+            "y": 0.2851
+          },
+          {
+            "x": 0.5422,
+            "y": 0.2848
+          },
+          {
+            "x": 0.5423,
+            "y": 0.3005
+          },
+          {
+            "x": 0.4622,
+            "y": 0.3009
+          }
+        ],
+        [
+          {
+            "x": 0.5505,
+            "y": 0.2853
+          },
+          {
+            "x": 0.6494,
+            "y": 0.2848
+          },
+          {
+            "x": 0.6496,
+            "y": 0.3002
+          },
+          {
+            "x": 0.5506,
+            "y": 0.3006
+          }
+        ],
+        [
+          {
+            "x": 0.6573,
+            "y": 0.2869
+          },
+          {
+            "x": 0.6843,
+            "y": 0.2868
+          },
+          {
+            "x": 0.6844,
+            "y": 0.3007
+          },
+          {
+            "x": 0.6574,
+            "y": 0.3009
+          }
+        ],
+        [
+          {
+            "x": 0.6903,
+            "y": 0.2857
+          },
+          {
+            "x": 0.7436,
+            "y": 0.2855
+          },
+          {
+            "x": 0.7438,
+            "y": 0.3001
+          },
+          {
+            "x": 0.6904,
+            "y": 0.3003
+          }
+        ],
+        [
+          {
+            "x": 0.7515,
+            "y": 0.286
+          },
+          {
+            "x": 0.8159,
+            "y": 0.2857
+          },
+          {
+            "x": 0.816,
+            "y": 0.2993
+          },
+          {
+            "x": 0.7515,
+            "y": 0.2996
+          }
+        ]
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "0:employer_info",
+      "document_index": 0,
+      "field": "employer_info",
+      "category": "기타 개인정보",
+      "label": "직장 정보",
+      "subject": "신청인",
+      "mapping_status": "needs_review",
+      "value": "직장명: (주)바다물류; 부서: 회계팀; 직위: 과장",
+      "masked": "직장명: (주)****; 부서: 회**; 직위: 과*",
+      "exposure": "전체 노출",
+      "risk": "unrated",
+      "risk_source": null,
+      "risk_reason": null,
+      "page": 1,
+      "boxes": [
+        [
+          {
+            "x": 0.353,
+            "y": 0.3225
+          },
+          {
+            "x": 0.4663,
+            "y": 0.3221
+          },
+          {
+            "x": 0.4665,
+            "y": 0.3379
+          },
+          {
+            "x": 0.3531,
+            "y": 0.3383
+          }
+        ],
+        [
+          {
+            "x": 0.4894,
+            "y": 0.3222
+          },
+          {
+            "x": 0.5479,
+            "y": 0.3219
+          },
+          {
+            "x": 0.5481,
+            "y": 0.3374
+          },
+          {
+            "x": 0.4896,
+            "y": 0.3376
+          }
+        ],
+        [
+          {
+            "x": 0.5716,
+            "y": 0.3223
+          },
+          {
+            "x": 0.6114,
+            "y": 0.3222
+          },
+          {
+            "x": 0.6115,
+            "y": 0.3372
+          },
+          {
+            "x": 0.5718,
+            "y": 0.3374
+          }
+        ]
+      ],
+      "confidence": "low"
+    },
+    {
+      "id": "0:account_number",
+      "document_index": 0,
+      "field": "account_number",
+      "category": "계좌번호",
+      "label": "계좌번호",
+      "subject": "신청인",
+      "mapping_status": "ok",
+      "value": "302-118-559201",
+      "masked": "302-***-***201",
+      "exposure": "전체 노출",
+      "risk": "unrated",
+      "risk_source": null,
+      "risk_reason": null,
+      "page": 1,
+      "boxes": [
+        [
+          {
+            "x": 0.4414,
+            "y": 0.3969
+          },
+          {
+            "x": 0.5899,
+            "y": 0.3962
+          },
+          {
+            "x": 0.5901,
+            "y": 0.4095
+          },
+          {
+            "x": 0.4415,
+            "y": 0.4102
+          }
+        ]
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "0:loan_info",
+      "document_index": 0,
+      "field": "loan_info",
+      "category": "소득·거래정보",
+      "label": "대출 정보",
+      "subject": "신청인",
+      "mapping_status": "needs_review",
+      "value": "가상은행 신용대출 20,000,000원 24개월 원리금균등",
+      "masked": "가*** 신*** 2*,***,**** 2*** 원****",
+      "exposure": "전체 노출",
+      "risk": "unrated",
+      "risk_source": null,
+      "risk_reason": null,
+      "page": 1,
+      "boxes": [
+        [
+          {
+            "x": 0.3549,
+            "y": 0.3588
+          },
+          {
+            "x": 0.4339,
+            "y": 0.3584
+          },
+          {
+            "x": 0.434,
+            "y": 0.3737
+          },
+          {
+            "x": 0.3551,
+            "y": 0.3741
+          }
+        ],
+        [
+          {
+            "x": 0.441,
+            "y": 0.3597
+          },
+          {
+            "x": 0.5586,
+            "y": 0.3592
+          },
+          {
+            "x": 0.5588,
+            "y": 0.3739
+          },
+          {
+            "x": 0.4411,
+            "y": 0.3745
+          }
+        ],
+        [
+          {
+            "x": 0.5656,
+            "y": 0.3648
+          },
+          {
+            "x": 0.5708,
+            "y": 0.3648
+          },
+          {
+            "x": 0.5709,
+            "y": 0.3692
+          },
+          {
+            "x": 0.5657,
+            "y": 0.3692
+          }
+        ],
+        [
+          {
+            "x": 0.5773,
+            "y": 0.3591
+          },
+          {
+            "x": 0.6393,
+            "y": 0.3588
+          },
+          {
+            "x": 0.6394,
+            "y": 0.3735
+          },
+          {
+            "x": 0.5774,
+            "y": 0.3738
+          }
+        ],
+        [
+          {
+            "x": 0.647,
+            "y": 0.3651
+          },
+          {
+            "x": 0.6523,
+            "y": 0.365
+          },
+          {
+            "x": 0.6523,
+            "y": 0.3694
+          },
+          {
+            "x": 0.6471,
+            "y": 0.3694
+          }
+        ],
+        [
+          {
+            "x": 0.6602,
+            "y": 0.3588
+          },
+          {
+            "x": 0.7591,
+            "y": 0.3584
+          },
+          {
+            "x": 0.7592,
+            "y": 0.3737
+          },
+          {
+            "x": 0.6603,
+            "y": 0.3741
+          }
+        ]
+      ],
+      "confidence": "low"
+    },
+    {
+      "id": "1:applicant_name",
+      "document_index": 1,
+      "field": "applicant_name",
+      "category": "이름",
+      "label": "신청인 성명",
+      "subject": "신청인",
+      "mapping_status": "ok",
+      "value": "이도윤",
+      "masked": "이*윤",
+      "exposure": "전체 노출",
+      "risk": "unrated",
+      "risk_source": null,
+      "risk_reason": null,
+      "page": 2,
+      "boxes": [
+        [
+          {
+            "x": 0.3551,
+            "y": 0.3328
+          },
+          {
+            "x": 0.4136,
+            "y": 0.3326
+          },
+          {
+            "x": 0.4138,
+            "y": 0.3475
+          },
+          {
+            "x": 0.3552,
+            "y": 0.3478
+          }
+        ]
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "1:applicant_birth_date",
+      "document_index": 1,
+      "field": "applicant_birth_date",
+      "category": "생년월일",
+      "label": "생년월일",
+      "subject": "신청인",
+      "mapping_status": "ok",
+      "value": "1991년 7월 21일",
+      "masked": "1991년 *월 **일",
+      "exposure": "전체 노출",
+      "risk": "unrated",
+      "risk_source": null,
+      "risk_reason": null,
+      "page": 2,
+      "boxes": [
+        [
+          {
+            "x": 0.354,
+            "y": 0.3697
+          },
+          {
+            "x": 0.417,
+            "y": 0.3694
+          },
+          {
+            "x": 0.4171,
+            "y": 0.384
+          },
+          {
+            "x": 0.3541,
+            "y": 0.3843
+          }
+        ],
+        [
+          {
+            "x": 0.4249,
+            "y": 0.3693
+          },
+          {
+            "x": 0.4554,
+            "y": 0.3692
+          },
+          {
+            "x": 0.4555,
+            "y": 0.384
+          },
+          {
+            "x": 0.425,
+            "y": 0.3842
+          }
+        ],
+        [
+          {
+            "x": 0.4631,
+            "y": 0.3695
+          },
+          {
+            "x": 0.505,
+            "y": 0.3693
+          },
+          {
+            "x": 0.5052,
+            "y": 0.3841
+          },
+          {
+            "x": 0.4632,
+            "y": 0.3843
+          }
+        ]
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "1:applicant_phone",
+      "document_index": 1,
+      "field": "applicant_phone",
+      "category": "연락처·이메일",
+      "label": "전화번호",
+      "subject": "신청인",
+      "mapping_status": "ok",
+      "value": "010-5530-2194",
+      "masked": "010-****-2194",
+      "exposure": "전체 노출",
+      "risk": "unrated",
+      "risk_source": null,
+      "risk_reason": null,
+      "page": 2,
+      "boxes": [
+        [
+          {
+            "x": 0.3529,
+            "y": 0.4065
+          },
+          {
+            "x": 0.493,
+            "y": 0.4059
+          },
+          {
+            "x": 0.4931,
+            "y": 0.4193
+          },
+          {
+            "x": 0.3531,
+            "y": 0.4199
+          }
+        ]
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "2:applicant_name",
+      "document_index": 2,
+      "field": "applicant_name",
+      "category": "이름",
+      "label": "신청인 성명",
+      "subject": "신청인",
+      "mapping_status": "ok",
+      "value": "김하늘",
+      "masked": "김*늘",
+      "exposure": "전체 노출",
+      "risk": "unrated",
+      "risk_source": null,
+      "risk_reason": null,
+      "page": 3,
+      "boxes": [
+        [
+          {
+            "x": 0.3552,
+            "y": 0.1688
+          },
+          {
+            "x": 0.4135,
+            "y": 0.1686
+          },
+          {
+            "x": 0.4136,
+            "y": 0.1838
+          },
+          {
+            "x": 0.3552,
+            "y": 0.184
+          }
+        ]
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "2:applicant_rrn",
+      "document_index": 2,
+      "field": "applicant_rrn",
+      "category": "고유식별정보",
+      "label": "주민등록번호",
+      "subject": "신청인",
+      "mapping_status": "ok",
+      "value": "950312-2******",
+      "masked": "950312-2******",
+      "exposure": "부분 마스킹",
+      "risk": "unrated",
+      "risk_source": null,
+      "risk_reason": null,
+      "page": 3,
+      "boxes": [
+        [
+          {
+            "x": 0.3531,
+            "y": 0.2066
+          },
+          {
+            "x": 0.4916,
+            "y": 0.206
+          },
+          {
+            "x": 0.4917,
+            "y": 0.2193
+          },
+          {
+            "x": 0.3531,
+            "y": 0.22
+          }
+        ]
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "2:applicant_address",
+      "document_index": 2,
+      "field": "applicant_address",
+      "category": "주소",
+      "label": "주소",
+      "subject": "신청인",
+      "mapping_status": "ok",
+      "value": "부산광역시 해운대구 센텀중앙로 55",
+      "masked": "부산광역시 해운대구 ***** **",
+      "exposure": "전체 노출",
+      "risk": "unrated",
+      "risk_source": null,
+      "risk_reason": null,
+      "page": 3,
+      "boxes": [
+        [
+          {
+            "x": 0.3544,
+            "y": 0.2417
+          },
+          {
+            "x": 0.4533,
+            "y": 0.2413
+          },
+          {
+            "x": 0.4534,
+            "y": 0.2569
+          },
+          {
+            "x": 0.3545,
+            "y": 0.2574
+          }
+        ],
+        [
+          {
+            "x": 0.4621,
+            "y": 0.2418
+          },
+          {
+            "x": 0.5423,
+            "y": 0.2414
+          },
+          {
+            "x": 0.5425,
+            "y": 0.2569
+          },
+          {
+            "x": 0.4623,
+            "y": 0.2572
+          }
+        ],
+        [
+          {
+            "x": 0.5502,
+            "y": 0.2418
+          },
+          {
+            "x": 0.6495,
+            "y": 0.2414
+          },
+          {
+            "x": 0.6496,
+            "y": 0.2568
+          },
+          {
+            "x": 0.5503,
+            "y": 0.2572
+          }
+        ],
+        [
+          {
+            "x": 0.6572,
+            "y": 0.2434
+          },
+          {
+            "x": 0.6796,
+            "y": 0.2433
+          },
+          {
+            "x": 0.6797,
+            "y": 0.2561
+          },
+          {
+            "x": 0.6573,
+            "y": 0.2562
+          }
+        ]
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "2:income_info",
+      "document_index": 2,
+      "field": "income_info",
+      "category": "소득·거래정보",
+      "label": "소득 정보",
+      "subject": "신청인",
+      "mapping_status": "needs_review",
+      "value": "소득 구분: 근로소득; 소득금액: 41,500,000원",
+      "masked": "소득 구분: 근***; 소득금액: 4*,***,****",
+      "exposure": "전체 노출",
+      "risk": "unrated",
+      "risk_source": null,
+      "risk_reason": null,
+      "page": 3,
+      "boxes": [
+        [
+          {
+            "x": 0.095,
+            "y": 0.2872
+          },
+          {
+            "x": 0.9049,
+            "y": 0.2872
+          },
+          {
+            "x": 0.9049,
+            "y": 0.3621
+          },
+          {
+            "x": 0.095,
+            "y": 0.3621
+          }
+        ]
+      ],
+      "confidence": "low"
+    }
+  ],
+  "overall": {
+    "level": "검토 필요",
+    "text": "risk_level: 검토 필요【†1】【†2】【†3】\ndocument_types: [loan_application, consent_form, income_proof]【†4】【†5】【†6】\nsensitive_categories: [고유식별정보, 신용거래정보, 신용능력정보, 일반개인정보]【†7】【†8】【†9】【†10】【†11】【†12】\nreview_reasons: [서류 간 불일치]【†13】【†14】\nreason: 신청서의 신청인 성명은 대출 신청서에 존재하고【†15】, 소득 증빙 서류의 신청인 성명은 신청서와 일치합니다【†16】. 그러나 동의서의 신청인 성명이 신청서와 다른 사람으로 추출되어 있어 서류 간 불일치에 해당하므로, 판정 순서에 따라 위험도는 검토 필요입니다【†17】【†18】.\n검토 필요",
+    "next_stage": "검토_안내",
+    "next_text": "## 담당자 확인 필요 사항\n\n- **서류 종류:** 개인정보 수집·이용·제공 동의서 / **확인할 정보 종류:** 신청인 성명 / **확인이 필요한 이유:** 서류 간 불일치【†1】【†2】  \n  - 확인 후 할 일: 대출 신청서의 신청인 정보와 동의서의 동의자 정보가 동일인인지 대조하고, 불일치가 확정되면 올바른 동의서를 재징구하거나 신청 건을 보류합니다.【†3】\n\n- **서류 종류:** 대출 신청서 / **확인할 정보 종류:** 신청인 성명 / **확인이 필요한 이유:** 서류 간 불일치【†4】【†5】  \n  - 확인 후 할 일: 기준 서류로 사용할 신청인 정보를 확정하고, 다른 제출 서류들과 동일인 여부를 다시 대조합니다.【†6】\n\n- **서류 종류:** 소득 증빙 서류 / **확인할 정보 종류:** 신청인 성명 / **확인이 필요한 이유:** 서류 간 불일치 여부 검증 대상【†7】【†8】  \n  - 확인 후 할 일: 소득 증빙의 신청인 정보가 대출 신청서 기준 정보와 일치하는지 재확인하고, 일치가 유지되면 동의서만 보정 대상으로 분리합니다.【†9】"
+  },
+  "items": [
+    {
+      "id": "lowconf:0",
+      "number": "R-01",
+      "type": "lowconf",
+      "document_index": 0,
+      "page": 1,
+      "finding_id": null,
+      "title": "인식 신뢰도가 낮은 항목 2건",
+      "desc": "D1-05, D1-07의 값이 틀렸을 수 있습니다.",
+      "next": "원본과 값을 비교해 확인해 주세요.",
+      "evidence": [
+        {
+          "label": "1쪽 값 보기",
+          "page": 1,
+          "finding_ids": [
+            "0:employer_info",
+            "0:loan_info"
+          ],
+          "finding_id": null
+        }
+      ],
+      "link_id": null
+    },
+    {
+      "id": "mismatch:0:1",
+      "number": "R-02",
+      "type": "mismatch",
+      "document_index": 1,
+      "page": 2,
+      "finding_id": null,
+      "title": "대출신청서와 신청인 성명이 다릅니다",
+      "desc": "서류 대조에서 같은 고객으로 확인되지 않았습니다.",
+      "next": "같은 고객의 서류인지 원본에서 확인해 주세요.",
+      "evidence": [
+        {
+          "label": "1쪽 값 보기",
+          "page": 2,
+          "finding_ids": [
+            "1:applicant_name"
+          ],
+          "finding_id": null
+        }
+      ],
+      "link_id": "link:0:1"
+    },
+    {
+      "id": "lowconf:2",
+      "number": "R-03",
+      "type": "lowconf",
+      "document_index": 2,
+      "page": 3,
+      "finding_id": null,
+      "title": "인식 신뢰도가 낮은 항목 1건",
+      "desc": "D3-04의 값이 틀렸을 수 있습니다.",
+      "next": "원본과 값을 비교해 확인해 주세요.",
+      "evidence": [
+        {
+          "label": "1쪽 값 보기",
+          "page": 3,
+          "finding_ids": [
+            "2:income_info"
+          ],
+          "finding_id": null
+        }
+      ],
+      "link_id": null
+    }
+  ],
+  "links": [
+    {
+      "id": "link:0:1",
+      "number": "L-01",
+      "status": "check",
+      "state": "unmatched",
+      "title": "대출신청서 · 동의서",
+      "field": "applicant_name",
+      "label": "신청인 성명",
+      "docs": [
+        {
+          "document_index": 0,
+          "page": 1,
+          "fields": "신청인 성명 김*늘",
+          "finding_ids": [
+            "0:applicant_name"
+          ]
+        },
+        {
+          "document_index": 1,
+          "page": 2,
+          "fields": "신청인 성명 이*윤",
+          "finding_ids": [
+            "1:applicant_name"
+          ]
+        }
+      ],
+      "basis": [],
+      "missing": "두 서류의 신청인 성명이 다릅니다.",
+      "check": "같은 고객의 서류인지 원본에서 확인해 주세요."
+    },
+    {
+      "id": "link:0:2",
+      "number": "L-02",
+      "status": "confirmed",
+      "state": "linked",
+      "title": "대출신청서 · 소득 증빙",
+      "field": "applicant_name",
+      "label": "신청인 성명",
+      "docs": [
+        {
+          "document_index": 0,
+          "page": 1,
+          "fields": "신청인 성명 김*늘",
+          "finding_ids": [
+            "0:applicant_name"
+          ]
+        },
+        {
+          "document_index": 2,
+          "page": 3,
+          "fields": "신청인 성명 김*늘",
+          "finding_ids": [
+            "2:applicant_name"
+          ]
+        }
+      ],
+      "basis": [
+        "두 서류의 신청인 성명이 같습니다."
+      ],
+      "missing": "",
+      "check": "두 서류를 함께 보관·전달할 때 열람 권한을 확인해 주세요."
+    }
+  ],
+  "decision": {
+    "risk_level": "검토 필요",
+    "document_types": [
+      "loan_application",
+      "consent_form",
+      "income_proof"
+    ],
+    "sensitive_categories": [
+      "고유식별정보",
+      "신용거래정보",
+      "신용능력정보",
+      "일반개인정보"
+    ],
+    "review_reasons": [
+      "서류 간 불일치"
+    ],
+    "reason": "신청서의 신청인 성명은 대출 신청서에 존재하고, 소득 증빙 서류의 신청인 성명은 신청서와 일치합니다. 그러나 동의서의 신청인 성명이 신청서와 다른 사람으로 추출되어 있어 서류 간 불일치에 해당하므로, 판정 순서에 따라 위험도는 검토 필요입니다."
+  },
+  "bundle_check": {
+    "verdict": "yellow",
+    "checks": [
+      {
+        "id": "신청서_신청인_성명",
+        "name": "신청서_신청인_성명",
+        "severity": "error",
+        "status": "pass",
+        "field": "applicant_name",
+        "label": "신청인 성명",
+        "group": "신청서"
+      },
+      {
+        "id": "확인서_신청인_성명",
+        "name": "확인서_신청인_성명",
+        "severity": "warning",
+        "status": "pass",
+        "field": "applicant_name",
+        "label": "신청인 성명",
+        "group": "확인서"
+      },
+      {
+        "id": "증빙_신청인_성명",
+        "name": "증빙_신청인_성명",
+        "severity": "warning",
+        "status": "pass",
+        "field": "applicant_name",
+        "label": "신청인 성명",
+        "group": "증빙"
+      },
+      {
+        "id": "위임장_위임인_성명",
+        "name": "위임장_위임인_성명",
+        "severity": "warning",
+        "status": "absent",
+        "field": "applicant_name",
+        "label": "신청인 성명",
+        "group": "위임장"
+      },
+      {
+        "id": "위임장_대리인_성명",
+        "name": "위임장_대리인_성명",
+        "severity": "warning",
+        "status": "absent",
+        "field": "other_person_name",
+        "label": "제3자 성명",
+        "group": "위임장"
+      }
+    ]
+  }
+}

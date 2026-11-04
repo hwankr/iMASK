@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import type { CSSProperties, MouseEvent } from 'react';
 import { AnalysisStatusLabel, Button, Icon, ReviewStatusPill, RiskBadge, VisuallyHidden, cx } from '@/components/ui';
-import { riskView } from '@/display/rules';
+import { analysisRiskView } from '@/display/rules';
 import { staggerStyle } from '@/lib/hooks/useStagger';
 import { detailHref } from '@/lib/routes';
 import { useRouteBase } from '@/services/react';
@@ -103,7 +103,7 @@ function TableRow({
   onRetry: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
-  const risk = riskView(r.risk);
+  const risk = analysisRiskView(r.risk);
   const base = useRouteBase();
   const stop = (fn: () => void) => (e: MouseEvent) => {
     e.stopPropagation();

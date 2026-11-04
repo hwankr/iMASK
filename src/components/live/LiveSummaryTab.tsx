@@ -4,7 +4,8 @@
    실제 분석 상세 — 결과 패널 '분석 요약' 탭(데모에는 없다)
    - 위험도 판정(overall.text)과 다음 단계 문구(권장 조치 · 검토 안내 — next_text)를 글자 그대로 보인다
      (줄바꿈 유지, 인용 표시 【…】만 지움 — HTML 로 그리지 않는다). 위험도 판정 키(raw.decision — 최종 흐름 워크플로우)가 있으면
-     판정 본문 대신 키 5개 표(위험도 · 서류 종류 · 정보 종류 · 검토 사유 · 판단 근거). 머리의 등급 표시는 그대로 overall.level 기준.
+     판정 본문 대신 키 5개 표(위험도 · 서류 종류 · 정보 종류 · 검토 사유 · 판단 근거). 머리의 등급 표시는 그대로 overall.level 기준 —
+     등급 글이 옆 배지 라벨과 같으면(검토 필요) 글은 숨긴다(한 번만).
    - 결과 요약 줄(분류한 서류 · 추출한 서류 · 위험도 · 마지막 단계 · 기타 서류 · (묶음 검증 · 문서 간 연결 — 값이 있을 때만) ·
      걸린 시간 · Upstage 작업 번호).
    - 원본 단계별 JSON 은 접은 칸(<details>). 처음 펼칠 때 불러오고(useLiveStages — 상세 화면이 들고 있어 다시 부르지 않음),
@@ -13,11 +14,12 @@
 
 import { useState } from 'react';
 import { Button, Icon, RiskBadge, Spinner, cx } from '@/components/ui';
+import { analysisRiskView } from '@/display/rules';
 import type { Analysis } from '@/services/types';
 import { guideText } from '@/components/detail/liveViewerModel';
 import { StageList } from './LiveResult';
 import type { LiveStagesState } from './liveHooks';
-import { decisionRows, finalFlowRows, nextStageTitle, riskText, stageRows, summaryRows, type SummaryRow } from './liveModel';
+import { decisionRows, finalFlowRows, judgeLevelText, nextStageTitle, stageRows, summaryRows, type SummaryRow } from './liveModel';
 import liveStyles from './LiveDetailScreen.module.css';
 import styles from './LiveSummaryTab.module.css';
 
@@ -48,6 +50,8 @@ export function LiveSummaryTab({ analysis: a, stages, onLoadStages }: LiveSummar
   const judge = guideText(overall?.text);
   const next = guideText(overall?.nextText);
   const decision = decisionRows(raw?.decision);
+  // 등급 글이 배지 라벨과 같으면(검토 필요) 숨긴다
+  const levelText = judgeLevelText(overall?.level, analysisRiskView(a.risk).label);
   const base = summaryRows(raw?.result ?? null, { createdAt: raw?.createdAt ?? '', startedAt: raw?.startedAt ?? '', updatedAt: raw?.updatedAt ?? '', jobId: raw?.jobId ?? '' });
   // 묶음 검증 · 문서 간 연결 줄은 '기타 서류' 다음(걸린 시간 · 작업 번호 앞)에
   const at = base.findIndex((r) => r.key === 'other') + 1;
@@ -60,7 +64,7 @@ export function LiveSummaryTab({ analysis: a, stages, onLoadStages }: LiveSummar
         <h3 id="live-judge-title" className={styles.title}>
           위험도 판정
           <RiskBadge level={a.risk} size="xs" />
-          <span className={styles.level}>{riskText(overall?.level)}</span>
+          {levelText ? <span className={styles.level}>{levelText}</span> : null}
         </h3>
         {decision ? <Rows rows={decision} /> : judge ? <p className={styles.text}>{judge}</p> : <p className={styles.none}>위험도 판정 문구가 없습니다.</p>}
       </section>

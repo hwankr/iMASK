@@ -49,6 +49,23 @@ export type RiskLevel = keyof typeof RISK;
 /** 위험 등급 키 — 높은 순서 */
 export const RISK_LEVELS = Object.keys(RISK) as RiskLevel[];
 
+/* ---------- 분석 위험도(분석 건 하나) ---------- */
+
+/** 분석 건 위험도 표기 — 배지 · 목록 타일 · 정렬이 쓰는 칸만 */
+export type AnalysisRiskView = Pick<RiskView, 'key' | 'label' | 'rank' | 'fg' | 'bg' | 'glyph'>;
+
+/**
+ * 분석 건 위험도 — 위험 등급(RISK) 넷에 실제 분석 위험도 판정의 '검토 필요'(review)를 더한 표.
+ * RISK · RISK_LEVELS(탐지 항목 · 항목 필터 · 분포 막대 · 목록 필터)는 늘리지 않는다 — 데모 · 항목 화면은 그대로다.
+ * review 는 정렬에서 높음보다 앞(사람이 먼저 볼 것). 색은 주의(warn) 토큰.
+ */
+export const ANALYSIS_RISK = {
+  review: { key: 'review', label: '검토 필요', rank: 4, fg: 'var(--warn)', bg: 'var(--warn-bg)', glyph: 'dg-i-alert' },
+  ...RISK,
+} as const satisfies Record<string, AnalysisRiskView>;
+
+export type AnalysisRisk = keyof typeof ANALYSIS_RISK;
+
 /* ---------- 분석 상태(분석 건·문서) ---------- */
 
 export interface AnalysisStatusView {
@@ -259,6 +276,11 @@ function hasKey<T extends object>(table: T, key: string | null | undefined): key
 /** 위험 등급 표기. 모르는 값은 '미평가'. (원본 riskV) */
 export function riskView(level: string | null | undefined): RiskView {
   return hasKey(RISK, level) ? RISK[level] : RISK.unrated;
+}
+
+/** 분석 건 위험도 표기 — review 는 '검토 필요', 그 밖은 riskView 와 같다(모르는 값은 '미평가') */
+export function analysisRiskView(level: string | null | undefined): AnalysisRiskView {
+  return hasKey(ANALYSIS_RISK, level) ? ANALYSIS_RISK[level] : RISK.unrated;
 }
 
 /** 분석 상태 표기. 모르는 값은 '대기'. still = 아이콘이 멈춰 있는지. (원본 stV) */

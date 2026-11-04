@@ -4,7 +4,7 @@
    - 시각은 'YYYY-MM-DD HH:mm'(Asia/Seoul — src/lib/format.ts 의 형식과 같다). 한국은 서머타임이 없어
      UTC+9 로 고정 계산한다(브라우저 시간대와 무관하게 같은 값).
    - 위험도는 result.overall.level(공통 계약), 없으면 result.summary.risk_level:
-     상 → high · 중 → medium · 하 → low · 그 밖(검토 필요·없음) → unrated.
+     상 → high · 중 → medium · 하 → low · 검토 필요 → review(분석 건 위험도 — ② ANALYSIS_RISK) · 그 밖(없음 · 모르는 값) → unrated.
    - 완료 + 공통 계약 결과(result.documents 에 유효한 서류 1개 이상 + result.findings 배열)면 detailReady:
      docs = 분류된 서류, findings = 계약 탐지 항목(contract.ts), riskReasons·recs = overall 의 Markdown 줄.
      그 밖(대기·분석 중·실패·옛 형식·서류 0개)은 전과 같이 docs = 올린 파일 행, findings = [].
@@ -24,12 +24,12 @@
      원래 시각 — 만든 · 바뀐 · 시작한 시각).
    - 목록(GET /analyses)은 상세 매핑과 따로 읽는다(readAnalysisList · toListAnalysis — 가벼운 항목):
      docs = 올린 파일 행(toDoc 과 같은 모양, 문서 id 가 없어 분석 안에서 겹치지 않는 'f1'·'f2'… 를 만든다),
-     위험등급 = risk_level(상·중·하 → high·medium·low, 그 밖 · null → unrated), 검토 상태 = review(done · needed, 그 밖 none),
+     위험등급 = risk_level(상·중·하·검토 필요 → high·medium·low·review, 그 밖 · null → unrated), 검토 상태 = review(done · needed, 그 밖 none),
      탐지 항목 · 검토사항 · 연결 · 이력 = 빈 값, raw 는 result null · detailReady false · reviewable false.
      응답이 객체가 아니거나 analyses 가 배열이 아니면 null(목록 불러오기 실패). 객체가 아니거나 id 가 빈 항목만 뺀다. 순서는 서버 순서.
    ========================================================================== */
 
-import { ASTATUS, HKIND, type AnalysisStatus, type HistoryKind, type ReviewStatus, type RiskLevel } from '@/display/rules';
+import { ASTATUS, HKIND, type AnalysisRisk, type AnalysisStatus, type HistoryKind, type ReviewStatus } from '@/display/rules';
 import { pad2 } from '@/lib/format';
 import { rawValueMasker } from '../raw-mask';
 import type { Analysis, AnalysisDoc, DocStatus, HistoryEntry, RawAnalysisInfo } from '../types';
@@ -102,12 +102,13 @@ export function toStatus(value: unknown): AnalysisStatus {
   return Object.prototype.hasOwnProperty.call(ASTATUS, s) ? (s as AnalysisStatus) : 'queued';
 }
 
-/** 위험도 판정 값(상·중·하·검토 필요) → 화면 위험등급 */
-export function riskFromLevel(level: unknown): RiskLevel {
+/** 위험도 판정 값(상·중·하·검토 필요) → 분석 건 위험도(high·medium·low·review). 그 밖 · 빈 값은 unrated */
+export function riskFromLevel(level: unknown): AnalysisRisk {
   const s = str(level).trim();
   if (s === '상') return 'high';
   if (s === '중') return 'medium';
   if (s === '하') return 'low';
+  if (s === '검토 필요') return 'review';
   return 'unrated';
 }
 

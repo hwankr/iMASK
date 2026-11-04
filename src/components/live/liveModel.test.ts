@@ -15,6 +15,7 @@ import {
   elapsedText,
   fileLine,
   isPolling,
+  judgeLevelText,
   nextStageTitle,
   progressSteps,
   riskText,
@@ -116,6 +117,12 @@ describe('라벨', () => {
     expect(riskText('검토 필요')).toBe('검토 필요');
     expect(riskText('')).toBe('판정 없음');
     expect(riskText(null)).toBe('판정 없음');
+    // 분석 요약 머리의 등급 글 — 옆 배지 라벨과 같으면 숨김
+    expect(judgeLevelText('검토 필요', '검토 필요')).toBe('');
+    expect(judgeLevelText(' 검토 필요 ', '검토 필요')).toBe('');
+    expect(judgeLevelText('상', '높음')).toBe('상');
+    expect(judgeLevelText(null, '미평가')).toBe('판정 없음');
+    expect(judgeLevelText('검토 필요', '미평가')).toBe('검토 필요');
     expect(upstageStatusText('in_progress')).toBe('진행 중(in_progress)');
     expect(upstageStatusText('')).toBe('아직 확인 전');
     expect(upstageStatusText('cancelled')).toBe('cancelled');

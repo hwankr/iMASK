@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import type { CSSProperties } from 'react';
 import { AnalysisStatusLabel, Icon, ReviewStatusPill, RiskBadge, cx } from '@/components/ui';
-import { riskView } from '@/display/rules';
+import { analysisRiskView } from '@/display/rules';
 import { staggerStyle } from '@/lib/hooks/useStagger';
 import { detailHref } from '@/lib/routes';
 import { useRouteBase } from '@/services/react';
@@ -30,7 +30,7 @@ export function AnalysisCardList({
   return (
     <ul className={styles.list}>
       {model.rows.map((r, i) => {
-        const risk = riskView(r.risk);
+        const risk = analysisRiskView(r.risk);
         return (
           <li
             key={r.id}

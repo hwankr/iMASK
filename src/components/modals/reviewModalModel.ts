@@ -13,7 +13,7 @@
      실패를 빈 pending 으로 보지 않는다(남은 항목을 모른 채 완료하지 않게).
    ========================================================================== */
 
-import { CATS, EXPOSURES, FP_REASONS, RTYPE, SUBJECTS, byRisk, riskView, type Exposure, type FpReason, type InfoCategory, type InfoSubject } from '@/display/rules';
+import { CATS, EXPOSURES, FP_REASONS, RTYPE, SUBJECTS, analysisRiskView, byRisk, riskView, type Exposure, type FpReason, type InfoCategory, type InfoSubject } from '@/display/rules';
 import type { ModalWidth } from '@/components/ui';
 import type { AnalysisService, Pending } from '@/services/analysis-service';
 import { isReportTarget } from '@/services/report-safe';
@@ -149,7 +149,7 @@ export function completeModel(a: Analysis, p: Pending): CompleteModel {
       .map((x) => ({ id: x.id, label: riskView(x.risk).label + ' · ' + x.cat + ' · ' + x.label, go: { kind: 'finding', id: x.id } as const })),
     ...p.openL.map((l) => ({ id: l.id, label: '연결 확인 필요 · ' + l.title, go: { kind: 'link', id: l.id } as const })),
   ].slice(0, 5);
-  return { any: p.any, lines, items, riskLabel: riskView(a.risk).label };
+  return { any: p.any, lines, items, riskLabel: analysisRiskView(a.risk).label };
 }
 
 /**

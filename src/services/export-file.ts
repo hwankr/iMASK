@@ -18,7 +18,7 @@
    - 생성 시각은 부르는 쪽이 'YYYY-MM-DD HH:mm' 으로 준다(데모 = 데모 시계, 실제 = 서울 시각). 파일 이름 = '<brand>_<code>_검토결과…'.
    ========================================================================== */
 
-import { FSTATUS, HKIND, LSTATUS, RTYPE, analysisStatusView, reviewStatusView, riskView, type ExportFormat } from '@/display/rules';
+import { FSTATUS, HKIND, LSTATUS, RTYPE, analysisStatusView, reviewStatusView, analysisRiskView, riskView, type ExportFormat } from '@/display/rules';
 import { fmtDT, utf8Len } from '@/lib/format';
 import type { Analysis, ExportFile } from './types';
 
@@ -123,7 +123,7 @@ export function buildExportFile(a: Analysis, format: ExportFormat, opts: ExportF
       분석명: a.name,
       접수일시: fmtDT(a.submittedAt),
       분석상태: analysisStatusView(a.status).label,
-      위험등급: riskView(a.risk).label,
+      위험등급: analysisRiskView(a.risk).label,
       검토상태: reviewStatusView(a.review).label,
       검토자: a.reviewer || '',
       검토완료시각: a.reviewedAt ? fmtDT(a.reviewedAt) : '',

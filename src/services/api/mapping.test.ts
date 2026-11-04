@@ -33,12 +33,15 @@ describe('상태 · 위험도 · 형식', () => {
     expect(toStatus('toString')).toBe('queued');
   });
 
-  it('위험도 상·중·하 → high·medium·low, 그 밖 → unrated', () => {
+  it('위험도 상·중·하·검토 필요 → high·medium·low·review, 그 밖 → unrated', () => {
     expect(riskFromLevel('상')).toBe('high');
     expect(riskFromLevel('중')).toBe('medium');
     expect(riskFromLevel(' 하 ')).toBe('low');
-    expect(riskFromLevel('검토 필요')).toBe('unrated');
-    expect(riskFromLevel(null)).toBe('unrated');
+    expect(riskFromLevel('검토 필요')).toBe('review');
+    expect(riskFromLevel(' 검토 필요\n')).toBe('review');
+    for (const v of [null, undefined, '', '  ', '검토필요', '검토 필요함', '미평가', 'review', 'unrated', 'high', 3, true, {}, ['검토 필요']]) {
+      expect(riskFromLevel(v)).toBe('unrated');
+    }
   });
 
   it('형식 표기 — MIME 우선, 없으면 확장자(jpeg → JPG)', () => {
@@ -274,6 +277,8 @@ describe('공통 계약 — 분석 위험도', () => {
     overall.level = '중';
     expect(doneWith(r).risk).toBe('medium');
     overall.level = '검토 필요';
+    expect(doneWith(r).risk).toBe('review');
+    overall.level = '모르는 값';
     expect(doneWith(r).risk).toBe('unrated');
   });
 

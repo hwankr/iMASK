@@ -91,11 +91,12 @@ describe('목록 항목 → Analysis — 키 하나하나', () => {
     expect(must({ ...listItemOut({ status: 'done' }), review: 1 }).review).toBe('none');
   });
 
-  it('위험등급 — 상 · 중 · 하 → high · medium · low, 그 밖 · null → unrated', () => {
+  it('위험등급 — 상 · 중 · 하 · 검토 필요 → high · medium · low · review, 그 밖 · null → unrated', () => {
     expect(must(listItemOut({ risk_level: '상' })).risk).toBe('high');
     expect(must(listItemOut({ risk_level: '중' })).risk).toBe('medium');
     expect(must(listItemOut({ risk_level: '하' })).risk).toBe('low');
-    expect(must(listItemOut({ risk_level: '검토 필요' })).risk).toBe('unrated');
+    expect(must(listItemOut({ risk_level: '검토 필요' })).risk).toBe('review');
+    expect(must(listItemOut({ risk_level: '미평가' })).risk).toBe('unrated');
     expect(must(listItemOut({ risk_level: null })).risk).toBe('unrated');
     expect(must({ ...listItemOut(), risk_level: 3 }).risk).toBe('unrated');
   });

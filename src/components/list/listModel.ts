@@ -5,7 +5,7 @@
    - 필터 값은 URL 검색 파라미터(q · risk · status · review · sort)와 서로 바꿀 수 있다.
    ========================================================================== */
 
-import { ASTATUS, RISK, RSTATUS, riskView, type AnalysisStatus, type ReviewStatus, type RiskLevel } from '@/display/rules';
+import { ASTATUS, RISK, RSTATUS, analysisRiskView, type AnalysisStatus, type ReviewStatus, type RiskLevel } from '@/display/rules';
 import type { IconName } from '@/display/icon-names';
 import { CONFIG } from '@/config/app';
 import { fmtDT } from '@/lib/format';
@@ -140,8 +140,9 @@ function byDate(x: Analysis, y: Analysis): number {
   return y.submittedAt > x.submittedAt ? 1 : y.submittedAt < x.submittedAt ? -1 : 0;
 }
 
+/** 위험도순 — 분석 건 위험도 순위(검토 필요 → 높음 → 보통 → 낮음 → 미평가), 같으면 최근 접수순 */
 export function sortAnalyses(rows: readonly Analysis[], sort: SortKey): Analysis[] {
-  return rows.slice().sort(sort === 'risk' ? (x, y) => riskView(y.risk).rank - riskView(x.risk).rank || byDate(x, y) : byDate);
+  return rows.slice().sort(sort === 'risk' ? (x, y) => analysisRiskView(y.risk).rank - analysisRiskView(x.risk).rank || byDate(x, y) : byDate);
 }
 
 /* ---------- 드롭다운 ---------- */

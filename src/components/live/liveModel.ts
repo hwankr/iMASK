@@ -154,6 +154,15 @@ export function riskText(level: unknown): string {
   return s || '판정 없음';
 }
 
+/**
+ * 분석 요약 '위험도 판정' 머리의 등급 글 — riskText 와 같되, 옆 배지 라벨과 같으면 ''(숨김 — '검토 필요' 를 한 번만).
+ * 상 → '상'(배지 '높음'), 없음 → '판정 없음'(배지 '미평가')은 지금처럼 보인다.
+ */
+export function judgeLevelText(level: unknown, badgeLabel: string): string {
+  const text = riskText(level);
+  return text === badgeLabel ? '' : text;
+}
+
 /** 다음 단계 제목 — 권장_조치 → '권장 조치', 검토_안내 → '검토 안내', 그 밖 → '다음 단계' */
 export function nextStageTitle(stage: unknown): string {
   const s = typeof stage === 'string' ? stage.trim() : '';

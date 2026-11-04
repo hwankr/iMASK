@@ -94,7 +94,7 @@ describe('LiveSummaryTab 마크업', () => {
     expect(rows.slice(5).map(([k]) => k)).toEqual(['docs', 'extracted', 'risk', 'final', 'other', 'bundle', 'links', 'took', 'job']);
     expect(rows.find(([k]) => k === 'bundle')?.[2]).toBe('실패 · 실패 1');
     expect(rows.find(([k]) => k === 'links')?.[2]).toBe('연결 1 · 확인 필요 2');
-    // 판정 본문(overall.text)은 표가 대신한다 · 머리의 등급 글은 overall.level
+    // 판정 본문(overall.text)은 표가 대신한다 · 머리는 배지 '검토 필요'(같은 등급 글은 숨김)
     expect(m).not.toContain('판단됩니다');
     expect(m).toContain('검토 필요</span>');
   });

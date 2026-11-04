@@ -49,7 +49,7 @@ from fastapi.testclient import TestClient
 
 from imask_backend.analyses import ApiError, analysis_out
 from imask_backend.manage import list_out
-from imask_backend.reviews import analysis_read_out, parse_action, parse_json, review_action_out
+from imask_backend.reviews import RISK_LABELS, analysis_read_out, parse_action, parse_json, review_action_out
 from imask_backend.store import StoreError
 from imask_backend.textsafe import escaped_json_bytes, has_unpaired_surrogates
 from imask_backend.upstage import UpstageClient
@@ -3233,3 +3233,11 @@ def test_final_result_with_explicit_null_decision_passes(script: Any, capsys: An
     assert _run(script, api, FakeUpstageServer(), ["--analysis-id", ANALYSIS_ID]) == 0
     out = capsys.readouterr().out
     assert "decision: null" in out and "결과 키 없음" not in out
+
+
+def test_s2_risk_label_matches_the_backend(script: Any) -> None:
+    # S2 의 위험등급 표(상·중·하·검토 필요)는 백엔드 reviews.RISK_LABELS 와 같다 — 그 밖은 미평가
+    assert script.RISK_LABELS == RISK_LABELS
+    assert script._risk_label({"overall": {"level": "검토 필요"}}) == "검토 필요"
+    assert script._risk_label({"overall": {"level": None}, "summary": {"risk_level": " 검토 필요 "}}) == "검토 필요"
+    assert script._risk_label({"overall": {"level": "모르는 값"}}) == "미평가"

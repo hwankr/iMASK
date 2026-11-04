@@ -663,7 +663,16 @@ def test_block_without_a_row_is_the_default_with_two_system_lines(env: Env) -> N
 
 @pytest.mark.parametrize(
     ("risk", "summary", "label"),
-    [("상", None, "높음"), ("중", None, "보통"), ("하", None, "낮음"), ("검토 필요", None, "미평가"), (None, {"risk_level": " 중 "}, "보통"), (None, {"risk_level": "x"}, "미평가")],
+    [
+        ("상", None, "높음"),
+        ("중", None, "보통"),
+        ("하", None, "낮음"),
+        ("검토 필요", None, "검토 필요"),
+        (None, {"risk_level": " 중 "}, "보통"),
+        (None, {"risk_level": " 검토 필요 "}, "검토 필요"),
+        (None, {"risk_level": "검토필요"}, "미평가"),
+        (None, {"risk_level": "x"}, "미평가"),
+    ],
 )
 def test_system_line_risk_label(risk: str | None, summary: dict[str, Any] | None, label: str) -> None:
     env = make_env(custom_result(SMALL, risk=risk, summary=summary))

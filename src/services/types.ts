@@ -6,6 +6,7 @@
    ========================================================================== */
 
 import type {
+  AnalysisRisk,
   AnalysisStatus,
   Exposure,
   ExportFormat,
@@ -386,7 +387,8 @@ export interface Analysis {
   submittedAt: string;
   analyzedAt: string;
   status: AnalysisStatus;
-  risk: RiskLevel;
+  /** 분석 건 위험도 — 위험 등급 넷 + 실제 분석의 review(검토 필요) */
+  risk: AnalysisRisk;
   review: ReviewStatus;
   docs: AnalysisDoc[];
   findings: Finding[];

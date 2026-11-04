@@ -204,7 +204,7 @@ REVIEW_ACTOR = "api_e2e"  # 이 스크립트가 보내는 처리자 이름
 SYSTEM_ACTOR = "시스템"
 ANALYSIS_TARGET = "분석 건"
 UNNAMED_FINDING = "이름 없는 항목"
-RISK_LABELS = {"상": "높음", "중": "보통", "하": "낮음"}
+RISK_LABELS = {"상": "높음", "중": "보통", "하": "낮음", "검토 필요": "검토 필요"}
 FP_REASON = "개인정보가 아닌 번호·문구"  # 오탐 사유 목록(FP_REASONS)의 첫 값
 MSG_REVIEW_BAD_REQUEST = "요청 형식이 올바르지 않습니다."
 MSG_REVIEW_TEXT_TOO_LONG = "메모·사유는 500자 이하로 적어 주세요."
@@ -1357,7 +1357,7 @@ def _review_targets(result: Any) -> list[dict[str, str]]:
 
 
 def _risk_label(result: Mapping[str, Any]) -> str:
-    """S2 의 위험등급 — overall.level(비면 summary.risk_level) 상·중·하 → 높음·보통·낮음, 그 밖 미평가."""
+    """S2 의 위험등급 — overall.level(비면 summary.risk_level) 상·중·하·검토 필요 → 높음·보통·낮음·검토 필요, 그 밖 미평가."""
     overall = result.get("overall") if isinstance(result.get("overall"), Mapping) else {}
     level = overall.get("level")
     if not (isinstance(level, str) and _js_trim(level)):

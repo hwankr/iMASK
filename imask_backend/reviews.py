@@ -148,7 +148,7 @@ AI_SUBJECT_FALLBACK = "기타"
 AI_EXPOSURE_FALLBACK = "전체 노출"
 SYSTEM_ACTOR = "시스템"
 ANALYSIS_TARGET = "분석 건"
-RISK_LABELS = {"상": "높음", "중": "보통", "하": "낮음"}  # 화면 riskFromLevel + RISK 라벨
+RISK_LABELS = {"상": "높음", "중": "보통", "하": "낮음", "검토 필요": "검토 필요"}  # 화면 riskFromLevel + ANALYSIS_RISK 라벨
 UNRATED_LABEL = "미평가"
 REPLACEMENT = "�"
 ELLIPSIS = "…"
@@ -263,7 +263,7 @@ class ItemTarget:
 class ReviewScope:
     targets: tuple[Target, ...]
     by_id: Mapping[str, Target]  # 계약 id → 처음 나온 항목
-    risk_label: str  # S2 의 위험등급(높음·보통·낮음·미평가)
+    risk_label: str  # S2 의 위험등급(높음·보통·낮음·검토 필요·미평가)
     items: tuple[ItemTarget, ...] = ()  # 검토사항(저장할 수 없는 것도 — S2 개수·남은 항목 수에 센다)
     item_by_id: Mapping[str, ItemTarget] = field(default_factory=dict)  # 계약 id → 저장할 수 있는 검토사항
 

@@ -7,7 +7,7 @@
  */
 
 import { CONFIG } from '@/config/app';
-import { riskView } from '@/display/rules';
+import { analysisRiskView } from '@/display/rules';
 import type { Analysis } from '@/services/types';
 import { incomeSet, loanResults, maskedSet, newSet, scanSet, brokenSet } from './sets';
 import { loanDocs } from './documents';
@@ -21,7 +21,7 @@ export function mkA(o: MkAInput): Analysis {
 export function summaryText(a: Analysis): string {
   if (a.status === 'failed') return '분석 실패 · 파일을 열 수 없음 · 위험등급 미평가';
   const head = a.status === 'partial' ? '분석 일부 실패 · 문서 ' + a.docs.filter((d) => d.status === 'failed').length + '개 실패' : '분석 완료';
-  return head + ' · 탐지 ' + a.findings.length + '건 · 위험등급 ' + riskView(a.risk).label + ' · 검토사항 ' + a.items.length + '건';
+  return head + ' · 탐지 ' + a.findings.length + '건 · 위험등급 ' + analysisRiskView(a.risk).label + ' · 검토사항 ' + a.items.length + '건';
 }
 export function rawSamples(): Analysis[] {
   const list = [

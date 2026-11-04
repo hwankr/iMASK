@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { riskView } from '@/display/rules';
+import { analysisRiskView } from '@/display/rules';
 import { cx } from './cx';
 import { Icon } from './Icon';
 import styles from './RiskBadge.module.css';
@@ -11,7 +11,7 @@ import styles from './RiskBadge.module.css';
 export type RiskBadgeSize = 'xs' | 'sm' | 'md' | 'lg';
 
 export interface RiskBadgeProps {
-  /** 서비스 값(high·medium·low·unrated). 모르는 값은 ② 규칙대로 '미평가'. */
+  /** 서비스 값(high·medium·low·unrated — 분석 건은 review 도). 모르는 값은 ② 규칙대로 '미평가'. */
   level: string | null | undefined;
   size?: RiskBadgeSize;
   /** sm 크기에서 굵은 글자(800)·막대 12px — 상세 머리 */
@@ -20,10 +20,11 @@ export interface RiskBadgeProps {
 }
 
 /**
- * 위험등급 — 채운 사각 + 막대 수(dg-r*) + 라벨. 라벨·색·막대는 ② riskView 에서만 가져온다.
+ * 위험등급 — 채운 사각 + 막대 수(dg-r*) + 라벨. 라벨·색·막대는 ② analysisRiskView 에서만 가져온다
+ * (탐지 항목 등급은 riskView 와 같다 · 분석 건의 review 는 '검토 필요' — 주의 아이콘).
  */
 export function RiskBadge({ level, size = 'sm', strong = false, className }: RiskBadgeProps) {
-  const r = riskView(level);
+  const r = analysisRiskView(level);
   const glyph = size === 'lg' ? 13 : size === 'md' || (size === 'sm' && strong) ? 12 : 11;
   const style = { '--rb-fg': r.fg, '--rb-bg': r.bg } as CSSProperties;
   return (

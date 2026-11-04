@@ -8,9 +8,12 @@
      항목마다 색이 바뀌는 곳만 ② 의 CSS 변수 값(var(--hi-soft) 등)을 넘긴다.
    - 행동(누름)은 담지 않는다. 화면 조각이 useDetailUi(선택·이동)와 DetailActions(T7 검토 동작)를 부른다.
    - 실제 분석(Analysis.raw 가 있음 — API 서비스만 채운다, DetailFacts.live)도 데모처럼 검토 동작을 쓴다. 다른 점:
-     결과 탭은 탐지 항목 · 분석 요약(검토사항 · 연결은 아직 없음), 원문은 블록 대신 원본 파일 쪽(live — 파일 기준 쪽 ·
-     위치 상자)을 그린다. 검토 완료 띠의 '보고서 보기'는 데모와 같다(실제 분석 보고서 — 보고서 화면이 reportGate 로 가른다).
-     검토 기록을 불러오지 못한 실제 분석(raw.reviewable false)은 readOnly — 검토 동작 버튼만 막는다
+     결과 탭은 탐지 항목 · 검토 필요 · 분석 요약(연결은 아직 없음), 원문은 블록 대신 원본 파일 쪽(live — 파일 기준 쪽 ·
+     위치 상자)을 그린다. 검토사항(서버가 계산한 result.items)의 근거는 위치 상자 id 를 가리키므로 데모와 같은 규칙으로
+     그 상자를 검토사항 색으로 강조하고 이름표를 단다 — 지금 쪽에 근거 상자가 없으면 원문 보기 안 item 안내(제목 'R-0n · 종류',
+     글 = 할 일). 검토사항이 없을 때 빈 화면은 제목만(데모의 설명 줄은 실제 분석이 만들지 않는 종류를 말해서 뺀다).
+     검토 완료 띠의 '보고서 보기'는 데모와 같다(실제 분석 보고서 — 보고서 화면이 reportGate 로 가른다).
+     검토 기록을 불러오지 못한 실제 분석(raw.reviewable false)은 readOnly — 검토 동작 버튼(해결 · 다시 열기 포함)만 막는다
      (검토 완료 버튼 title 만 '검토 기록을 불러오지 못했습니다'). 데모 분석에는 raw 가 없어 값이 전과 같다.
    ========================================================================== */
 
@@ -974,6 +977,10 @@ export interface ResultsModel {
   nOpen: number;
   nDone: number;
   items: ItemModel[];
+  /** 해결 · 다시 열기 버튼을 막는다(검토 완료 · 검토 기록을 불러오지 못함) */
+  itemsLocked: boolean;
+  /** 검토사항이 없을 때 제목 아래 설명 줄(실제 분석은 '' — 제목만) */
+  itemsEmptyText: string;
   /* 문서 간 연결 */
   links: LinkModel[];
   /* 기다림 */
@@ -985,6 +992,9 @@ export interface ResultsModel {
   /** 실제 분석인데 검토 기록을 불러오지 못함 — 검토 동작 · 메모 버튼을 막는다 */
   readOnly: boolean;
 }
+
+/** 검토사항이 없을 때 설명 줄(데모만 — 원본 문구) */
+export const ITEMS_EMPTY_TEXT = '판독 실패, 잘린 페이지, 값 불일치, 연결 근거 부족 같은 문제가 발견되면 이곳에 표시됩니다.';
 
 /** 결과 패널(원본 detailVM 의 '탐지 결과 패널' 부분) */
 export function resultsModel(a: Analysis, s: DetailUiState, x: DetailFacts): ResultsModel {
@@ -1006,7 +1016,7 @@ export function resultsModel(a: Analysis, s: DetailUiState, x: DetailFacts): Res
 
   const tabLabel: Record<DetailTab, string> = { findings: '탐지 항목', review: '검토 필요', links: '문서 간 연결', summary: '분석 요약' };
   const tabCount: Record<DetailTab, number | undefined> = { findings: fAll.length, review: x.openItems, links: a.links.length, summary: undefined };
-  // 실제 분석은 검토사항 · 연결이 아직 없어 그 탭을 빼고 '분석 요약'(위험도 판정 · 다음 단계 · 결과 요약 · 단계별 JSON)을 둔다
+  // 실제 분석은 연결이 아직 없어 그 탭을 빼고 '분석 요약'(위험도 판정 · 다음 단계 · 결과 요약 · 단계별 JSON)을 둔다
   const tabList = x.live ? LIVE_DETAIL_TABS : DETAIL_TABS;
 
   return {
@@ -1031,6 +1041,8 @@ export function resultsModel(a: Analysis, s: DetailUiState, x: DetailFacts): Res
       .slice()
       .sort((p, q) => (p.resolved ? 1 : 0) - (q.resolved ? 1 : 0))
       .map((it) => itemModel(a, it, focus)),
+    itemsLocked: x.locked || x.readOnly,
+    itemsEmptyText: x.live ? '' : ITEMS_EMPTY_TEXT,
     links: a.links.map((l) => linkModel(a, l, focus)),
     waiting: waitingModel(a, x),
     memo: a.memo,

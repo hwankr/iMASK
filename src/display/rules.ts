@@ -113,6 +113,8 @@ export interface ReviewItemTypeView {
   readonly icon: IconName;
 }
 
+/** 앞 6개는 디자인(데모) 종류, 뒤 3개(missing·lowconf·other)는 실제 분석 검토사항 종류다.
+ *  백엔드 imask_backend 의 종류 표가 이 키·라벨·순서를 그대로 가진다(pytest 가 이 파일을 읽어 맞춰 본다). */
 export const RTYPE = {
   unreadable: { label: '판독 불가', icon: 'dg-i-eye-off' },
   cutoff: { label: '페이지 잘림', icon: 'dg-i-scissors' },
@@ -120,6 +122,9 @@ export const RTYPE = {
   weaklink: { label: '연결 근거 부족', icon: 'dg-i-link-off' },
   nolocation: { label: '위치 확인 필요', icon: 'dg-i-pin-q' },
   failed: { label: '분석 실패', icon: 'dg-i-x-circle' },
+  missing: { label: '필수 항목 없음', icon: 'dg-i-alert' },
+  lowconf: { label: '인식 확인 필요', icon: 'dg-i-eye-half' },
+  other: { label: '기타 서류', icon: 'dg-i-file' },
 } as const satisfies Record<string, ReviewItemTypeView>;
 
 export type ReviewItemType = keyof typeof RTYPE;
@@ -226,8 +231,8 @@ export const EXPORT_FORMATS = [
 
 export type ExportFormat = (typeof EXPORT_FORMATS)[number]['key'];
 
-/** 실제 분석의 JSON 형식 설명 — 실제 분석 파일에는 검토사항 · 문서 간 연결이 없다(데모는 EXPORT_FORMATS 그대로) */
-export const LIVE_EXPORT_JSON_DESC = '분석 정보, 탐지 항목, 검토 이력을 모두 담습니다.';
+/** 실제 분석의 JSON 형식 설명 — 실제 분석 파일에는 문서 간 연결이 없다(데모 문구에서 그것만 뺐다 · 데모는 EXPORT_FORMATS 그대로) */
+export const LIVE_EXPORT_JSON_DESC = '분석 정보, 탐지 항목, 검토사항, 검토 이력을 모두 담습니다.';
 
 /* ---------- 도우미 ---------- */
 

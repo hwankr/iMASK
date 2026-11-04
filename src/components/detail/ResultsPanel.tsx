@@ -75,8 +75,8 @@ function Waiting({ w }: { w: WaitingModel }) {
 /**
  * 결과 패널(Main 457–600) — 탭 3개(탐지 항목 · 검토 필요 · 문서 간 연결 + 건수), 탐지 항목(필터 칩 · 현재 문서만 보기 ·
  * 펼치는 행), 검토 필요, 문서 간 연결, 결과를 기다리는 동안의 안내, 검토 메모(편집은 T7).
- * 실제 분석은 탭이 탐지 항목 · 분석 요약(summary 를 그린다)이다. 검토 기록을 불러오지 못했으면(rs.readOnly)
- * 검토 동작 · 메모 버튼만 막는다.
+ * 실제 분석은 탭이 탐지 항목 · 검토 필요 · 분석 요약(summary 를 그린다)이다. 검토 기록을 불러오지 못했으면(rs.readOnly)
+ * 검토 동작(해결 · 다시 열기 포함) · 메모 버튼만 막는다.
  */
 export function ResultsPanel({
   rs,
@@ -131,7 +131,17 @@ export function ResultsPanel({
         ) : null}
         {rs.hasTabs && rs.tab === 'review' ? (
           <div key="review" className={styles.fade}>
-            <ReviewItems keep={rs.keep} nOpen={rs.nOpen} nDone={rs.nDone} items={rs.items} locked={rs.locked} onEvidence={onItemEvidence} onOpenLink={onOpenLink} actions={actions} />
+            <ReviewItems
+              keep={rs.keep}
+              nOpen={rs.nOpen}
+              nDone={rs.nDone}
+              items={rs.items}
+              locked={rs.itemsLocked}
+              emptyText={rs.itemsEmptyText}
+              onEvidence={onItemEvidence}
+              onOpenLink={onOpenLink}
+              actions={actions}
+            />
           </div>
         ) : null}
         {rs.hasTabs && rs.tab === 'links' ? (

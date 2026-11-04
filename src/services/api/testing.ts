@@ -2,11 +2,15 @@
    테스트 도우미(실제 분석 서비스) — 가짜 fetch · AnalysisOut · 목록 항목 만들기 · 계약 모양 결과(고정 자료).
    앱 코드는 import 하지 않는다(테스트 전용).
    고정 자료 fixtures/done-result.json = 합성 묶음(testdocs/iMASK_smoke_bundle.pdf, 6쪽 = 서류 6개)의 공통 계약
-   result(stages 없음). 다음 작업의 가짜 백엔드도 같은 파일을 읽는다.
+   result(stages 없음). 다음 작업의 가짜 백엔드도 같은 파일을 읽는다. items 키가 없다(옛 결과 = 검토사항 0개).
+   고정 자료 fixtures/items-result.json = 위 자료의 사본 + 서버가 계산한 검토사항 result.items 8개(BRIEF §5.3 글 · 근거 규칙):
+   서류 index 1 이 필수 항목 검증에 실패했다고 보고 validation 'red' + missing 1개, 나머지는 위 자료에서 규칙대로 나오는
+   lowconf 4 · nolocation 2 · other 1(검증 checks 는 result 에 없으므로 missing 은 응답 모양으로만 넣었다).
    ========================================================================== */
 
 import type { AnalysisListItemOut, AnalysisOut, DocumentOut } from './client';
 import doneResultFixture from './fixtures/done-result.json';
+import itemsResultFixture from './fixtures/items-result.json';
 
 /** 가짜 fetch 가 받은 요청 */
 export interface SeenRequest {
@@ -83,6 +87,11 @@ export function doneResult(): Record<string, unknown> {
 /** 공통 계약 모양의 완료 결과(fixtures/done-result.json) — 깊은 복사본이라 고쳐도 다른 테스트에 번지지 않는다 */
 export function contractResult(): Record<string, unknown> {
   return structuredClone(doneResultFixture) as unknown as Record<string, unknown>;
+}
+
+/** 검토사항이 든 공통 계약 결과(fixtures/items-result.json) — 깊은 복사본 */
+export function itemsResult(): Record<string, unknown> {
+  return structuredClone(itemsResultFixture) as unknown as Record<string, unknown>;
 }
 
 /** AnalysisOut */

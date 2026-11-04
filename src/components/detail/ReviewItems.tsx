@@ -11,7 +11,10 @@ export interface ReviewItemsProps {
   nOpen: number;
   nDone: number;
   items: ItemModel[];
+  /** 해결 · 다시 열기를 막는다(검토 완료 · 검토 기록을 불러오지 못한 실제 분석 — ResultsModel.itemsLocked) */
   locked: boolean;
+  /** 검토사항이 없을 때 제목 아래 설명 줄(빈 글이면 제목만 — 실제 분석) */
+  emptyText: string;
   /** 근거 위치 링크 — 문서 · 쪽을 바꾸고 그 위치로(휴대폰이면 원문 탭으로) */
   onEvidence: (rid: string, idx: number) => void;
   /** '연결 보기' — 문서 간 연결 탭의 그 카드로 */
@@ -22,8 +25,9 @@ export interface ReviewItemsProps {
 /**
  * 검토 필요 탭(Main 515–542) — '유지' 안내(rs.keep), 미해결 · 해결 건수, 검토사항 행
  * (유형 · ID · 해결 상태, 제목, 설명, 위치, 할 일, 처리 내용, 근거 위치 · 연결 보기 · 다시 분석 · 해결 · 다시 열기).
+ * 실제 분석도 같은 행을 그린다(서버가 만든 검토사항 글 그대로). 검토사항이 없으면 제목 + 설명 줄(emptyText — 실제 분석은 제목만).
  */
-export function ReviewItems({ keep, nOpen, nDone, items, locked, onEvidence, onOpenLink, actions }: ReviewItemsProps) {
+export function ReviewItems({ keep, nOpen, nDone, items, locked, emptyText, onEvidence, onOpenLink, actions }: ReviewItemsProps) {
   return (
     <>
       {keep ? (
@@ -102,7 +106,7 @@ export function ReviewItems({ keep, nOpen, nDone, items, locked, onEvidence, onO
             <SpriteIcon name="dg-i-check-circle" className={styles.icon26} />
           </span>
           <strong className={styles.emptyTitle}>확인이 필요한 문제가 없습니다</strong>
-          <span className={styles.emptyText}>판독 실패, 잘린 페이지, 값 불일치, 연결 근거 부족 같은 문제가 발견되면 이곳에 표시됩니다.</span>
+          {emptyText ? <span className={styles.emptyText}>{emptyText}</span> : null}
         </div>
       ) : null}
     </>

@@ -14,7 +14,7 @@ const DOC_TABLE_TITLE = '대상 문서와 문서별 확인 결과';
 /** 08 구역의 소제목(ReportHistory h3)이자 수정 표의 이름 */
 export const CHANGE_TABLE_TITLE = '최초 AI 결과와 담당자 수정';
 
-/** 03 대상 문서와 문서별 확인 결과 — Main 645–648. 실제 분석에는 '남은 검토사항' 열이 없다(docOpenCol) */
+/** 03 대상 문서와 문서별 확인 결과 — Main 645–648. '남은 검토사항' 열(docOpenCol)은 데모 · 실제 분석 모두 보인다 */
 export function ReportDocTable({ v }: { v: ReportView }) {
   return (
     <ReportSection n={v.sections.docs} title={DOC_TABLE_TITLE}>

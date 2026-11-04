@@ -19,11 +19,11 @@ import type { Analysis, LinkDecision } from '@/services/types';
 
 /* ---------- 화면 조건 ---------- */
 
-/** 결과 패널 탭 — 탐지 항목 · 검토 필요 · 문서 간 연결(데모), 실제 분석은 탐지 항목 · 분석 요약 */
+/** 결과 패널 탭 — 탐지 항목 · 검토 필요 · 문서 간 연결(데모), 실제 분석은 탐지 항목 · 검토 필요 · 분석 요약 */
 export type DetailTab = 'findings' | 'review' | 'links' | 'summary';
 export const DETAIL_TABS: readonly DetailTab[] = ['findings', 'review', 'links'];
-/** 실제 분석(읽기 전용)의 결과 패널 탭 — 검토사항 · 연결이 아직 없어 빼고 '분석 요약'을 둔다 */
-export const LIVE_DETAIL_TABS: readonly DetailTab[] = ['findings', 'summary'];
+/** 실제 분석의 결과 패널 탭 — 문서 간 연결은 아직 없어 빼고 '분석 요약'을 둔다 */
+export const LIVE_DETAIL_TABS: readonly DetailTab[] = ['findings', 'review', 'summary'];
 
 /** 탐지 항목 필터 칩 — 전체 · 미확인 · 위험등급별 */
 export type FindingFilter = 'all' | 'open' | Exclude<RiskLevel, 'unrated'>;

@@ -13,7 +13,8 @@
      이력(kind 가 HKIND 키인 줄만, 시각은 서울)을 분석에, 항목별 값(review.findings)을 탐지 항목에 덧씌운다(contract.ts).
      detailReady 인데 review 가 객체가 아니면(검토 기록을 읽지 못함) 검토 상태 'none' · 빈 값이고 raw.reviewable false.
      그 밖(대기·분석 중·실패·옛 형식)은 review 가 있어도 'none' · 빈 이력.
-   - 검토사항·연결은 아직 없다(빈 목록).
+   - 검토사항은 detailReady 일 때만 서버가 계산한 result.items 를 옮긴다(contract.ts toLiveItems — 없거나 배열이 아니면 [] =
+     옛 결과). reviewable 이면 해결 기록(review.items)을 덧씌운다(overlayItemReviews). 그 밖은 빈 목록. 연결은 아직 없다(빈 목록).
    - 백엔드가 준 원래 값은 raw 에 둔다(결과 JSON · 올린 파일 · detailReady · reviewable · overall · 오류 · 작업 번호 · 조회 상태 ·
      원래 시각 — 만든 · 바뀐 · 시작한 시각).
    - 목록(GET /analyses)은 상세 매핑과 따로 읽는다(readAnalysisList · toListAnalysis — 가벼운 항목):
@@ -27,7 +28,18 @@ import { ASTATUS, HKIND, type AnalysisStatus, type HistoryKind, type ReviewStatu
 import { pad2 } from '@/lib/format';
 import type { Analysis, AnalysisDoc, DocStatus, HistoryEntry, RawAnalysisInfo } from '../types';
 import type { AnalysisOut, DocumentOut } from './client';
-import { isDetailReady, markdownLines, overlayFindingReviews, readDocSources, readFile, readOverall, toLiveDocs, toLiveFindings } from './contract';
+import {
+  isDetailReady,
+  markdownLines,
+  overlayFindingReviews,
+  overlayItemReviews,
+  readDocSources,
+  readFile,
+  readOverall,
+  toLiveDocs,
+  toLiveFindings,
+  toLiveItems,
+} from './contract';
 
 /** 서울 시각 = UTC + 9시간 */
 const SEOUL_OFFSET_MS = 9 * 60 * 60 * 1000;
@@ -206,6 +218,8 @@ export function toAnalysis(out: AnalysisOut): Analysis {
   const reviewable = info !== null;
   const shown = info ?? NO_REVIEW;
   const findings = detailReady ? toLiveFindings((result as { findings?: unknown }).findings, sources, analyzedAt) : [];
+  // 검토사항 — 서버가 계산한 result.items(없으면 옛 결과 = 0개). 위치는 덧씌우기 전 탐지 항목으로 찾는다(위치 · 번호는 덧씌우기와 무관)
+  const items = detailReady ? toLiveItems((result as { items?: unknown }).items, sources, findings) : [];
   const raw: RawAnalysisInfo = {
     result,
     file,
@@ -231,7 +245,7 @@ export function toAnalysis(out: AnalysisOut): Analysis {
     review: shown.review,
     docs: detailReady ? toLiveDocs(sources, file, extLabel(file?.mime, file?.name)) : documents.map((d) => toDoc(d, status, error)),
     findings: reviewable ? overlayFindingReviews(findings, (reviewBlock as { findings?: unknown }).findings, seoulDateTime) : findings,
-    items: [],
+    items: reviewable ? overlayItemReviews(items, (reviewBlock as { items?: unknown }).items, seoulDateTime) : items,
     links: [],
     history: shown.history,
     memo: shown.memo,

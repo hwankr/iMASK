@@ -87,7 +87,7 @@ describe('buildExport — 보고서 대상', () => {
     expect(jsonFile.name).toBe('iMASK_DG-20261102-AB12_검토결과.json');
     const obj = JSON.parse(jsonFile.text);
     expect(obj.보고서).toMatchObject({ 서비스: 'iMASK', 생성시각: '2026.11.05 00:00', 데모데이터: false });
-    expect(Object.keys(obj)).not.toContain('검토사항');
+    expect(obj.검토사항).toEqual([]); // 옛 결과(items 없음) — 검토사항 0개, 키는 데모 자리
     expect(Object.keys(obj)).not.toContain('문서간연결');
     const raws = rawValues();
     expect(raws.length).toBeGreaterThan(0);

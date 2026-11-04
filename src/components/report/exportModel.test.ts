@@ -15,7 +15,7 @@ describe('내보내기 모달 화면 값 — 원본 modalVM export', () => {
   });
 
   it('실제 분석 선택지 — JSON 설명만 실제 분석 문구, 데모 선택지 · ② EXPORT_FORMATS 는 그대로', () => {
-    expect(LIVE_EXPORT_JSON_DESC).toBe('분석 정보, 탐지 항목, 검토 이력을 모두 담습니다.');
+    expect(LIVE_EXPORT_JSON_DESC).toBe('분석 정보, 탐지 항목, 검토사항, 검토 이력을 모두 담습니다.');
     expect(LIVE_FORMAT_OPTIONS).toEqual([FORMAT_OPTIONS[0], { ...FORMAT_OPTIONS[1], description: LIVE_EXPORT_JSON_DESC }]);
     expect(FORMAT_OPTIONS.map((o) => o.description)).toEqual([
       '엑셀 등에서 열 수 있는 표입니다. 탐지 항목, 판단 근거, 확인 상태를 담습니다.',

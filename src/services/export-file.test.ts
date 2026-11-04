@@ -138,11 +138,13 @@ describe('실제 분석 파일 — 합성 고정 자료', () => {
     expect(file.preview).toBe(file.text.slice(1).split('\r\n').slice(0, 6).join('\n'));
   });
 
-  it('JSON — 최상위 키(검토사항 · 문서간연결 없음, 순서 그대로) · 데모데이터 false · 생성 시각(받은 서울 시각)', () => {
+  it('JSON — 최상위 키(검토사항은 데모 자리 · 문서간연결 없음, 순서 그대로) · 데모데이터 false · 생성 시각(받은 서울 시각)', () => {
     const file = liveFile(a, 'json');
     expect(file.name).toBe(`${CONFIG.brandName}_${a.code}_검토결과.json`);
     const obj = JSON.parse(file.text);
-    expect(Object.keys(obj)).toEqual(['보고서', '분석', '대상문서', '주요위험사유', '탐지항목', '권장조치', '검토메모', '검토이력']);
+    expect(Object.keys(obj)).toEqual(['보고서', '분석', '대상문서', '주요위험사유', '탐지항목', '검토사항', '권장조치', '검토메모', '검토이력']);
+    // 옛 결과(items 없음) — 검토사항 0개
+    expect(obj.검토사항).toEqual([]);
     expect(obj.보고서).toEqual({ 서비스: CONFIG.brandName, 생성시각: '2026.11.04 15:07', 데모데이터: false, 마스킹: '민감한 값은 마스킹된 표시값만 포함' });
     expect(Object.keys(obj.분석)).toEqual(['분석ID', '분석명', '접수일시', '분석상태', '위험등급', '검토상태', '검토자', '검토완료시각']);
     expect(obj.분석.분석ID).toBe(a.code);

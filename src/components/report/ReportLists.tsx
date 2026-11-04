@@ -33,9 +33,8 @@ export function ReportReasons({ v }: { v: ReportView }) {
   );
 }
 
-/** 05 남아 있는 검토사항 — Main 659–662. 실제 분석에는 이 구역이 없다(sections.remaining null) */
+/** 05 남아 있는 검토사항 — Main 659–662(실제 분석도 같다 — 서버가 계산한 검토사항 중 미해결) */
 export function ReportRemaining({ v }: { v: ReportView }) {
-  if (v.sections.remaining === null) return null;
   return (
     <ReportSection n={v.sections.remaining} title="남아 있는 검토사항">
       {v.remaining.length > 0 ? (

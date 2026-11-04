@@ -15,6 +15,14 @@
    - 검토 기록 덧씌우기(overlayFindingReviews): review.findings[계약 id](자기 속성만)의 확인 상태 · 분류 · 오탐 사유 ·
      수정 사유 · 메모 · 수정 시각을 그 항목에 덧씌운다. 목록 밖 · 타입이 틀린 값은 버리고 AI 값 · 기본값을 쓴다.
      최초 AI 결과(ai) · 위험등급(risk) · 판단 근거(reason) · 계약 원래 값(live)은 바꾸지 않는다.
+   - 검토사항(toLiveItems): 서버가 계산한 result.items[](BRIEF §5.3 — 화면은 다시 계산하지 않는다)를 ReviewItem 으로 옮긴다.
+     id 가 비지 않은 문자열 · number 가 'R-' + 숫자 2자리 이상 · type 이 RTYPE 자기 키 · document_index 가 보이는 서류인 항목만,
+     같은 id · 같은 number 는 처음 것만(받아들인 항목 기준). 화면 id = number, 계약 id 는 live.id. 쪽은 서류 안 쪽(범위 밖 · 정수 아님은 1쪽).
+     글(title · desc · next)은 서버 글 그대로(문자열이 아니면 ''). 근거는 label 이 비지 않은 문자열인 객체만 — anchors 는 finding_ids 가
+     가리키는 같은 서류 · 같은 쪽 탐지 항목의 위치 ID 를 차례로(겹치는 위치 ID 는 한 번), findingId 는 finding_id 가 같은 서류의 탐지
+     항목일 때 그 화면 번호(위치 유무와 무관 — 누르면 그 탐지 항목을 고른다). 탐지 항목 찾기는 Map 이라 항목 · 근거 수에 선형이다.
+   - 검토사항 덧씌우기(overlayItemReviews): review.items[계약 id](자기 속성 · 객체만)의 해결 여부(정확히 true 일 때만) · 처리 내용 ·
+     해결 시각(서울, 못 읽으면 '') · 처리자를 덧씌운다. 그 밖은 미해결 기본값.
    ========================================================================== */
 
 import {
@@ -23,6 +31,7 @@ import {
   FP_REASONS,
   FSTATUS,
   RISK,
+  RTYPE,
   SUBJECTS,
   docTypeName,
   type Exposure,
@@ -30,11 +39,12 @@ import {
   type FpReason,
   type InfoCategory,
   type InfoSubject,
+  type ReviewItemType,
   type RiskLevel,
 } from '@/display/rules';
 import { pad2 } from '@/lib/format';
 import { unitBoxOnPage } from '@/lib/pageBox';
-import type { AnalysisDoc, DocSource, Finding, FindingBox, FindingLive, RawFileInfo, RawOverall } from '../types';
+import type { AnalysisDoc, DocSource, EvidenceRef, Finding, FindingBox, FindingLive, RawFileInfo, RawOverall, ReviewItem } from '../types';
 
 /** 항목 위험등급이 없고(risk_source null) 사유도 없을 때 보이는 판단 근거 */
 export const UNRATED_REASON = '워크플로우가 항목별 위험등급을 아직 판정하지 않아 미평가로 표시합니다.';
@@ -304,6 +314,124 @@ export function overlayFindingReviews(findings: readonly Finding[], saved: unkno
       reclassNote: str(v.reclass_note),
       memo: str(v.memo),
       updatedAt: toTime(v.updated_at) || f.updatedAt,
+    };
+  });
+}
+
+/* ---------- 검토사항(result.items — 서버가 계산) ---------- */
+
+/** 검토사항 화면 번호 — 'R-' + 숫자 2자리 이상(백엔드 R-01 · R-100). ASCII 숫자만(\d 는 u 플래그 없이 0-9) */
+const ITEM_NUMBER = /^R-\d{2,}$/;
+
+/** 서류 안 쪽(1부터) — 정수이고 서류 범위 안이면 그 쪽, 아니면 1쪽 */
+function pageInDoc(page: unknown, src: DocSource): number {
+  return isInt(page) && page >= src.pageStart && page <= src.pageEnd ? page - src.pageStart + 1 : 1;
+}
+
+/**
+ * result.items[] → 검토사항(서버 순서 그대로). 예외 없이 읽는다 — 모양이 틀린 항목 · 근거는 건너뛴다.
+ * - items 가 배열이 아니면 []. 항목: 객체 · id(비지 않은 문자열) · number(ITEM_NUMBER) · type(RTYPE 자기 키) ·
+ *   document_index(보이는 서류 — sources)일 때만. 같은 id · 같은 number 는 처음 받아들인 것만.
+ * - findings 는 같은 결과의 탐지 항목(toLiveFindings) — 계약 id(live.id) → 탐지 항목 Map(처음 것)으로 찾는다.
+ */
+export function toLiveItems(items: unknown, sources: readonly DocSource[], findings: readonly Finding[]): ReviewItem[] {
+  if (!Array.isArray(items)) return [];
+  const byIndex = new Map<number, DocSource>();
+  for (const src of sources) if (!byIndex.has(src.index)) byIndex.set(src.index, src);
+  const byContractId = new Map<string, Finding>();
+  for (const f of findings) {
+    const key = f.live?.id;
+    if (typeof key === 'string' && key && !byContractId.has(key)) byContractId.set(key, f);
+  }
+  /** 같은 서류의 탐지 항목(계약 id 로) — 다른 서류 · 없는 id · 문자열 아님은 null */
+  const findingOf = (id: unknown, docId: string): Finding | null => {
+    if (typeof id !== 'string') return null;
+    const f = byContractId.get(id);
+    return f && f.docId === docId ? f : null;
+  };
+
+  const seenIds = new Set<string>();
+  const seenNumbers = new Set<string>();
+  const out: ReviewItem[] = [];
+  for (const it of items) {
+    if (!isObj(it)) continue;
+    const { id, number, type, document_index: index } = it;
+    if (typeof id !== 'string' || !id || seenIds.has(id)) continue;
+    if (typeof number !== 'string' || !ITEM_NUMBER.test(number) || seenNumbers.has(number)) continue;
+    if (typeof type !== 'string' || !own(RTYPE, type)) continue;
+    if (!isInt(index)) continue;
+    const src = byIndex.get(index);
+    if (!src) continue;
+    seenIds.add(id);
+    seenNumbers.add(number);
+
+    const docId = docIdFor(src.index);
+    const evidence: EvidenceRef[] = [];
+    if (Array.isArray(it.evidence)) {
+      for (const ev of it.evidence) {
+        if (!isObj(ev) || typeof ev.label !== 'string' || !ev.label) continue;
+        const page = pageInDoc(ev.page, src);
+        const anchors: string[] = [];
+        if (Array.isArray(ev.finding_ids)) {
+          const once = new Set<string>();
+          for (const fid of ev.finding_ids) {
+            const f = findingOf(fid, docId);
+            if (!f || f.page !== page) continue;
+            for (const a of f.anchors) {
+              if (once.has(a)) continue;
+              once.add(a);
+              anchors.push(a);
+            }
+          }
+        }
+        const target = findingOf(ev.finding_id, docId);
+        const ref: EvidenceRef = { label: ev.label, docId, page, anchors };
+        if (target) ref.findingId = target.id;
+        evidence.push(ref);
+      }
+    }
+
+    const item: ReviewItem = {
+      id: number,
+      type: type as ReviewItemType,
+      title: str(it.title),
+      desc: str(it.desc),
+      next: str(it.next),
+      docId,
+      page: pageInDoc(it.page, src),
+      evidence,
+      resolved: false,
+      note: '',
+      resolvedAt: '',
+      resolvedBy: '',
+      live: { id },
+    };
+    const related = findingOf(it.finding_id, docId);
+    if (related) item.findingId = related.id;
+    out.push(item);
+  }
+  return out;
+}
+
+/**
+ * 검토사항들에 해결 기록(review.items — 계약 id → 저장 값)을 덧씌운 새 목록.
+ * - 그 항목의 계약 id(live.id)가 saved 의 **자기 속성**이고 값이 객체일 때만 본다(__proto__ · constructor 등 상속 키는 없는 것).
+ * - resolved 는 값이 정확히 true 일 때만 true('true' · 1 은 false), note · resolved_by 는 문자열만(아니면 ''),
+ *   resolved_at 은 서울 시각으로(toTime — 읽지 못하면 '').
+ * - 그 밖은 미해결 기본값 그대로. saved 가 객체가 아니면(null · 배열 · 문자열) 그대로 복사한다.
+ */
+export function overlayItemReviews(items: readonly ReviewItem[], saved: unknown, toTime: (value: unknown) => string): ReviewItem[] {
+  const table = isObj(saved) ? saved : null;
+  return items.map((it) => {
+    const key = it.live?.id;
+    const v = table && typeof key === 'string' && own(table, key) ? table[key] : undefined;
+    if (!isObj(v)) return it;
+    return {
+      ...it,
+      resolved: v.resolved === true,
+      note: str(v.note),
+      resolvedAt: toTime(v.resolved_at),
+      resolvedBy: str(v.resolved_by),
     };
   });
 }

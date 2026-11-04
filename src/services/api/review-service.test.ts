@@ -313,18 +313,10 @@ describe('pending — 조회한 분석의 미확인 항목', () => {
 });
 
 describe('남은 미지원 기능은 그대로', () => {
-  it('검토사항 · 연결 판단은 요청 없이 거절(내보내기는 export-service.test.ts)', async () => {
+  it('연결 판단은 요청 없이 거절(검토사항은 item-service.test.ts · 내보내기는 export-service.test.ts)', async () => {
     const { service, seen, notified } = setup();
-    const results = await Promise.allSettled([
-      service.resolveItem(ID, 'R-01', '처리'),
-      service.reopenItem(ID, 'R-01'),
-      service.decideLink(ID, 'L-01', 'linked', '근거'),
-    ]);
-    expect(results).toHaveLength(3);
-    for (const r of results) {
-      expect(r.status).toBe('rejected');
-      expect((r as PromiseRejectedResult).reason.message).toBe(MSG_UNSUPPORTED);
-    }
+    const err = await service.decideLink(ID, 'L-01', 'linked', '근거').catch((e: unknown) => e);
+    expect((err as Error).message).toBe(MSG_UNSUPPORTED);
     expect(seen).toHaveLength(0);
     expect(notified).not.toHaveBeenCalled();
   });

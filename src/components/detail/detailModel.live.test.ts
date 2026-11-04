@@ -211,13 +211,15 @@ describe('실제 분석 상세 — 고정 자료 → toAnalysis → 화면 모�
     expect(bannerModel(a, detailFacts(a, stateOf(a)))).toBeNull();
   });
 
-  it("결과 패널 — 탭은 탐지 항목 · 분석 요약, 검토 메모 버튼 켜짐, 등급은 받은 값(미평가 17 · 높음 2)", () => {
+  it("결과 패널 — 탭은 탐지 항목 · 검토 필요 · 분석 요약(옛 결과는 검토사항 0개), 검토 메모 버튼 켜짐, 등급은 받은 값(미평가 17 · 높음 2)", () => {
     const s = stateOf(a);
     const rs = resultsModel(a, s, detailFacts(a, s));
     expect(rs.tabs.map((t) => [t.value, t.label, t.count])).toEqual([
       ['findings', '탐지 항목', 19],
+      ['review', '검토 필요', 0],
       ['summary', '분석 요약', undefined],
     ]);
+    expect(rs.items).toEqual([]);
     expect(rs.readOnly).toBe(false);
     expect(rs.locked).toBe(false);
     expect(rs.memoPreview).toBe('아직 작성한 메모가 없습니다.');
@@ -351,7 +353,8 @@ describe('실제 분석 — 검토 완료 뒤 · 검토 기록을 불러오지 �
     expect(bannerModel(a, x)).toBeNull();
     const rs = resultsModel(a, s, x);
     expect(rs.readOnly).toBe(true);
-    expect(rs.tabs.map((t) => t.value)).toEqual(['findings', 'summary']);
+    expect(rs.tabs.map((t) => t.value)).toEqual(['findings', 'review', 'summary']);
+    expect(rs.itemsLocked).toBe(true);
     expect(rs.memoPreview).toBe('아직 작성한 메모가 없습니다.');
   });
 

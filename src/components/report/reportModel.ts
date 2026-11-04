@@ -3,10 +3,11 @@
    - 위험등급·근거·라벨은 서비스 값과 ② 표시 규칙 그대로다(화면에서 다시 판정하지 않는다).
    - 민감한 값은 마스킹된 표시값(masked)만 쓴다. 원문 위치 조각(Highlight.x)은 보고서에 넣지 않는다.
    - 휴대폰 배치(요약 카드 구분선 등)는 CSS 가 맡는다. 여기에는 폭과 상관없는 값만 둔다.
-   - 실제 분석(Analysis.raw 가 있음 — 화면은 원문 값을 지운 안전한 사본을 넘긴다)만 다른 점(데모 값은 그대로):
-     요약 카드 2장(탐지 항목 · 담당자 확인 — 미평가가 있으면 탐지 항목 아랫줄에 ' · 미평가 n'), '남아 있는 검토사항' 구역 없음
-     (구역 번호 01~07), 대상 문서 표의 '남은 검토사항' 열 없음, 정보 종류별 표의 '미평가' 열(1건 이상일 때), 전체 탐지 항목은
-     서류 순번 → 서류 안 순번의 숫자 순(D2-01 이 D10-01 앞), 빈 위험 사유 · 권장 조치는 '-', 꼬리말 한 문장.
+   - 실제 분석(Analysis.raw 가 있음 — 화면은 원문 값을 지운 안전한 사본을 넘긴다)도 데모와 같은 구역 01~08 · 대상 문서 표의
+     '남은 검토사항' 열 · '남아 있는 검토사항' 구역(서버가 계산한 검토사항 중 미해결)을 쓴다. 다른 점(데모 값은 그대로):
+     요약 카드 3장(탐지 항목 · 담당자 확인 · 남은 검토사항 — '문서 간 연결' 카드는 아직 없어 뺀다, 미평가가 있으면 탐지 항목
+     아랫줄에 ' · 미평가 n'), 정보 종류별 표의 '미평가' 열(1건 이상일 때), 전체 탐지 항목은 서류 순번 → 서류 안 순번의 숫자 순
+     (D2-01 이 D10-01 앞), 빈 위험 사유 · 권장 조치는 '-', 꼬리말 한 문장.
    - 수정 표의 수정 시각 = 이력 대상(target)이 항목 번호와 같거나 '번호 + 공백'으로 시작하는 마지막 오탐 · 분류 수정 줄
      (D1-10 이 'D1-100 …' 줄을 잡지 않게).
    ========================================================================== */
@@ -206,20 +207,19 @@ export interface HistoryLine {
   reason: string;
 }
 
-/** 구역 번호 — 실제 분석은 '남아 있는 검토사항' 구역이 없어(null) 그 뒤 번호를 하나씩 당긴다 */
+/** 구역 번호 — 데모 · 실제 분석 같다(01~08) */
 export interface ReportSections {
   summary: number;
   reasons: number;
   docs: number;
   findings: number;
-  remaining: number | null;
+  remaining: number;
   recs: number;
   memo: number;
   history: number;
 }
 
-const DEMO_SECTIONS: ReportSections = { summary: 1, reasons: 2, docs: 3, findings: 4, remaining: 5, recs: 6, memo: 7, history: 8 };
-const LIVE_SECTIONS: ReportSections = { summary: 1, reasons: 2, docs: 3, findings: 4, remaining: null, recs: 5, memo: 6, history: 7 };
+const SECTIONS: ReportSections = { summary: 1, reasons: 2, docs: 3, findings: 4, remaining: 5, recs: 6, memo: 7, history: 8 };
 
 export interface ReportView {
   /** 실제 분석 보고서인지 */
@@ -242,7 +242,7 @@ export interface ReportView {
   noReasonsText: string;
   limits: string;
   docs: DocRow[];
-  /** 대상 문서 표에 '남은 검토사항' 열을 보이는지(데모만) */
+  /** 대상 문서 표에 '남은 검토사항' 열을 보이는지(데모 · 실제 분석 모두) */
   docOpenCol: boolean;
   cats: CatRow[];
   /** 정보 종류별 표에 '미평가' 열을 보이는지(실제 분석 · 미평가 1건 이상) */
@@ -364,7 +364,7 @@ export function reportView(a: Analysis): ReportView {
 
   return {
     live,
-    sections: live ? LIVE_SECTIONS : DEMO_SECTIONS,
+    sections: { ...SECTIONS },
     code: a.code,
     name: a.name,
     risk: a.risk,
@@ -372,8 +372,8 @@ export function reportView(a: Analysis): ReportView {
     review: a.review,
     completedText: a.review === 'done' ? a.reviewer + ' · ' + fmtDT(a.reviewedAt) : '검토 진행 중 (완료 전)',
     notDone: a.review !== 'done',
-    /* 실제 분석에는 검토사항 · 문서 간 연결이 아직 없다 — 그 두 카드를 빼고 두 장만 */
-    cards: live ? cards.filter((k) => k.key === 'findings' || k.key === 'reviewed') : cards,
+    /* 실제 분석에는 문서 간 연결이 아직 없다 — 그 카드를 빼고 세 장만 */
+    cards: live ? cards.filter((k) => k.key !== 'links') : cards,
     dist,
     distAria: '위험등급별 탐지 분포: ' + (dist.length ? dist.map((d) => d.label + ' ' + d.n + '건').join(', ') : '탐지 없음'),
     nFind: c.total,
@@ -401,7 +401,7 @@ export function reportView(a: Analysis): ReportView {
         open: oi,
       };
     }),
-    docOpenCol: !live,
+    docOpenCol: true,
     cats,
     catUnratedCol: live && c.unrated > 0,
     findings: f

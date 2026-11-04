@@ -8,7 +8,7 @@
    - 실제 분석은 백엔드(FastAPI)가 Upstage Studio 워크플로우를 호출해 실행하고,
      화면은 분석 상태 · 결과 · 검토 기록만 주고받는다.
    - 메서드마다 '실제:' 주석은 실제 분석 서비스(src/services/api/service.ts)가 부르는 경로다.
-     아직 백엔드가 없는 것(검토사항 · 문서 간 연결)은 '실제 분석에서는 아직 지원하지 않음'(거절)이라고 적었다.
+     아직 백엔드가 없는 것(문서 간 연결)은 '실제 분석에서는 아직 지원하지 않음'(거절)이라고 적었다.
    - 로그인이 없다 — 실제 분석은 주소를 아는 누구나 같은 목록을 보고 · 검토하고 · 지울 수 있다(대회용).
    ========================================================================== */
 
@@ -126,7 +126,7 @@ export interface AnalysisService {
   list(): Promise<Analysis[]>;
   /** 분석 건 하나를 가져온다. 없으면 null. 실제: GET /api/py/analyses/{id}(404 → null, review 블록을 덧씌움) */
   get(id: string): Promise<Analysis | null>;
-  /** 검토 완료 전에 남은 항목(미확인 탐지·미해결 검토사항·확인 필요 연결)을 계산한다. 실제: GET /api/py/analyses/{id} 의 미확인 탐지 항목(검토사항·연결은 빈 목록) */
+  /** 검토 완료 전에 남은 항목(미확인 탐지·미해결 검토사항·확인 필요 연결)을 계산한다. 실제: GET /api/py/analyses/{id} 의 미확인 탐지 항목 · 미해결 검토사항(연결은 빈 목록) */
   pending(id: string): Promise<Pending>;
   /** 샘플 문서 3개를 업로드 파일 형태로 준다(데모 전용 기능). 실제 분석에서는 빈 목록 */
   sampleFiles(): Promise<UploadFile[]>;
@@ -155,9 +155,9 @@ export interface AnalysisService {
   reclassify(id: string, fid: string, patch: ReclassifyPatch, reason: string): Promise<boolean>;
   /** 탐지 항목 메모를 저장한다(빈 문자열이면 삭제). 실제: POST /api/py/analyses/{id}/review-actions(type save_finding_memo) */
   saveFindingMemo(id: string, fid: string, text: string): Promise<void>;
-  /** 검토사항을 해결로 표시한다(처리 내용 기록). 실제 분석에서는 아직 지원하지 않음 */
+  /** 검토사항을 해결로 표시한다(처리 내용 기록). 실제: POST /api/py/analyses/{id}/review-actions(type resolve_item — 화면 번호를 계약 id 로) */
   resolveItem(id: string, rid: string, note: string): Promise<void>;
-  /** 해결한 검토사항을 다시 연다. 실제 분석에서는 아직 지원하지 않음 */
+  /** 해결한 검토사항을 다시 연다. 실제: POST /api/py/analyses/{id}/review-actions(type reopen_item — 화면 번호를 계약 id 로) */
   reopenItem(id: string, rid: string): Promise<void>;
   /** 문서 간 연결을 판단하고, 그 연결에 묶인 검토사항을 함께 해결한다. 실제 분석에서는 아직 지원하지 않음 */
   decideLink(id: string, lid: string, decision: LinkDecision, note: string): Promise<void>;

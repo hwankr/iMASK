@@ -319,6 +319,8 @@ export interface ReviewItem {
   findingId?: string;
   /** 다시 분석할 수 있는 실패 문서 ID */
   retryDoc?: string;
+  /** 실제 분석에서만 — 계약 id(result.items[].id, 예 'lowconf:0'). 화면 id 는 표시 번호(R-01). 데모는 넣지 않는다. */
+  live?: { id: string };
 }
 
 /* ---------- 문서 간 연결 ---------- */

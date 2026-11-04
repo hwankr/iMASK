@@ -16,7 +16,7 @@ export interface ExportModalProps {
   onPickFormat: (format: ExportFormat) => void;
   /** '파일 만들기 · 저장' / '다시 시도' / '다시 내보내기' */
   onExport: () => void;
-  /** 실제 분석이면 JSON 형식 설명이 다르다(검토사항 · 문서 간 연결 없음) */
+  /** 실제 분석이면 JSON 형식 설명이 다르다(문서 간 연결 없음) */
   live?: boolean;
 }
 

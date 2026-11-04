@@ -749,15 +749,10 @@ describe('그 밖의 메서드', () => {
     expect(await service.sampleFiles()).toEqual([]);
   });
 
-  it('검토사항 · 연결 판단은 지원하지 않는다고 거절(요청 없음 — 내보내기는 export-service.test.ts)', async () => {
+  it('연결 판단은 지원하지 않는다고 거절(요청 없음 — 검토사항은 item-service.test.ts · 내보내기는 export-service.test.ts)', async () => {
     const { service, seen } = setup();
-    const calls: Promise<unknown>[] = [service.resolveItem(ID, 'r', ''), service.reopenItem(ID, 'r'), service.decideLink(ID, 'l', 'linked', '')];
-    const results = await Promise.allSettled(calls);
-    expect(results).toHaveLength(3);
-    for (const r of results) {
-      expect(r.status).toBe('rejected');
-      expect((r as PromiseRejectedResult).reason.message).toBe(MSG_UNSUPPORTED);
-    }
+    const err = await service.decideLink(ID, 'l', 'linked', '').catch((e: unknown) => e);
+    expect((err as Error).message).toBe(MSG_UNSUPPORTED);
     expect(seen).toHaveLength(0);
   });
 

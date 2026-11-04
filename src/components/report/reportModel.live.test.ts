@@ -49,9 +49,11 @@ describe('실제 분석 보고서 모델', () => {
   const a = liveAnalysis();
   const v = reportView(reportSafeAnalysis(a));
 
-  it('카드 2장(탐지 항목 · 담당자 확인), 미평가가 있으면 탐지 항목 아랫줄에 · 미평가 n', () => {
+  it('카드 3장(탐지 항목 · 담당자 확인 · 남은 검토사항), 미평가가 있으면 탐지 항목 아랫줄에 · 미평가 n', () => {
     expect(v.live).toBe(true);
-    expect(v.cards.map((c) => c.key)).toEqual(['findings', 'reviewed']);
+    expect(v.cards.map((c) => c.key)).toEqual(['findings', 'reviewed', 'remaining']);
+    // 옛 결과(items 없음) — 남은 검토사항 0건
+    expect(v.cards[2]).toMatchObject({ label: '남은 검토사항', num: 0, unit: '건', after: '', sub: '전체 0건 중 해결 0건', warn: false });
     const n = (k: string) => a.findings.filter((f) => f.risk === k).length;
     expect(n('unrated')).toBeGreaterThan(0);
     expect(v.cards[0].sub).toBe(`높음 ${n('high')} · 보통 ${n('medium')} · 낮음 ${n('low')} · ${RISK.unrated.label} ${n('unrated')}`);
@@ -71,23 +73,26 @@ describe('실제 분석 보고서 모델', () => {
     expect(heads(renderReport(rv))).not.toContain(RISK.unrated.label);
   });
 
-  it('구역 번호 01~07(남아 있는 검토사항 없음) · 대상 문서 표에 남은 검토사항 열 없음 · 정보 종류별 표의 미평가 열', () => {
+  it('구역 번호 01~08(데모와 같음) · 대상 문서 표의 남은 검토사항 열 · 남은 0개면 데모 문구 · 정보 종류별 표의 미평가 열', () => {
     const html = renderReport(v);
     expect(h2s(html)).toEqual([
       'rp-s1 01 결과 요약',
       'rp-s2 02 주요 위험 사유',
       'rp-s3 03 대상 문서와 문서별 확인 결과',
       'rp-s4 04 탐지 항목 요약',
-      'rp-s5 05 권장 조치',
-      'rp-s6 06 검토자 메모',
-      'rp-s7 07 수정 이력과 검토 기록',
+      'rp-s5 05 남아 있는 검토사항',
+      'rp-s6 06 권장 조치',
+      'rp-s7 07 검토자 메모',
+      'rp-s8 08 수정 이력과 검토 기록',
     ]);
-    expect(html).not.toContain('남아 있는 검토사항');
+    expect(v.sections).toEqual({ summary: 1, reasons: 2, docs: 3, findings: 4, remaining: 5, recs: 6, memo: 7, history: 8 });
     expect(html).not.toContain('문서 간 연결');
-    expect(html).not.toContain('남은 검토사항');
+    expect(v.docOpenCol).toBe(true);
+    expect(v.remaining).toEqual([]);
+    expect(text(html)).toContain('남아 있는 검토사항이 없습니다.');
     const h = heads(html);
-    expect(h.slice(0, 6)).toEqual(['문서', '형식·페이지', '처리 상태', '탐지', '높음', '담당자 확인']);
-    expect(h.slice(6, 14)).toEqual(['정보 종류', '건수', '높음', '보통', '낮음', '미평가', '확인', '오탐']);
+    expect(h.slice(0, 7)).toEqual(['문서', '형식·페이지', '처리 상태', '탐지', '높음', '담당자 확인', '남은 검토사항']);
+    expect(h.slice(7, 15)).toEqual(['정보 종류', '건수', '높음', '보통', '낮음', '미평가', '확인', '오탐']);
     expect(v.catUnratedCol).toBe(true);
     expect(v.cats.reduce((s, c) => s + c.unrated, 0)).toBe(a.findings.filter((f) => f.risk === 'unrated').length);
   });
@@ -106,7 +111,7 @@ describe('실제 분석 보고서 모델', () => {
     const html = renderReport(ev);
     expect(html).not.toContain('분석이 끝나면');
     expect(text(html)).toContain('|02|주요 위험 사유||-|');
-    expect(text(html)).toContain('|05|권장 조치||-|');
+    expect(text(html)).toContain('|06|권장 조치||-|');
     expect(ev.footer).toEqual([FOOTER_MASKED]);
     expect(ev.footer[0]).toBe('민감한 값은 마스킹해 표시했습니다. 원문 값은 보고서와 내보내기 파일에 포함하지 않습니다.');
   });
@@ -148,7 +153,7 @@ describe('실제 분석 보고서 모델', () => {
     expect(raws.filter((x) => ph.includes(x)).length).toBe(0);
   });
 
-  it('검토 기록 — 서버 이력 줄 그대로(내보내기 줄 포함), 07 구역', () => {
+  it('검토 기록 — 서버 이력 줄 그대로(내보내기 줄 포함), 08 구역', () => {
     const withHistory = liveAnalysis(undefined, {
       ...NEW_REVIEW,
       history: [
@@ -188,7 +193,7 @@ describe('아주 긴 원문 값(V-T2-1 V1 회귀) — 보고서 모델 · 렌더
       expect(v.reasons).toEqual(['사유 ***', '둘째']);
       expect(v.recs).toEqual(['조치 ***']);
       const html = renderReport(v);
-      expect(h2s(html)).toHaveLength(7);
+      expect(h2s(html)).toHaveLength(8);
       expect(html.includes(value.slice(3000, 3064))).toBe(false);
       expect(rawValues(a).filter((x) => html.includes(x)).length).toBe(0);
     });

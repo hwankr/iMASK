@@ -9,6 +9,7 @@
    - reviewAction = 검토 동작 하나(POST /analyses/{id}/review-actions, JSON 본문 — 항목 id 는 어떤 문자든 올 수 있어
      주소가 아니라 본문에 담는다). 시간 제한 · 오류 모양은 다른 요청과 같다(413 은 bad_request).
    - AnalysisOut.review(검토 기록 블록)는 바깥 값이라 unknown 으로 두고 매핑(mapping.ts)이 방어적으로 읽는다.
+     result.items(서버가 계산한 검토사항 — ReviewItemOut)와 review.items(해결 기록 — 계약 id → ItemReviewOut)도 같다.
    - listAnalyses = GET /analyses(서버 목록 — 최근 100건, 가벼운 항목). 응답 모양은 매핑(mapping.ts readAnalysisList)이 검사한다.
    - deleteAnalysis = DELETE /analyses/{id} → 204. 204 는 본문을 읽지 않는다(빈 본문을 JSON 으로 읽다 '응답을 읽지 못함'이 되지 않게).
    - retryAnalysis = POST /analyses/{id}/retry(본문 { actor }) → 200 다시 시작한(또는 시작하다 실패한) 분석.
@@ -177,9 +178,42 @@ export type ReviewActionIn =
   | (ReviewActionBase & { type: 'save_memo'; text: string })
   | (ReviewActionBase & { type: 'complete_review'; note: string })
   | (ReviewActionBase & { type: 'reopen_review'; reason: string })
+  /* 검토사항 해결 · 다시 열기 — item_id = 계약 id(result.items[].id — 화면 번호 R-01 이 아니다), note = 처리 내용 */
+  | (ReviewActionBase & { type: 'resolve_item'; item_id: string; note: string })
+  | (ReviewActionBase & { type: 'reopen_item'; item_id: string })
   /* 내보내기 기록 — format csv·json, size = 내려받는 파일의 UTF-8 바이트, state handed(다운로드 요청)·saved(저장 완료),
      file_name = 화면이 만든 파일 이름(서버가 이 분석의 이름인지 확인한다) */
   | (ReviewActionBase & { type: 'log_export'; format: ExportFormat; size: number; state: 'handed' | 'saved'; file_name: string });
+
+/**
+ * result.items[] 한 행 — 서버가 조회 때 계산한 검토사항(BRIEF §5.3). AnalysisOut.result 는 unknown 이라 이 타입은 계약 설명이고,
+ * 실제 값은 매핑(contract.ts toLiveItems)이 방어적으로 읽는다(옛 결과에는 items 키가 없다).
+ */
+export interface ReviewItemOut {
+  /** 계약 id(예 'missing:0:<규칙 이름>' · 'nolocation:<탐지 id>' · 'lowconf:0' · 'other:5') */
+  id: string;
+  /** 화면 번호 'R-01'(100번째부터 3자리) */
+  number: string;
+  /** 종류 — RTYPE 키(실제 분석은 missing · nolocation · lowconf · other) */
+  type: string;
+  document_index: number;
+  /** 파일 기준 쪽(1부터) */
+  page: number;
+  /** nolocation 만 그 탐지 계약 id, 그 밖 null */
+  finding_id: string | null;
+  title: string;
+  desc: string;
+  next: string;
+  evidence: { label: string; page: number; finding_ids: string[]; finding_id: string | null }[];
+}
+
+/** review.items 의 값 하나(키 = 계약 id) — 해결 기록. 모양을 믿지 않는다(contract.ts overlayItemReviews) */
+export interface ItemReviewOut {
+  resolved: boolean;
+  note: string;
+  resolved_at: string | null;
+  resolved_by: string;
+}
 
 /** 검토 동작 응답 — 갱신된 분석(조회와 같은 모양) + 실제로 바뀌었는지(분류 수정에서 바뀐 값이 없으면 false) */
 export interface ReviewActionOut {

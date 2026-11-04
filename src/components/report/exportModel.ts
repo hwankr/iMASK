@@ -49,7 +49,7 @@ export function expectedExportName(code: string, format: ExportFormat, brand: st
 /** 형식 선택지 — 라벨·설명은 ② EXPORT_FORMATS */
 export const FORMAT_OPTIONS = EXPORT_FORMATS.map((fm) => ({ value: fm.key, label: fm.label, description: fm.desc }));
 
-/** 실제 분석의 형식 선택지 — JSON 설명만 ② LIVE_EXPORT_JSON_DESC(실제 분석 파일에는 검토사항 · 문서 간 연결이 없다) */
+/** 실제 분석의 형식 선택지 — JSON 설명만 ② LIVE_EXPORT_JSON_DESC(실제 분석 파일에는 문서 간 연결이 없다) */
 export const LIVE_FORMAT_OPTIONS = FORMAT_OPTIONS.map((o) => (o.value === 'json' ? { ...o, description: LIVE_EXPORT_JSON_DESC } : o));
 
 export interface ExportView {

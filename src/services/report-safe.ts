@@ -4,12 +4,13 @@
    - 실제 분석인지는 Analysis.raw 가 있는지로 가른다(실제 분석 서비스만 채운다). 데모 분석은 받은 값을 그대로 돌려준다.
    - 실제 분석이면 새 사본: 모든 탐지 항목의 evidence = '' · live.value = ''(다른 live 필드는 그대로), raw.result = null.
    - 워크플로우가 만든 글(주요 위험 사유 riskReasons 줄 · 권장 조치 recs 줄 · 탐지 항목 판단 근거 reason, 그리고 그 원문인
-     raw.overall 의 text · nextText)에 어떤 탐지 항목의 원문 값이 그대로 들어 있으면 그 자리를 그 항목의 masked 로 바꾼다.
+     raw.overall 의 text · nextText)와 검토사항 글(서버가 만든 title · desc · next · 근거 label)에 어떤 탐지 항목의 원문 값이
+     그대로 들어 있으면 그 자리를 그 항목의 masked 로 바꾼다(검토사항 글은 원래 고정 문구 · 이름 · 번호로만 만들지만 한 겹 더 막는다).
      대상 원문 값 = 원래 live.value 가 비지 않았고 2 코드 포인트 이상이며 그 항목의 masked 와 다른 것(같은 값이 여러 항목이면
      처음 항목의 masked). 정규식 · 엔진 검색 없이 KMP 로 맞추는 한 번의 훑기다 — 커서 뒤 가장 이른 일치, 같은 위치면 긴 값
      (바꾼 글을 다시 훑지 않는다 · 값 길이와 개수에 한도가 없고 시간은 글 길이 × 값 수에 선형 · 예외가 원문 값을 담지 않는다).
      masked 가 비면 같은 코드 포인트 수의 '*' 로 바꾼다.
-   - 담당자가 쓴 글(메모 · 사유 · 완료 메모) · 분석 이름 · 파일 이름 · 이력 줄은 바꾸지 않는다.
+   - 담당자가 쓴 글(메모 · 사유 · 완료 메모 · 검토사항 처리 내용 note) · 처리자 · 분석 이름 · 파일 이름 · 이력 줄은 바꾸지 않는다.
    - 원래 객체는 바꾸지 않는다(새 객체 · 새 배열).
    - 보고서 대상(isReportTarget) = 실제 분석 중 raw.detailReady && raw.reviewable(완료 + 공통 계약 결과 + 검토 기록을 읽음).
    ========================================================================== */
@@ -170,7 +171,13 @@ export function reportSafeAnalysis(a: Analysis): Analysis {
       evidence: '',
       ...(f.live ? { live: { ...f.live, value: '' } } : {}),
     })),
-    items: a.items.slice(),
+    items: a.items.map((i) => ({
+      ...i,
+      title: mask(i.title),
+      desc: mask(i.desc),
+      next: mask(i.next),
+      evidence: i.evidence.map((ev) => ({ ...ev, label: mask(ev.label) })),
+    })),
     links: a.links.slice(),
     history: a.history.slice(),
     riskReasons: a.riskReasons.map(mask),

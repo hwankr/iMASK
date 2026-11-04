@@ -38,7 +38,11 @@
      로 실패하면 그 분석의 진행 중 조회를 떼고 한 번 알린 뒤 같은 오류로 거절한다(화면이 최신 상태를 다시 불러온다).
      그 밖 실패는 떼지도 알리지도 않고 그 오류로 거절한다. reclassify 는 응답의 changed 를 돌려준다.
      confirmMany 는 빈 목록이면 요청 · 알림 없이 끝낸다.
-   - pending = 조회한 분석의 미확인(open) 탐지 항목(검토사항 · 연결은 아직 없어 빈 목록). 없는 분석이면 빈 값.
+   - 검토사항(resolveItem · reopenItem) = 같은 POST …/review-actions 하나. 분석을 조회해(위와 같이 나눠 씀) 화면 번호(ReviewItem.id, R-01)를
+     계약 id(ReviewItem.live.id)로 바꿔 보낸다 — 본문 { type: 'resolve_item', actor, item_id, note } · { type: 'reopen_item', actor, item_id }.
+     없는 번호면 요청 없이 MSG_NO_ITEM 으로 거절, 조회가 404 면 위와 같이 ApiError(not_found). 성공 · 409 · 404 · 그 밖 실패의 떼기 · 알림은
+     검토 동작과 같다(sendReview).
+   - pending = 조회한 분석의 미확인(open) 탐지 항목 · 미해결 검토사항(연결은 아직 없어 빈 목록), any = 둘 중 하나라도 있음. 없는 분석이면 빈 값.
    - 내보내기 파일(buildExport(id, format)): 분석을 조회해(위와 같이 나눠 씀) 없으면(404) 검토 동작처럼 ApiError(not_found)로(알림 한 번),
      보고서 대상(report-safe.ts isReportTarget — 완료 + 공통 계약 결과 + 검토 기록을 읽음)이 아니면 MSG_NO_REPORT 로 거절한다
      (화면은 기존 실패 문구를 보인다). 대상이면 원문 값을 지운 안전한 사본(reportSafeAnalysis)으로 공용 모듈(export-file.ts
@@ -47,8 +51,7 @@
    - 내보내기 기록(logExport) = 검토 동작과 같은 보내기(sendReview) 하나 — 본문 { type: 'log_export', actor, format, size, state,
      file_name }(크기 = file.size, 이름 = file.name). 보내기 전 조회는 하지 않는다. 성공 · 409 · 404 · 그 밖 실패의 떼기 · 알림은
      검토 동작과 같다(성공하면 보고서의 검토 기록 구역이 다시 그려진다).
-   - 검토사항(resolveItem · reopenItem) · 연결 판단(decideLink)은 아직 백엔드가 없다 —
-     '실제 분석에서는 아직 지원하지 않는 기능입니다.' 로 거절한다.
+   - 연결 판단(decideLink)은 아직 백엔드가 없다 — '실제 분석에서는 아직 지원하지 않는 기능입니다.' 로 거절한다.
    - 분석 완료 이벤트(ServiceEvent 'done')는 보내지 않는다(탐지 0건 완료 토스트가 오해를 준다) — 위의 알림은 모두
      이벤트 없는 listener() 다.
    - 분석 데이터를 메모리 · 브라우저 저장소에 두지 않는다(목록은 서버가 준다) — 조회 결과는 요청마다 새로 만든 값이다.
@@ -90,6 +93,8 @@ export const MSG_UNSUPPORTED = '실제 분석에서는 아직 지원하지 않�
 export const MSG_NO_ANALYSIS = '분석 건을 찾을 수 없습니다.';
 /** 검토 동작 — 화면 번호의 탐지 항목이 지금 분석에 없을 때(요청하지 않는다) */
 export const MSG_NO_FINDING = '탐지 항목을 찾을 수 없습니다.';
+/** 검토사항 해결 · 다시 열기 — 화면 번호의 검토사항이 지금 분석에 없을 때(요청하지 않는다) */
+export const MSG_NO_ITEM = '검토사항을 찾을 수 없습니다.';
 /** 내보내기 — 보고서 대상이 아닌 분석(대기 · 분석 중 · 실패 · 옛 형식 · 검토 기록을 읽지 못함). 화면은 기존 실패 문구를 보인다 */
 export const MSG_NO_REPORT = '보고서를 만들 수 없는 분석입니다.';
 /** 다시 분석이 시작하다 실패했는데 이유(error)가 비었을 때 — 실제 분석 실패 띠와 같은 문구 */
@@ -169,6 +174,13 @@ function contractId(a: Analysis, fid: string): string | null {
   const f = a.findings.find((x) => x.id === fid);
   const id = f?.live?.id;
   return typeof id === 'string' ? id : null;
+}
+
+/** 검토사항 화면 번호 → 계약 id(그 분석에 없으면 null) */
+function itemContractId(a: Analysis, rid: string): string | null {
+  const it = a.items.find((x) => x.id === rid);
+  const id = it?.live?.id;
+  return typeof id === 'string' && id ? id : null;
 }
 
 /** 요청할 파일 하나 — 정확히 1개이고 브라우저 File 이 있어야 한다 */
@@ -290,6 +302,13 @@ export function createApiService(deps: ApiServiceDeps = {}): ApiService {
     return key;
   };
 
+  /** 검토사항 화면 번호 하나 → 계약 id. 없으면 요청 없이 거절 */
+  const itemTarget = async (id: string, rid: string): Promise<string> => {
+    const key = itemContractId(await reviewTarget(id), rid);
+    if (key === null) throw new Error(MSG_NO_ITEM);
+    return key;
+  };
+
   /**
    * 검토 동작 하나를 보내고, 성공하면(바뀌었든 아니든) 한 번 알린다. 409 · 404 면 떼고 알린 뒤 그 오류로, 그 밖 실패는
    * 알리지 않고 그 오류로 거절.
@@ -340,7 +359,8 @@ export function createApiService(deps: ApiServiceDeps = {}): ApiService {
       const a = await getOrNull(id);
       if (!a) return EMPTY_PENDING();
       const openF = a.findings.filter((f) => f.status === 'open');
-      return { openF, openI: [], openL: [], any: openF.length > 0 };
+      const openI = a.items.filter((i) => !i.resolved);
+      return { openF, openI, openL: [], any: openF.length + openI.length > 0 };
     },
 
     sampleFiles: async () => [],
@@ -505,9 +525,19 @@ export function createApiService(deps: ApiServiceDeps = {}): ApiService {
       await sendReview(id, { type: 'log_export', format: file.format, size: file.size, state, file_name: file.name });
     },
 
+    /* ---------- 검토사항(POST …/review-actions resolve_item · reopen_item) ---------- */
+
+    async resolveItem(id, rid, note) {
+      const itemId = await itemTarget(id, rid);
+      await sendReview(id, { type: 'resolve_item', item_id: itemId, note });
+    },
+
+    async reopenItem(id, rid) {
+      const itemId = await itemTarget(id, rid);
+      await sendReview(id, { type: 'reopen_item', item_id: itemId });
+    },
+
     /* ---------- 아직 백엔드가 없는 기능 ---------- */
-    resolveItem: unsupported,
-    reopenItem: unsupported,
     decideLink: unsupported,
 
     subscribe(listener) {

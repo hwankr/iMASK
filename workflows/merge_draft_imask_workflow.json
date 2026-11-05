@@ -1,0 +1,1251 @@
+{
+  "name": "병합 초안 A4 — 17키 통일 + 서식별 칸 안내 + 빈 기준 성명 조항(main 설정 3 기준)",
+  "steps": [
+    {
+      "id": "3a26ebd5-f5f2-54b4-bbe5-85df091ba737",
+      "name": "step_1_parse",
+      "type": "document-parse",
+      "data": {
+        "model": "document-parse",
+        "mode": "standard",
+        "ocr": "force",
+        "lang": "ko",
+        "chart_recognition": false,
+        "coordinates": true,
+        "merge_multipage_tables": false,
+        "output_formats": [
+          "html",
+          "text"
+        ],
+        "base64_encoding": [
+          "figure"
+        ],
+        "custom_name": "서류-인식"
+      },
+      "next_steps": [
+        {
+          "step_name": "step_2_classify",
+          "condition": null
+        }
+      ],
+      "is_first": true,
+      "node_id": "nd_42b3c19c403751dc8d38ac99311cb11a"
+    },
+    {
+      "id": "e7f6b35e-9cbd-5b36-95a4-e751feb3666c",
+      "name": "step_2_classify",
+      "type": "document-classify",
+      "data": {
+        "text": {
+          "format": {
+            "name": "document-classify",
+            "schema": {
+              "type": "string",
+              "oneOf": [
+                {
+                  "const": "loan_application",
+                  "description": "대출 신청서, 대출 상담 신청서, 대출거래약정서, 여신거래약정서, 추가약정서. 대출 금액·기간·상환 방법을 신청하거나 약정하는 서류."
+                },
+                {
+                  "const": "consent_form",
+                  "description": "개인(신용)정보 수집·이용·제공·조회 동의서. 동의 항목 표와 '동의함/동의하지 않음' 체크란이 있는 서류. 고유식별정보 처리 동의서, 신용정보 조회 동의서도 여기에 넣는다."
+                },
+                {
+                  "const": "income_proof",
+                  "description": "소득금액증명, 근로소득 원천징수영수증, 재직증명서, 건강보험 자격득실확인서처럼 소득이나 직장을 증명하는 서류."
+                },
+                {
+                  "const": "power_of_attorney",
+                  "description": "본인 대신 대리인이 업무를 보도록 위임하는 서류. 위임인과 대리인의 인적사항이 함께 적혀 있다. 상속예금 처리를 위한 위임장(상속인이 대리인에게 위임)도 여기에 넣는다 — 상속재산(피상속인 예금) 표, 위임인(상속인) 표, 대리인 인적사항, 결재란이 있다."
+                },
+                {
+                  "const": "debt_transaction",
+                  "description": "대출·카드 채무 내역, 대환대출 채무내역, 거래내역서처럼 금액이 날짜별·건별로 나열된 서류."
+                },
+                {
+                  "const": "payment_guarantee_application",
+                  "description": "지급보증거래 신청서(서면/전자 지급보증 겸용). 제목에 '지급보증거래 신청서'가 있고 지급보증서 발급방식(서면/전자) 선택, 보증금액, 보증기간, 보증요율(고정/변동), 보증처(성명 또는 상호·사업자번호·주소·연락처), 피보증 채무의 내용(특정채무보증/근보증), 특약사항, 보증료 출금 계좌 칸이 있다. 뒤에 '지급보증거래 이용약관' 쪽이 붙어 있어도 이 서류다. '선불식 할부거래업자'·'소비자피해보상금' 항목이 있으면 이 서류가 아니라 소비자피해보상금 지급신청서다."
+                },
+                {
+                  "const": "consumer_compensation_claim",
+                  "description": "소비자피해보상금 지급신청서. 할부거래법에 따라 소비자가 은행(지급보증의무자)에 피해보상금 지급을 요청하는 1장짜리 서식으로, 신청인 성명·주민등록번호·주소·전화, 지급보증계약을 체결한 선불식 할부거래업체명, 요청 사유(폐업·당좌거래 정지·등록 말소·파산 등) 체크란, 소비자피해보상금 금액, 증서번호, 지급 계좌·은행명, 구비서류 칸이 있다. 제목에 '지급보증'이 보여도 '소비자피해보상금' 항목이 있으면 이 서류다."
+                },
+                {
+                  "const": "foreign_household_confirmation",
+                  "description": "주택담보대출을 위한 외국인등 차주의 세대 구성원 확인서. 제목이 '확 인 서'이고 부제에 외국인등·세대 구성원 확인이 있다. 본인·담보제공자 성명·주소, '세대구성 사항(Members of Household)' 표(관계, 성명, 성별, 생년월일, 외국인등록번호)가 영문과 함께 있고, 기한 전의 채무변제의무 확약 문구가 있다."
+                },
+                {
+                  "const": "debit_card_application",
+                  "description": "체크카드(직불카드) 개인회원 가입·발급 신청서. 신청인 성명(한글·영문)·생년월일·주소·연락처, 결제 계좌·결제일, 우편물 수령지, 직장 정보, 가족카드 신청, 카드 상품·브랜드 선택, 카드 수령 장소, 부가서비스(해외 원화결제 차단 등) 선택, 고객확인사항, 동의·서명란, 신분증 사본 첨부란이 있다."
+                },
+                {
+                  "const": "auto_transfer_application",
+                  "description": "자동이체 신청서(신규·변경·해지). 예금주 성명·생년월일 또는 사업자번호, 출금 계좌번호, 연락처와 은행계좌 자동이체·아파트관리비 자동이체·지로/CMS 자동이체 같은 이체 내역 표, 변경신고(이체 정지 기간·출금 시각)·일괄해지 칸, 대리인·법정대리인 칸, 서명란이 있다."
+                },
+                {
+                  "const": "dormant_deposit_claim",
+                  "description": "휴면예금 지급신청서. 제목에 휴면예금 지급 요청·신청이 있고 출연금융회사, 원권리자(예금주)와 대리인 인적사항, 휴면예금 계좌·금액 표, 입금받을 계좌(입금신청내역), 접수 금융회사 담당자 칸이 있다."
+                },
+                {
+                  "const": "fatca_crs_certification",
+                  "description": "FATCA/CRS 개인 본인확인서(자기증명서). 해외 납세의무 확인을 위한 서식으로 귀속년도, 성명·생년월일·국적·영문 성명·주소, 조세목적상 한국 거주자 여부와 증빙, 조세목적상 거주지 국가와 납세자번호(TIN) 표, 본인 또는 대리인 서명란, 직원 확인란이 있다."
+                },
+                {
+                  "const": "retirement_pension_application",
+                  "description": "퇴직연금·개인형 IRP 신규 가입·계약이전·해지 신청서. 가입자 성명·생년월일·연락처, 신규/이전 구분, 연간 납입한도, 사업장명·사업자등록번호, 운용상품 선택과 배분 비율, 디폴트옵션 동의 칸이 있다."
+                },
+                {
+                  "const": "Other",
+                  "description": "위 서류 중 어디에도 해당하지 않거나 판독이 어려운 서류(예: 지점 방문 안내문, 빈 쪽, 다른 업무 서식). 다른 유형에 억지로 넣지 않는다."
+                }
+              ]
+            },
+            "type": "json_schema"
+          }
+        },
+        "custom_name": "서류-분류",
+        "split": true,
+        "split_criteria": [
+          {
+            "criterion": "CONTINUITY",
+            "description": ""
+          }
+        ]
+      },
+      "next_steps": [
+        {
+          "step_name": "Instruct - 기타_서류_안내",
+          "condition": {
+            "field": "text",
+            "operator": "==",
+            "value": "Other"
+          }
+        },
+        {
+          "step_name": "Information Extract - 추출_위임장",
+          "condition": {
+            "field": "text",
+            "operator": "==",
+            "value": "power_of_attorney"
+          }
+        },
+        {
+          "step_name": "Information Extract - 추출_확인서",
+          "condition": {
+            "field": "text",
+            "operator": "==",
+            "value": "consent_form"
+          }
+        },
+        {
+          "step_name": "Information Extract - 추출_확인서",
+          "condition": {
+            "field": "text",
+            "operator": "==",
+            "value": "fatca_crs_certification"
+          }
+        },
+        {
+          "step_name": "Information Extract - 추출_증빙",
+          "condition": {
+            "field": "text",
+            "operator": "==",
+            "value": "income_proof"
+          }
+        },
+        {
+          "step_name": "Information Extract - 추출_증빙",
+          "condition": {
+            "field": "text",
+            "operator": "==",
+            "value": "debt_transaction"
+          }
+        },
+        {
+          "step_name": "Information Extract - 추출_신청서",
+          "condition": {
+            "field": "text",
+            "operator": "==",
+            "value": "loan_application"
+          }
+        },
+        {
+          "step_name": "Information Extract - 추출_신청서",
+          "condition": {
+            "field": "text",
+            "operator": "==",
+            "value": "payment_guarantee_application"
+          }
+        },
+        {
+          "step_name": "Information Extract - 추출_신청서",
+          "condition": {
+            "field": "text",
+            "operator": "==",
+            "value": "consumer_compensation_claim"
+          }
+        },
+        {
+          "step_name": "Information Extract - 추출_신청서",
+          "condition": {
+            "field": "text",
+            "operator": "==",
+            "value": "foreign_household_confirmation"
+          }
+        },
+        {
+          "step_name": "Information Extract - 추출_신청서",
+          "condition": {
+            "field": "text",
+            "operator": "==",
+            "value": "debit_card_application"
+          }
+        },
+        {
+          "step_name": "Information Extract - 추출_신청서",
+          "condition": {
+            "field": "text",
+            "operator": "==",
+            "value": "auto_transfer_application"
+          }
+        },
+        {
+          "step_name": "Information Extract - 추출_신청서",
+          "condition": {
+            "field": "text",
+            "operator": "==",
+            "value": "dormant_deposit_claim"
+          }
+        },
+        {
+          "step_name": "Information Extract - 추출_신청서",
+          "condition": {
+            "field": "text",
+            "operator": "==",
+            "value": "retirement_pension_application"
+          }
+        }
+      ],
+      "is_first": false,
+      "node_id": "nd_d39b33cfd5cc5d1298c773f752676295"
+    },
+    {
+      "id": "1f85334e-8b9a-5c55-90a9-2529a707fbcd",
+      "name": "Instruct - 기타_서류_안내",
+      "type": "instruct",
+      "data": {
+        "custom_name": "기타_서류_안내",
+        "input": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "이 서류는 iMASK가 다루는 은행 서류(대출 신청서·약정서, 개인(신용)정보 동의서, 소득 증빙, 위임장, 채무·거래 내역, 지급보증거래 신청서, 소비자피해보상금 지급신청서, 외국인 세대구성원 확인서, 체크카드 가입 신청서, 자동이체 신청서, 휴면예금 지급신청서, FATCA/CRS 본인확인서, 퇴직연금·IRP 신청서) 중 어디에도 분류되지 않았다. 한 줄로 작성하라: 예상_서류_종류=..., 검토_사유=..., 담당자_조치=... . 실제 개인정보 값은 출력에 넣지 마라."
+              }
+            ]
+          }
+        ]
+      },
+      "next_steps": [],
+      "is_first": false,
+      "node_id": "nd_4add5aa7cf6f54a385247ecea6527a92"
+    },
+    {
+      "id": "7a9431ec-11e9-5dcd-97df-1bcbb3d42a02",
+      "name": "Information Extract - 추출_위임장",
+      "type": "information-extract",
+      "data": {
+        "custom_name": "추출_위임장",
+        "schema_layout": {
+          "version": 1,
+          "columns": [
+            {
+              "name": "applicant_name",
+              "source": "root"
+            },
+            {
+              "name": "applicant_rrn",
+              "source": "root"
+            },
+            {
+              "name": "applicant_id_number",
+              "source": "root"
+            },
+            {
+              "name": "applicant_birth_date",
+              "source": "root"
+            },
+            {
+              "name": "applicant_phone",
+              "source": "root"
+            },
+            {
+              "name": "applicant_email",
+              "source": "root"
+            },
+            {
+              "name": "applicant_address",
+              "source": "root"
+            },
+            {
+              "name": "employer_info",
+              "source": "root"
+            },
+            {
+              "name": "account_number",
+              "source": "root"
+            },
+            {
+              "name": "card_number",
+              "source": "root"
+            },
+            {
+              "name": "loan_info",
+              "source": "root"
+            },
+            {
+              "name": "income_info",
+              "source": "root"
+            },
+            {
+              "name": "credit_negative_info",
+              "source": "root"
+            },
+            {
+              "name": "other_person_name",
+              "source": "root"
+            },
+            {
+              "name": "other_person_rrn",
+              "source": "root"
+            },
+            {
+              "name": "other_person_contact",
+              "source": "root"
+            },
+            {
+              "name": "staff_contact",
+              "source": "root"
+            }
+          ]
+        },
+        "text": {
+          "format": {
+            "name": "document-schema",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "applicant_name": {
+                  "type": "string",
+                  "description": "신청인(이 서류를 낸 고객 본인 — 서식별 안내를 따른다)의 성명. 은행 직원·담당자·대리인·보증인의 이름은 넣지 않는다. 도장·서명 글자와 '(인)' 표시는 넣지 않고, 두 줄이면 한 줄로 잇는다. 일부 가려진 이름(예: 김*연)도 적힌 그대로 옮긴다. 없으면 빈 문자열."
+                },
+                "applicant_rrn": {
+                  "type": "string",
+                  "description": "신청인의 주민등록번호 또는 외국인등록번호. 문서에 적힌 그대로 옮기고 가려진 자리(*)도 그대로 둔다. 흐리거나 잘려서 읽을 수 없으면 추측하지 말고 비워 둔다. 동의서처럼 '주민등록번호'라는 항목 이름만 인쇄되어 있고 실제 값이 없으면 비워 둔다. 없으면 빈 문자열."
+                },
+                "applicant_id_number": {
+                  "type": "string",
+                  "description": "신청인의 여권번호·운전면허번호·외국 납세자번호(TIN)처럼 주민등록번호·외국인등록번호가 아닌 신분 식별 번호. 문서에 적힌 그대로 옮긴다. 항목 이름만 인쇄되어 있고 실제 값이 없으면 비워 둔다. 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "applicant_birth_date": {
+                  "type": "string",
+                  "description": "신청인의 생년월일. 주민등록번호와 따로 적힌 경우만 적는다(주민등록번호 앞 6자리만 적는 생년월일 칸도 여기에). 없으면 빈 문자열."
+                },
+                "applicant_phone": {
+                  "type": "string",
+                  "description": "신청인의 휴대전화·집·직장 전화번호. 은행·지점·담당 직원의 번호는 넣지 않는다. 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "applicant_email": {
+                  "type": "string",
+                  "description": "신청인의 이메일 주소. 은행·담당 직원의 이메일은 넣지 않는다. 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "applicant_address": {
+                  "type": "string",
+                  "description": "신청인의 집 주소. 은행·지점 주소는 넣지 않는다. 없으면 빈 문자열."
+                },
+                "employer_info": {
+                  "type": "string",
+                  "description": "신청인의 직장명·부서·직위·입사일. '항목: 값' 형태로 적고 세미콜론(;)으로 구분한다(예: 직장명: (주)동림정밀; 직위: 과장). 없으면 빈 문자열."
+                },
+                "account_number": {
+                  "type": "string",
+                  "description": "문서에 적힌 계좌번호. 누구의 계좌든 모두 넣고 가려진 자리(*)도 그대로 둔다. 번호 중간에 잘못 들어간 공백은 뺀다. 은행 양식의 관리번호·신청번호처럼 계좌번호가 아닌 숫자열은 넣지 않는다. 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "card_number": {
+                  "type": "string",
+                  "description": "신용카드·체크카드 번호. 가려진 자리(*)도 그대로 둔다. 번호 중간에 잘못 들어간 공백은 뺀다.(예: 1234-****-****-5678) 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "loan_info": {
+                  "type": "string",
+                  "description": "대출·보증 거래 정보. 건마다 금융회사·상품명·금액(신청금액 또는 잔액)·금리·기간·상환방식·상태 중 적힌 것을 한 구절로 적고, 건이 여러 개면 세미콜론(;)으로 구분한다(예: 가나캐피탈 전세자금대출 잔액 12,000,000원 연 5.2%). 금액·금리·기간 같은 거래 조건 없이 신청번호만 있으면 넣지 않는다. 동의서에 인쇄된 '대출 정보' 같은 항목 이름은 값이 아니다. 없으면 빈 문자열."
+                },
+                "income_info": {
+                  "type": "string",
+                  "description": "소득·재산 정보(연소득, 소득금액, 결정세액, 급여, 보유 부동산). '항목: 값' 형태로 적고 세미콜론(;)으로 구분한다(예: 연소득: 52,800,000원). 동의서에 인쇄된 '소득 정보' 같은 항목 이름은 값이 아니다. 없으면 빈 문자열."
+                },
+                "credit_negative_info": {
+                  "type": "string",
+                  "description": "신청인의 신용도 판단 정보(연체, 채무조정, 개인회생, 파산, 대위변제, 세금 체납). 어느 대출·카드에서 무엇이 있었는지 한 구절로 적고, 여러 건이면 세미콜론(;)으로 구분한다(예: 가나카드 카드론 연체 45일). 동의서·약관에 인쇄된 '연체 정보' 같은 항목 이름이나 설명 문구는 값이 아니다. 연체 등이 실제로 있었다고 적힌 경우만 넣는다. 없으면 빈 문자열."
+                },
+                "other_person_name": {
+                  "type": "string",
+                  "description": "신청인이 아닌 사람(보증인·보증처, 대리인, 배우자·가족·세대구성원, 피상속인, 거래 상대방)의 성명 또는 상호. 은행 직원은 넣지 않는다. 여러 명이면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "other_person_rrn": {
+                  "type": "string",
+                  "description": "신청인이 아닌 사람(보증인, 대리인, 가족)의 주민등록번호 또는 외국인등록번호. 적힌 그대로 옮기고 가려진 자리(*)도 그대로 둔다. 여러 명이면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "other_person_contact": {
+                  "type": "string",
+                  "description": "신청인이 아닌 사람(보증인·보증처, 대리인, 가족·세대구성원, 피상속인)의 전화번호·이메일·주소·생년월일·관계·사업자번호. '항목: 값' 꼴로 적고 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "staff_contact": {
+                  "type": "string",
+                  "description": "은행 직원·담당자의 이름, 직원번호(행번), 전화번호, 이메일과 결재란·직원 확인란의 이름. 고객 정보와 섞이지 않게 여기에만 모은다. 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                }
+              }
+            },
+            "type": "json_schema"
+          }
+        },
+        "location": true,
+        "location_granularity": "all",
+        "confidence": true,
+        "user_system_prompt": "[문서 경계] 입력 파일은 고객 한 명의 은행 서류 여러 종류가 한 PDF로 이어 붙은 묶음이며 앞 단계에서 서류 단위로 분리된다. 다른 서류에 속한 값을 이 서류의 값으로 가져오지 않는다. applicant_name·applicant_rrn 등 신청인 항목에는 위임인(본인)을 넣고, 대리인(수임인)은 other_person_name·other_person_rrn·other_person_contact 에 넣는다.\n[서식별 칸 → 키] 체크(☑·✔·V·■·동그라미)된 선택지만 값으로 보고 빈 칸(□)·인쇄된 안내 문구·칸 이름은 값이 아니다. 도장·서명 글자와 '(인)'·'(서명 또는 인)' 표시는 넣지 않는다.\n- 상속예금 처리용 위임장: 위임인(상속인) 표의 첫 사람 → applicant_name·applicant_birth_date·applicant_address, 둘째 위임인부터와 대리인·피상속인(예금주) 성명 → other_person_name, 그 생년월일·주소·관계 → other_person_contact. 상속재산 표의 계좌번호 → account_number, 예금 과목·잔액 → income_info('항목: 값'). 결재란(확인자·책임자·지점장) → staff_contact."
+      },
+      "next_steps": [
+        {
+          "step_name": "병합-1",
+          "condition": null
+        }
+      ],
+      "is_first": false,
+      "node_id": "nd_667a894d57965e9d8248dd31239e1abe"
+    },
+    {
+      "id": "7a26c595-f4f8-5fe1-88a0-a5ee0a8c5bbb",
+      "name": "Information Extract - 추출_확인서",
+      "type": "information-extract",
+      "data": {
+        "custom_name": "추출_확인서",
+        "schema_layout": {
+          "version": 1,
+          "columns": [
+            {
+              "name": "applicant_name",
+              "source": "root"
+            },
+            {
+              "name": "applicant_rrn",
+              "source": "root"
+            },
+            {
+              "name": "applicant_id_number",
+              "source": "root"
+            },
+            {
+              "name": "applicant_birth_date",
+              "source": "root"
+            },
+            {
+              "name": "applicant_phone",
+              "source": "root"
+            },
+            {
+              "name": "applicant_email",
+              "source": "root"
+            },
+            {
+              "name": "applicant_address",
+              "source": "root"
+            },
+            {
+              "name": "employer_info",
+              "source": "root"
+            },
+            {
+              "name": "account_number",
+              "source": "root"
+            },
+            {
+              "name": "card_number",
+              "source": "root"
+            },
+            {
+              "name": "loan_info",
+              "source": "root"
+            },
+            {
+              "name": "income_info",
+              "source": "root"
+            },
+            {
+              "name": "credit_negative_info",
+              "source": "root"
+            },
+            {
+              "name": "other_person_name",
+              "source": "root"
+            },
+            {
+              "name": "other_person_rrn",
+              "source": "root"
+            },
+            {
+              "name": "other_person_contact",
+              "source": "root"
+            },
+            {
+              "name": "staff_contact",
+              "source": "root"
+            }
+          ]
+        },
+        "text": {
+          "format": {
+            "name": "document-schema",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "applicant_name": {
+                  "type": "string",
+                  "description": "신청인(이 서류를 낸 고객 본인 — 서식별 안내를 따른다)의 성명. 은행 직원·담당자·대리인·보증인의 이름은 넣지 않는다. 도장·서명 글자와 '(인)' 표시는 넣지 않고, 두 줄이면 한 줄로 잇는다. 일부 가려진 이름(예: 김*연)도 적힌 그대로 옮긴다. 없으면 빈 문자열."
+                },
+                "applicant_rrn": {
+                  "type": "string",
+                  "description": "신청인의 주민등록번호 또는 외국인등록번호. 문서에 적힌 그대로 옮기고 가려진 자리(*)도 그대로 둔다. 흐리거나 잘려서 읽을 수 없으면 추측하지 말고 비워 둔다. 동의서처럼 '주민등록번호'라는 항목 이름만 인쇄되어 있고 실제 값이 없으면 비워 둔다. 없으면 빈 문자열."
+                },
+                "applicant_id_number": {
+                  "type": "string",
+                  "description": "신청인의 여권번호·운전면허번호·외국 납세자번호(TIN)처럼 주민등록번호·외국인등록번호가 아닌 신분 식별 번호. 문서에 적힌 그대로 옮긴다. 항목 이름만 인쇄되어 있고 실제 값이 없으면 비워 둔다. 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "applicant_birth_date": {
+                  "type": "string",
+                  "description": "신청인의 생년월일. 주민등록번호와 따로 적힌 경우만 적는다(주민등록번호 앞 6자리만 적는 생년월일 칸도 여기에). 없으면 빈 문자열."
+                },
+                "applicant_phone": {
+                  "type": "string",
+                  "description": "신청인의 휴대전화·집·직장 전화번호. 은행·지점·담당 직원의 번호는 넣지 않는다. 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "applicant_email": {
+                  "type": "string",
+                  "description": "신청인의 이메일 주소. 은행·담당 직원의 이메일은 넣지 않는다. 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "applicant_address": {
+                  "type": "string",
+                  "description": "신청인의 집 주소. 은행·지점 주소는 넣지 않는다. 없으면 빈 문자열."
+                },
+                "employer_info": {
+                  "type": "string",
+                  "description": "신청인의 직장명·부서·직위·입사일. '항목: 값' 형태로 적고 세미콜론(;)으로 구분한다(예: 직장명: (주)동림정밀; 직위: 과장). 없으면 빈 문자열."
+                },
+                "account_number": {
+                  "type": "string",
+                  "description": "문서에 적힌 계좌번호. 누구의 계좌든 모두 넣고 가려진 자리(*)도 그대로 둔다. 번호 중간에 잘못 들어간 공백은 뺀다. 은행 양식의 관리번호·신청번호처럼 계좌번호가 아닌 숫자열은 넣지 않는다. 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "card_number": {
+                  "type": "string",
+                  "description": "신용카드·체크카드 번호. 가려진 자리(*)도 그대로 둔다. 번호 중간에 잘못 들어간 공백은 뺀다.(예: 1234-****-****-5678) 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "loan_info": {
+                  "type": "string",
+                  "description": "대출·보증 거래 정보. 건마다 금융회사·상품명·금액(신청금액 또는 잔액)·금리·기간·상환방식·상태 중 적힌 것을 한 구절로 적고, 건이 여러 개면 세미콜론(;)으로 구분한다(예: 가나캐피탈 전세자금대출 잔액 12,000,000원 연 5.2%). 금액·금리·기간 같은 거래 조건 없이 신청번호만 있으면 넣지 않는다. 동의서에 인쇄된 '대출 정보' 같은 항목 이름은 값이 아니다. 없으면 빈 문자열."
+                },
+                "income_info": {
+                  "type": "string",
+                  "description": "소득·재산 정보(연소득, 소득금액, 결정세액, 급여, 보유 부동산). '항목: 값' 형태로 적고 세미콜론(;)으로 구분한다(예: 연소득: 52,800,000원). 동의서에 인쇄된 '소득 정보' 같은 항목 이름은 값이 아니다. 없으면 빈 문자열."
+                },
+                "credit_negative_info": {
+                  "type": "string",
+                  "description": "신청인의 신용도 판단 정보(연체, 채무조정, 개인회생, 파산, 대위변제, 세금 체납). 어느 대출·카드에서 무엇이 있었는지 한 구절로 적고, 여러 건이면 세미콜론(;)으로 구분한다(예: 가나카드 카드론 연체 45일). 동의서·약관에 인쇄된 '연체 정보' 같은 항목 이름이나 설명 문구는 값이 아니다. 연체 등이 실제로 있었다고 적힌 경우만 넣는다. 없으면 빈 문자열."
+                },
+                "other_person_name": {
+                  "type": "string",
+                  "description": "신청인이 아닌 사람(보증인·보증처, 대리인, 배우자·가족·세대구성원, 피상속인, 거래 상대방)의 성명 또는 상호. 은행 직원은 넣지 않는다. 여러 명이면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "other_person_rrn": {
+                  "type": "string",
+                  "description": "신청인이 아닌 사람(보증인, 대리인, 가족)의 주민등록번호 또는 외국인등록번호. 적힌 그대로 옮기고 가려진 자리(*)도 그대로 둔다. 여러 명이면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "other_person_contact": {
+                  "type": "string",
+                  "description": "신청인이 아닌 사람(보증인·보증처, 대리인, 가족·세대구성원, 피상속인)의 전화번호·이메일·주소·생년월일·관계·사업자번호. '항목: 값' 꼴로 적고 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "staff_contact": {
+                  "type": "string",
+                  "description": "은행 직원·담당자의 이름, 직원번호(행번), 전화번호, 이메일과 결재란·직원 확인란의 이름. 고객 정보와 섞이지 않게 여기에만 모은다. 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                }
+              }
+            },
+            "type": "json_schema"
+          }
+        },
+        "location": true,
+        "location_granularity": "all",
+        "confidence": true,
+        "user_system_prompt": "[문서 경계] 입력 파일은 고객 한 명의 은행 서류 여러 종류가 한 PDF로 이어 붙은 묶음이며 앞 단계에서 서류 단위로 분리된다. 다른 서류에 속한 값을 이 서류의 값으로 가져오지 않는다. 신청인은 동의서·확인서를 작성한 고객 본인(동의자·납세자 본인·차주)이다. 세대구성원·담보제공자는 other_person_* 에 넣는다.\n[서식별 칸 → 키] 체크(☑·✔·V·■·동그라미)된 선택지만 값으로 보고 빈 칸(□)·인쇄된 안내 문구·칸 이름은 값이 아니다. 도장·서명 글자와 '(인)'·'(서명 또는 인)' 표시는 넣지 않는다.\n- 개인(신용)정보 동의서: 동의자 본인 → applicant_*. 인쇄된 동의 항목 이름은 값이 아니다.\n- FATCA/CRS 본인확인서: 고객정보의 성명(한글만) → applicant_name, 생년월일 → applicant_birth_date, 전화번호 → applicant_phone, 주소와 조세목적상 국가 내 주소 → applicant_address(세미콜론). 조세목적상 국가의 납세자번호(TIN) → applicant_id_number('국가: 번호'). 대리인 신청이면 대리인 성명 → other_person_name. 담당자·책임자·직원 확인란 → staff_contact.\n- 외국인등 차주의 세대 구성원 확인서: 본인(차주) → applicant_*, 담보제공자·세대구성원 성명 → other_person_name, 외국인등록번호 → other_person_rrn, 관계·성별·생년월일·주소 → other_person_contact."
+      },
+      "next_steps": [
+        {
+          "step_name": "병합-1",
+          "condition": null
+        }
+      ],
+      "is_first": false,
+      "node_id": "nd_1a998624060452f096c2b41d8c9b6ec0"
+    },
+    {
+      "id": "d12d3d30-a95a-5481-b819-cc26366654d2",
+      "name": "Information Extract - 추출_증빙",
+      "type": "information-extract",
+      "data": {
+        "custom_name": "추출_증빙",
+        "schema_layout": {
+          "version": 1,
+          "columns": [
+            {
+              "name": "applicant_name",
+              "source": "root"
+            },
+            {
+              "name": "applicant_rrn",
+              "source": "root"
+            },
+            {
+              "name": "applicant_id_number",
+              "source": "root"
+            },
+            {
+              "name": "applicant_birth_date",
+              "source": "root"
+            },
+            {
+              "name": "applicant_phone",
+              "source": "root"
+            },
+            {
+              "name": "applicant_email",
+              "source": "root"
+            },
+            {
+              "name": "applicant_address",
+              "source": "root"
+            },
+            {
+              "name": "employer_info",
+              "source": "root"
+            },
+            {
+              "name": "account_number",
+              "source": "root"
+            },
+            {
+              "name": "card_number",
+              "source": "root"
+            },
+            {
+              "name": "loan_info",
+              "source": "root"
+            },
+            {
+              "name": "income_info",
+              "source": "root"
+            },
+            {
+              "name": "credit_negative_info",
+              "source": "root"
+            },
+            {
+              "name": "other_person_name",
+              "source": "root"
+            },
+            {
+              "name": "other_person_rrn",
+              "source": "root"
+            },
+            {
+              "name": "other_person_contact",
+              "source": "root"
+            },
+            {
+              "name": "staff_contact",
+              "source": "root"
+            }
+          ]
+        },
+        "text": {
+          "format": {
+            "name": "document-schema",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "applicant_name": {
+                  "type": "string",
+                  "description": "신청인(이 서류를 낸 고객 본인 — 서식별 안내를 따른다)의 성명. 은행 직원·담당자·대리인·보증인의 이름은 넣지 않는다. 도장·서명 글자와 '(인)' 표시는 넣지 않고, 두 줄이면 한 줄로 잇는다. 일부 가려진 이름(예: 김*연)도 적힌 그대로 옮긴다. 없으면 빈 문자열."
+                },
+                "applicant_rrn": {
+                  "type": "string",
+                  "description": "신청인의 주민등록번호 또는 외국인등록번호. 문서에 적힌 그대로 옮기고 가려진 자리(*)도 그대로 둔다. 흐리거나 잘려서 읽을 수 없으면 추측하지 말고 비워 둔다. 동의서처럼 '주민등록번호'라는 항목 이름만 인쇄되어 있고 실제 값이 없으면 비워 둔다. 없으면 빈 문자열."
+                },
+                "applicant_id_number": {
+                  "type": "string",
+                  "description": "신청인의 여권번호·운전면허번호·외국 납세자번호(TIN)처럼 주민등록번호·외국인등록번호가 아닌 신분 식별 번호. 문서에 적힌 그대로 옮긴다. 항목 이름만 인쇄되어 있고 실제 값이 없으면 비워 둔다. 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "applicant_birth_date": {
+                  "type": "string",
+                  "description": "신청인의 생년월일. 주민등록번호와 따로 적힌 경우만 적는다(주민등록번호 앞 6자리만 적는 생년월일 칸도 여기에). 없으면 빈 문자열."
+                },
+                "applicant_phone": {
+                  "type": "string",
+                  "description": "신청인의 휴대전화·집·직장 전화번호. 은행·지점·담당 직원의 번호는 넣지 않는다. 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "applicant_email": {
+                  "type": "string",
+                  "description": "신청인의 이메일 주소. 은행·담당 직원의 이메일은 넣지 않는다. 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "applicant_address": {
+                  "type": "string",
+                  "description": "신청인의 집 주소. 은행·지점 주소는 넣지 않는다. 없으면 빈 문자열."
+                },
+                "employer_info": {
+                  "type": "string",
+                  "description": "신청인의 직장명·부서·직위·입사일. '항목: 값' 형태로 적고 세미콜론(;)으로 구분한다(예: 직장명: (주)동림정밀; 직위: 과장). 없으면 빈 문자열."
+                },
+                "account_number": {
+                  "type": "string",
+                  "description": "문서에 적힌 계좌번호. 누구의 계좌든 모두 넣고 가려진 자리(*)도 그대로 둔다. 번호 중간에 잘못 들어간 공백은 뺀다. 은행 양식의 관리번호·신청번호처럼 계좌번호가 아닌 숫자열은 넣지 않는다. 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "card_number": {
+                  "type": "string",
+                  "description": "신용카드·체크카드 번호. 가려진 자리(*)도 그대로 둔다. 번호 중간에 잘못 들어간 공백은 뺀다.(예: 1234-****-****-5678) 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "loan_info": {
+                  "type": "string",
+                  "description": "대출·보증 거래 정보. 건마다 금융회사·상품명·금액(신청금액 또는 잔액)·금리·기간·상환방식·상태 중 적힌 것을 한 구절로 적고, 건이 여러 개면 세미콜론(;)으로 구분한다(예: 가나캐피탈 전세자금대출 잔액 12,000,000원 연 5.2%). 금액·금리·기간 같은 거래 조건 없이 신청번호만 있으면 넣지 않는다. 동의서에 인쇄된 '대출 정보' 같은 항목 이름은 값이 아니다. 없으면 빈 문자열."
+                },
+                "income_info": {
+                  "type": "string",
+                  "description": "소득·재산 정보(연소득, 소득금액, 결정세액, 급여, 보유 부동산). '항목: 값' 형태로 적고 세미콜론(;)으로 구분한다(예: 연소득: 52,800,000원). 동의서에 인쇄된 '소득 정보' 같은 항목 이름은 값이 아니다. 없으면 빈 문자열."
+                },
+                "credit_negative_info": {
+                  "type": "string",
+                  "description": "신청인의 신용도 판단 정보(연체, 채무조정, 개인회생, 파산, 대위변제, 세금 체납). 어느 대출·카드에서 무엇이 있었는지 한 구절로 적고, 여러 건이면 세미콜론(;)으로 구분한다(예: 가나카드 카드론 연체 45일). 동의서·약관에 인쇄된 '연체 정보' 같은 항목 이름이나 설명 문구는 값이 아니다. 연체 등이 실제로 있었다고 적힌 경우만 넣는다. 없으면 빈 문자열."
+                },
+                "other_person_name": {
+                  "type": "string",
+                  "description": "신청인이 아닌 사람(보증인·보증처, 대리인, 배우자·가족·세대구성원, 피상속인, 거래 상대방)의 성명 또는 상호. 은행 직원은 넣지 않는다. 여러 명이면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "other_person_rrn": {
+                  "type": "string",
+                  "description": "신청인이 아닌 사람(보증인, 대리인, 가족)의 주민등록번호 또는 외국인등록번호. 적힌 그대로 옮기고 가려진 자리(*)도 그대로 둔다. 여러 명이면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "other_person_contact": {
+                  "type": "string",
+                  "description": "신청인이 아닌 사람(보증인·보증처, 대리인, 가족·세대구성원, 피상속인)의 전화번호·이메일·주소·생년월일·관계·사업자번호. '항목: 값' 꼴로 적고 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "staff_contact": {
+                  "type": "string",
+                  "description": "은행 직원·담당자의 이름, 직원번호(행번), 전화번호, 이메일과 결재란·직원 확인란의 이름. 고객 정보와 섞이지 않게 여기에만 모은다. 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                }
+              }
+            },
+            "type": "json_schema"
+          }
+        },
+        "location": true,
+        "location_granularity": "all",
+        "confidence": true,
+        "user_system_prompt": "[문서 경계] 입력 파일은 고객 한 명의 은행 서류 여러 종류가 한 PDF로 이어 붙은 묶음이며 앞 단계에서 서류 단위로 분리된다. 다른 서류에 속한 값을 이 서류의 값으로 가져오지 않는다. 신청인은 증명서나 내역서의 대상 고객 본인(납세자·근로자·채무자)이다. 발급기관·회사 담당자 정보는 staff_contact 나 employer_info 에 넣는다."
+      },
+      "next_steps": [
+        {
+          "step_name": "병합-1",
+          "condition": null
+        }
+      ],
+      "is_first": false,
+      "node_id": "nd_80b5ce94fb9a56c19dd97b49864b1303"
+    },
+    {
+      "id": "c4d63534-fc92-52c0-b0a4-1302dc6fbb2b",
+      "name": "Information Extract - 추출_신청서",
+      "type": "information-extract",
+      "data": {
+        "custom_name": "추출_신청서",
+        "schema_layout": {
+          "version": 1,
+          "columns": [
+            {
+              "name": "applicant_name",
+              "source": "root"
+            },
+            {
+              "name": "applicant_rrn",
+              "source": "root"
+            },
+            {
+              "name": "applicant_id_number",
+              "source": "root"
+            },
+            {
+              "name": "applicant_birth_date",
+              "source": "root"
+            },
+            {
+              "name": "applicant_phone",
+              "source": "root"
+            },
+            {
+              "name": "applicant_email",
+              "source": "root"
+            },
+            {
+              "name": "applicant_address",
+              "source": "root"
+            },
+            {
+              "name": "employer_info",
+              "source": "root"
+            },
+            {
+              "name": "account_number",
+              "source": "root"
+            },
+            {
+              "name": "card_number",
+              "source": "root"
+            },
+            {
+              "name": "loan_info",
+              "source": "root"
+            },
+            {
+              "name": "income_info",
+              "source": "root"
+            },
+            {
+              "name": "credit_negative_info",
+              "source": "root"
+            },
+            {
+              "name": "other_person_name",
+              "source": "root"
+            },
+            {
+              "name": "other_person_rrn",
+              "source": "root"
+            },
+            {
+              "name": "other_person_contact",
+              "source": "root"
+            },
+            {
+              "name": "staff_contact",
+              "source": "root"
+            }
+          ]
+        },
+        "text": {
+          "format": {
+            "name": "document-schema",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "applicant_name": {
+                  "type": "string",
+                  "description": "신청인(이 서류를 낸 고객 본인 — 서식별 안내를 따른다)의 성명. 은행 직원·담당자·대리인·보증인의 이름은 넣지 않는다. 도장·서명 글자와 '(인)' 표시는 넣지 않고, 두 줄이면 한 줄로 잇는다. 일부 가려진 이름(예: 김*연)도 적힌 그대로 옮긴다. 없으면 빈 문자열."
+                },
+                "applicant_rrn": {
+                  "type": "string",
+                  "description": "신청인의 주민등록번호 또는 외국인등록번호. 문서에 적힌 그대로 옮기고 가려진 자리(*)도 그대로 둔다. 흐리거나 잘려서 읽을 수 없으면 추측하지 말고 비워 둔다. 동의서처럼 '주민등록번호'라는 항목 이름만 인쇄되어 있고 실제 값이 없으면 비워 둔다. 없으면 빈 문자열."
+                },
+                "applicant_id_number": {
+                  "type": "string",
+                  "description": "신청인의 여권번호·운전면허번호·외국 납세자번호(TIN)처럼 주민등록번호·외국인등록번호가 아닌 신분 식별 번호. 문서에 적힌 그대로 옮긴다. 항목 이름만 인쇄되어 있고 실제 값이 없으면 비워 둔다. 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "applicant_birth_date": {
+                  "type": "string",
+                  "description": "신청인의 생년월일. 주민등록번호와 따로 적힌 경우만 적는다(주민등록번호 앞 6자리만 적는 생년월일 칸도 여기에). 없으면 빈 문자열."
+                },
+                "applicant_phone": {
+                  "type": "string",
+                  "description": "신청인의 휴대전화·집·직장 전화번호. 은행·지점·담당 직원의 번호는 넣지 않는다. 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "applicant_email": {
+                  "type": "string",
+                  "description": "신청인의 이메일 주소. 은행·담당 직원의 이메일은 넣지 않는다. 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "applicant_address": {
+                  "type": "string",
+                  "description": "신청인의 집 주소. 은행·지점 주소는 넣지 않는다. 없으면 빈 문자열."
+                },
+                "employer_info": {
+                  "type": "string",
+                  "description": "신청인의 직장명·부서·직위·입사일. '항목: 값' 형태로 적고 세미콜론(;)으로 구분한다(예: 직장명: (주)동림정밀; 직위: 과장). 없으면 빈 문자열."
+                },
+                "account_number": {
+                  "type": "string",
+                  "description": "문서에 적힌 계좌번호. 누구의 계좌든 모두 넣고 가려진 자리(*)도 그대로 둔다. 번호 중간에 잘못 들어간 공백은 뺀다. 은행 양식의 관리번호·신청번호처럼 계좌번호가 아닌 숫자열은 넣지 않는다. 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "card_number": {
+                  "type": "string",
+                  "description": "신용카드·체크카드 번호. 가려진 자리(*)도 그대로 둔다. 번호 중간에 잘못 들어간 공백은 뺀다.(예: 1234-****-****-5678) 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "loan_info": {
+                  "type": "string",
+                  "description": "대출·보증 거래 정보. 건마다 금융회사·상품명·금액(신청금액 또는 잔액)·금리·기간·상환방식·상태 중 적힌 것을 한 구절로 적고, 건이 여러 개면 세미콜론(;)으로 구분한다(예: 가나캐피탈 전세자금대출 잔액 12,000,000원 연 5.2%). 금액·금리·기간 같은 거래 조건 없이 신청번호만 있으면 넣지 않는다. 동의서에 인쇄된 '대출 정보' 같은 항목 이름은 값이 아니다. 없으면 빈 문자열."
+                },
+                "income_info": {
+                  "type": "string",
+                  "description": "소득·재산 정보(연소득, 소득금액, 결정세액, 급여, 보유 부동산). '항목: 값' 형태로 적고 세미콜론(;)으로 구분한다(예: 연소득: 52,800,000원). 동의서에 인쇄된 '소득 정보' 같은 항목 이름은 값이 아니다. 없으면 빈 문자열."
+                },
+                "credit_negative_info": {
+                  "type": "string",
+                  "description": "신청인의 신용도 판단 정보(연체, 채무조정, 개인회생, 파산, 대위변제, 세금 체납). 어느 대출·카드에서 무엇이 있었는지 한 구절로 적고, 여러 건이면 세미콜론(;)으로 구분한다(예: 가나카드 카드론 연체 45일). 동의서·약관에 인쇄된 '연체 정보' 같은 항목 이름이나 설명 문구는 값이 아니다. 연체 등이 실제로 있었다고 적힌 경우만 넣는다. 없으면 빈 문자열."
+                },
+                "other_person_name": {
+                  "type": "string",
+                  "description": "신청인이 아닌 사람(보증인·보증처, 대리인, 배우자·가족·세대구성원, 피상속인, 거래 상대방)의 성명 또는 상호. 은행 직원은 넣지 않는다. 여러 명이면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "other_person_rrn": {
+                  "type": "string",
+                  "description": "신청인이 아닌 사람(보증인, 대리인, 가족)의 주민등록번호 또는 외국인등록번호. 적힌 그대로 옮기고 가려진 자리(*)도 그대로 둔다. 여러 명이면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "other_person_contact": {
+                  "type": "string",
+                  "description": "신청인이 아닌 사람(보증인·보증처, 대리인, 가족·세대구성원, 피상속인)의 전화번호·이메일·주소·생년월일·관계·사업자번호. '항목: 값' 꼴로 적고 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                },
+                "staff_contact": {
+                  "type": "string",
+                  "description": "은행 직원·담당자의 이름, 직원번호(행번), 전화번호, 이메일과 결재란·직원 확인란의 이름. 고객 정보와 섞이지 않게 여기에만 모은다. 여러 개면 세미콜론(;)으로 구분한다. 없으면 빈 문자열."
+                }
+              }
+            },
+            "type": "json_schema"
+          }
+        },
+        "location": true,
+        "location_granularity": "all",
+        "confidence": true,
+        "user_system_prompt": "[문서 경계] 입력 파일은 고객 한 명의 은행 서류 여러 종류가 한 PDF로 이어 붙은 묶음이며 앞 단계에서 서류 단위로 분리된다. 다른 서류에 속한 값을 이 서류의 값으로 가져오지 않는다. 신청인은 이 신청서를 낸 고객 본인(대출 신청인·보증신청인·카드 회원·예금주·원권리자·연금 가입자)이다.\n[서식별 칸 → 키] 서류 제목을 보고 아래를 따른다. 체크(☑·✔·V·■·동그라미)된 선택지만 값으로 보고 빈 칸(□)·인쇄된 안내 문구·칸 이름은 값이 아니다. 도장·서명 글자와 '(인)'·'(서명 또는 인)' 표시는 넣지 않는다.\n- 대출 신청서·약정서: 대출 금액·기간·금리·상환 방법 → loan_info, 연소득 등 → income_info, 직장 → employer_info.\n- 지급보증거래 신청서: 상단 '본인'(보증신청인 성명 또는 상호·주소) → applicant_name·applicant_address. 보증처 성명/상호 → other_person_name, 보증처 사업자번호·주소·연락처·이메일 → other_person_contact. 보증금액·보증기간·보증요율·피보증 채무의 내용·특약사항 → loan_info('항목: 값'; 세미콜론). 보증료 출금 계좌번호 → account_number. 약관 쪽의 인쇄 문구는 값이 아니다.\n- 소비자피해보상금 지급신청서: 신청인 성명·주민등록번호·주소·전화 → applicant_name·applicant_rrn·applicant_address·applicant_phone. 선불식 할부거래업체명·체크된 요청 사유·소비자피해보상금·증서번호 → loan_info. 지급받을 계좌번호 → account_number.\n- 외국인등 차주의 세대 구성원 확인서: 본인(차주) 성명·주소 → applicant_name·applicant_address. 담보제공자와 세대구성 사항 표의 사람마다 성명 → other_person_name, 외국인등록번호 → other_person_rrn, 관계·성별·생년월일·주소 → other_person_contact. 담보제공자가 '본인과 동일'·'상동'이면 따로 넣지 않는다.\n- 체크카드 가입신청서: 한글 성명만 applicant_name(영문 성명은 넣지 않는다), 생년월일 → applicant_birth_date, 자택 주소 → applicant_address, 자택·휴대·직장 전화번호 → applicant_phone, 이메일 → applicant_email, 결제 계좌 → account_number, 카드번호가 적혀 있으면 card_number, 직장명·부서·직위·직장 주소 → employer_info. 가족카드 신청인 성명 → other_person_name, 그 관계·휴대전화 → other_person_contact. 권유자·본인확인 직원과 전산인자란의 조작자·책임자 → staff_contact.\n- 자동이체 신청서: 예금주 성명 → applicant_name, 생년월일 → applicant_birth_date(사업자번호면 employer_info 에 '사업자번호: 값'), 연락처 → applicant_phone, 출금계좌번호와 이체 내역 표의 입금계좌번호 → account_number. 이체 내역의 다른 예금주·대리인·법정대리인 성명 → other_person_name, 그 생년월일·주소·연락처·관계 → other_person_contact.\n- 휴면예금 지급신청서: 원권리자(예금주) 성명·생년월일·주소·전화·휴대전화·이메일 → applicant_*. 대리인 성명 → other_person_name, 대리인 생년월일·주소·전화·이메일·관계 → other_person_contact. 휴면계좌 번호와 입금받을 계좌번호 → account_number, 휴면예금 금액 → income_info('휴면예금: 금액'). 접수 금융회사 담당자 이름·전화 → staff_contact.\n- 퇴직연금·IRP 신청서: 가입자 성명·생년월일·연락처·주소 → applicant_*, 사업장명·사업자등록번호 → employer_info, 계좌번호 → account_number."
+      },
+      "next_steps": [
+        {
+          "step_name": "병합-1",
+          "condition": null
+        }
+      ],
+      "is_first": false,
+      "node_id": "nd_f32bbe7d144e531d86b1cdd78ae712e3"
+    },
+    {
+      "id": "76e48acd-b34f-5b7a-b7d7-bfba2dfc1e33",
+      "name": "병합-1",
+      "type": "merge",
+      "data": null,
+      "next_steps": [
+        {
+          "step_name": "Match - 서류_대조",
+          "condition": null
+        }
+      ],
+      "is_first": false,
+      "node_id": "nd_353d7f8956e45b3e8d0f73641c8557c3"
+    },
+    {
+      "id": "4ae7f00f-038b-566a-90b8-5d0cdfdb04ac",
+      "name": "Match - 서류_대조",
+      "type": "match",
+      "data": {
+        "custom_name": "서류_대조",
+        "anchor_step_name": "Information Extract - 추출_신청서",
+        "targets": [
+          {
+            "step_name": "Information Extract - 추출_확인서",
+            "output_key": "추출_확인서",
+            "document_match": {
+              "anchor_key": "applicant_name",
+              "target_key": "applicant_name",
+              "method": {
+                "type": "exact"
+              }
+            }
+          },
+          {
+            "step_name": "Information Extract - 추출_증빙",
+            "output_key": "추출_증빙",
+            "document_match": {
+              "anchor_key": "applicant_name",
+              "target_key": "applicant_name",
+              "method": {
+                "type": "fuzzy"
+              }
+            }
+          },
+          {
+            "step_name": "Information Extract - 추출_위임장",
+            "output_key": "추출_위임장",
+            "document_match": {
+              "anchor_key": "applicant_name",
+              "target_key": "applicant_name",
+              "method": {
+                "type": "exact"
+              }
+            }
+          }
+        ]
+      },
+      "next_steps": [
+        {
+          "step_name": "Validate - 묶음_검증",
+          "condition": null
+        }
+      ],
+      "is_first": false,
+      "node_id": "nd_e7a8d716f36a523ca27adfab139595f8"
+    },
+    {
+      "id": "15479100-316a-5576-94d7-323885fa9aa4",
+      "name": "Validate - 묶음_검증",
+      "type": "validate",
+      "data": {
+        "checks": [
+          {
+            "name": "신청서_신청인_성명",
+            "severity": "error",
+            "condition": {
+              "left": {
+                "nodeType": "extract",
+                "nodeName": "추출_신청서",
+                "field": "applicant_name",
+                "attr": "length"
+              },
+              "operator": "gte",
+              "right": {
+                "const": 1
+              }
+            }
+          },
+          {
+            "name": "확인서_신청인_성명",
+            "severity": "warning",
+            "condition": {
+              "left": {
+                "nodeType": "extract",
+                "nodeName": "추출_확인서",
+                "field": "applicant_name",
+                "attr": "length"
+              },
+              "operator": "gte",
+              "right": {
+                "const": 1
+              }
+            }
+          },
+          {
+            "name": "증빙_신청인_성명",
+            "severity": "warning",
+            "condition": {
+              "left": {
+                "nodeType": "extract",
+                "nodeName": "추출_증빙",
+                "field": "applicant_name",
+                "attr": "length"
+              },
+              "operator": "gte",
+              "right": {
+                "const": 1
+              }
+            }
+          },
+          {
+            "name": "위임장_위임인_성명",
+            "severity": "warning",
+            "condition": {
+              "left": {
+                "nodeType": "extract",
+                "nodeName": "추출_위임장",
+                "field": "applicant_name",
+                "attr": "length"
+              },
+              "operator": "gte",
+              "right": {
+                "const": 1
+              }
+            }
+          },
+          {
+            "name": "위임장_대리인_성명",
+            "severity": "warning",
+            "condition": {
+              "left": {
+                "nodeType": "extract",
+                "nodeName": "추출_위임장",
+                "field": "other_person_name",
+                "attr": "length"
+              },
+              "operator": "gte",
+              "right": {
+                "const": 1
+              }
+            }
+          }
+        ],
+        "custom_name": "묶음_검증",
+        "summaryPrompt": "당신은 서류 묶음 필수 항목 검증기다. 결정적 규칙만 사용해 한국어로 요약하라. 출력에 validation_verdict와 validation_reason을 포함한다. 신청서의 신청인 성명이 없으면 red로 기록하고 신청서 누락·판독 실패·분리 실패 가능성을 적어 담당자 확인을 권고한다. 선택 규칙만 실패하면 yellow, 모두 통과하면 green으로 기록한다. 통과하지 못한 규칙 이름을 적는다. 실제 개인정보 값은 절대 포함하지 마라."
+      },
+      "next_steps": [
+        {
+          "step_name": "Instruct - 위험도_판정",
+          "condition": {
+            "field": "text",
+            "operator": "==",
+            "value": "green"
+          }
+        },
+        {
+          "step_name": "Instruct - 위험도_판정",
+          "condition": {
+            "field": "text",
+            "operator": "==",
+            "value": "yellow"
+          }
+        },
+        {
+          "step_name": "Instruct - 위험도_판정",
+          "condition": {
+            "field": "text",
+            "operator": "==",
+            "value": "red"
+          }
+        }
+      ],
+      "is_first": false,
+      "node_id": "nd_022a1ba57e2754bdb4e4df6c598cddf6"
+    },
+    {
+      "id": "afdd0d65-f639-54c2-b5f9-3fcc674f9302",
+      "name": "Instruct - 위험도_판정",
+      "type": "instruct",
+      "data": {
+        "custom_name": "위험도_판정",
+        "input": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "당신은 은행 창구·여신 담당자의 민감정보 점검을 돕는 보조자다. 입력은 고객 한 명의 은행 서류 묶음이다. 앞 단계(서류 분할·분류 → 서류별 민감정보 추출 → 병합 → 서류_대조 → 묶음_검증)의 결과가 전달된다. 이 묶음 전체의 위험도를 하나 고른다.\n\n추출 항목은 다음 정보 종류에 해당한다. 값이 빈 문자열이면 그 정보는 없는 것이다.\n- 고유식별정보: applicant_rrn, applicant_id_number, other_person_rrn\n- 신용도판단정보: credit_negative_info\n- 신용거래정보: account_number, card_number, loan_info\n- 신용능력정보: income_info, employer_info\n- 일반개인정보: applicant_name, applicant_birth_date, applicant_phone, applicant_email, applicant_address, other_person_name, other_person_contact\n- staff_contact는 은행 직원 정보이므로 위험도 계산에 넣지 않는다.\n\n[판정 순서 — 반드시 이 순서로]\n1단계 '검토 필요': 다음 중 하나라도 해당하면 '검토 필요'로 고르고 더 진행하지 않는다.\n  (a) 묶음_검증 결과가 red다(신청서가 없거나 신청서의 신청인 성명을 읽지 못함). yellow는 참고만 하고 그것만으로 '검토 필요'를 고르지 않는다.\n  (b) 서류_대조에서 신청서의 신청인 성명과 다른 서류의 신청인 성명이 일치하지 않는 대상이 있다. 값이 빈 서류와 가려진 자리(*)는 비교에서 빼고, 대리인 등 다른 사람 항목(other_person_*)은 비교하지 않는다. 신청서의 신청인 성명이 비어 있으면 (b)는 따지지 않는다(그 경우는 (a)의 필수 항목 누락이다).\n  (c) 값이 흐리거나 잘려서 판단할 수 없거나, 신청인과 다른 사람의 정보를 구분할 수 없다.\n2단계 '상': 고유식별정보나 신용도판단정보가 하나라도 있다.\n3단계 '중': 신용거래정보나 신용능력정보가 하나라도 있다.\n4단계 '하': 일반개인정보만 있다.\n\n근거는 추출 결과에 값이 있는 항목만 쓴다. 서류 본문에 인쇄된 동의 항목 이름(예: '주민등록번호', '연체 정보')이나 안내 문구는 근거가 아니다. 추측하지 않는다. 근거가 부족하면 '검토 필요'를 고른다. 실제 개인정보 원문 값은 다시 쓰지 말고 정보 종류와 서류 종류로만 지칭한다.\n\n[출력] 아래 키 다섯 개를 이 순서로, 한 줄에 하나씩 쓴다.\nrisk_level: <상 | 중 | 하 | 검토 필요 중 하나>\ndocument_types: <묶음에 있는 서류 종류 코드 목록. 예: [loan_application, consent_form]. 기타 서류는 Other>\nsensitive_categories: <값이 있는 정보 종류 목록(고유식별정보, 신용도판단정보, 신용거래정보, 신용능력정보, 일반개인정보 중). 없으면 []>\nreview_reasons: <'검토 필요'일 때의 사유 목록(판독 불가, 정보 주체 불명, 필수 항목 누락, 서류 간 불일치 중). 아니면 []>\nreason: <판정 근거 1~2문장>\n마지막 줄에 risk_level 값만 한 번 더 적는다."
+              }
+            ]
+          }
+        ],
+        "text": {
+          "format": {
+            "type": "json_schema",
+            "name": "enum",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "enum": {
+                  "type": "string",
+                  "enum": [
+                    "상",
+                    "중",
+                    "하",
+                    "검토 필요"
+                  ]
+                }
+              },
+              "required": [
+                "enum"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      },
+      "next_steps": [
+        {
+          "step_name": "Instruct - 권장_조치",
+          "condition": {
+            "field": "additional_values.enum",
+            "operator": "==",
+            "value": "상"
+          }
+        },
+        {
+          "step_name": "Instruct - 권장_조치",
+          "condition": {
+            "field": "additional_values.enum",
+            "operator": "==",
+            "value": "중"
+          }
+        },
+        {
+          "step_name": "Instruct - 권장_조치",
+          "condition": {
+            "field": "additional_values.enum",
+            "operator": "==",
+            "value": "하"
+          }
+        },
+        {
+          "step_name": "Instruct - 검토_안내",
+          "condition": {
+            "field": "additional_values.enum",
+            "operator": "==",
+            "value": "검토 필요"
+          }
+        }
+      ],
+      "is_first": false,
+      "node_id": "nd_1efcad43ed09599483840e9cf4e477eb"
+    },
+    {
+      "id": "a0c12ae0-c04a-5d70-b239-7ce250dcb859",
+      "name": "Instruct - 권장_조치",
+      "type": "instruct",
+      "data": {
+        "custom_name": "권장_조치",
+        "input": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "앞선 판정 #위험도_판정 을 바탕으로 여신 담당자가 이 서류 묶음을 보관하거나 외부로 넘기기 전에 할 조치를 정리하라.\n1) 조치는 3개 이내로 쓰고, 각 조치마다 대상 정보 종류, 대상 서류, 처리 방법(가림·삭제·접근 제한·보관 기간 확인 중 하나), 이유를 한 줄로 쓴다.\n2) 대상 서류에는 그 정보가 추출 결과에 실제로 있는 서류만 적는다. 근거는 추출 결과에 값이 있는 항목만 쓴다. 서류 본문에 인쇄된 동의 항목 이름(예: '주민등록번호', '연체 정보')이나 안내 문구는 근거가 아니다.\n3) 위험도가 높은 정보부터 쓴다.\n4) 실제 개인정보 원문 값은 쓰지 말고 정보 종류와 서류 종류로만 지칭한다.\n5) 마지막 줄에 '※ 담당자 최종 확인 필요'를 표기한다."
+              }
+            ]
+          }
+        ]
+      },
+      "next_steps": [],
+      "is_first": false,
+      "node_id": "nd_db2c3b405b2d5d929ca61c2538dccdf2"
+    },
+    {
+      "id": "f5e4288f-705b-5733-a734-ef6ddad97a43",
+      "name": "Instruct - 검토_안내",
+      "type": "instruct",
+      "data": {
+        "custom_name": "검토_안내",
+        "input": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "앞선 판정 #위험도_판정 결과 사람의 확인이 필요하다. 담당자가 확인할 내용을 정리하라.\n1) 확인할 서류 종류, 확인할 정보 종류, 확인이 필요한 이유를 항목별로 쓴다. 이유는 판독 불가, 정보 주체 불명, 필수 항목 누락, 서류 간 불일치 중 하나로 고른다.\n2) 확인 후 담당자가 할 일을 한 줄씩 덧붙인다.\n3) 근거는 추출 결과, 묶음_검증 결과, 서류_대조 결과만 쓴다.\n4) 실제 개인정보 원문 값은 쓰지 말고 정보 종류와 서류 종류로만 지칭한다."
+              }
+            ]
+          }
+        ]
+      },
+      "next_steps": [],
+      "is_first": false,
+      "node_id": "nd_f0538fb641765b9f8453c61a6ec01361"
+    }
+  ]
+}

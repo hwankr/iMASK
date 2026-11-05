@@ -2,15 +2,28 @@
    파일 저장 — 브라우저 다운로드(Blob). 프로토타입 deliverFile(Main.dc.html 1426–1452)의 브라우저 경로만 옮겼다.
    (window.claude 저장 경로는 옮기지 않는다 — BRIEF 1-1)
    - 파일 내용은 받은 그대로 담는다(CSV 의 BOM 포함). 화면에서 다시 만들지 않는다.
+     글자(text — CSV · JSON)와 바이너리(data — Uint8Array · Blob, 가린 PDF) 둘 다 받는다.
    - 앵커를 눌러 다운로드를 요청하고, 잠시 뒤 객체 URL 을 해제한다.
    - 브라우저는 저장 위치·완료 여부를 알려 주지 않으므로 결과는 'handed'(다운로드 요청) 또는 'failed' 다.
    ========================================================================== */
 
-/** 저장할 파일 — 서비스 ExportFile 의 일부 */
-export interface DownloadableFile {
-  name: string;
-  mime: string;
-  text: string;
+/**
+ * 저장할 파일 — 글자(서비스 ExportFile 의 일부 — CSV · JSON) 또는 바이너리(Uint8Array · Blob — 가린 PDF).
+ * Blob 이어도 저장할 형식은 mime 이다.
+ */
+export type DownloadableFile = { name: string; mime: string; text: string } | { name: string; mime: string; data: Uint8Array | Blob };
+
+/** 파일 내용 → Blob(형식 = mime) */
+function toBlob(file: DownloadableFile): Blob {
+  if ('data' in file) {
+    const d = file.data;
+    if (d instanceof Blob) return d.type === file.mime ? d : new Blob([d], { type: file.mime });
+    if (!(d instanceof Uint8Array)) throw new Error('잘못된 파일 내용');
+    // 보통 ArrayBuffer 위 보기 그대로 담고, 그 밖(SharedArrayBuffer 등)이면 복사본으로 담는다
+    const bytes = d.buffer instanceof ArrayBuffer ? (d as Uint8Array<ArrayBuffer>) : new Uint8Array(d);
+    return new Blob([bytes], { type: file.mime });
+  }
+  return new Blob([file.text], { type: file.mime });
 }
 
 export type DownloadResult = { state: 'handed' } | { state: 'failed'; message: string };
@@ -59,7 +72,7 @@ function browserEnv(): DownloadEnv {
 export function downloadFile(file: DownloadableFile, env: DownloadEnv = browserEnv()): DownloadResult {
   let url: string | null = null;
   try {
-    const blob = new Blob([file.text], { type: file.mime });
+    const blob = toBlob(file);
     url = env.createObjectURL(blob);
     env.clickAnchor(url, file.name);
     const made = url;

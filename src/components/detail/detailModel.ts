@@ -35,7 +35,20 @@ import {
 import type { IconName } from '@/display/icon-names';
 import { clamp, fmtDT, fmtSize } from '@/lib/format';
 import type { Analysis, AnalysisDoc, DocLink, Finding, PageBlock, ReviewItem, Segment, TextValue } from '@/services/types';
-import { DETAIL_TABS, LIVE_DETAIL_TABS, LIVE_LINK_TABS, focusAnchors, focusKey, passesFilter, type DetailFocus, type DetailTab, type DetailUiState, type FindingFilter, type MobileTab } from './detailState';
+import {
+  DETAIL_TABS,
+  LIVE_DETAIL_TABS,
+  LIVE_LINK_TABS,
+  focusAnchors,
+  focusKey,
+  maskPicked,
+  passesFilter,
+  type DetailFocus,
+  type DetailTab,
+  type DetailUiState,
+  type FindingFilter,
+  type MobileTab,
+} from './detailState';
 import { FILE_FAILED, filePageOf, guideText, liveDocMeta, pageMissingText } from './liveViewerModel';
 
 /** 검토 기록을 불러오지 못한 실제 분석 — 막힌 '검토 완료' 버튼의 title */
@@ -316,8 +329,11 @@ export interface HighlightVars {
 
 export type SegmentModel =
   | { kind: 'plain'; text: string }
-  /** 탐지 위치 — 누르면 그 탐지 항목을 고른다(진짜 버튼) */
-  | { kind: 'hl'; anchor: string; findingId: string; text: string; shown: string; aria: string; on: boolean; fp: boolean; tag: boolean; vars: HighlightVars }
+  /**
+   * 탐지 위치 — 누르면 그 탐지 항목을 고른다(진짜 버튼). 마스킹 미리보기 중에는 누르면 그 항목의 가림을 켜고 끈다 —
+   * pressed 는 그때만 있다(가림이면 true · aria-pressed).
+   */
+  | { kind: 'hl'; anchor: string; findingId: string; text: string; shown: string; aria: string; on: boolean; fp: boolean; tag: boolean; vars: HighlightVars; pressed?: boolean }
   /** 탐지 항목이 아닌 고른 위치(검토사항 근거 · 연결 근거) — 표시만 */
   | { kind: 'mark'; anchor: string; text: string; tag: boolean; vars: HighlightVars };
 
@@ -344,6 +360,8 @@ export interface NoticeModel {
   text: string;
   /** 여러 줄 글(줄바꿈을 지킨다 — 기타 서류 안내) */
   pre?: boolean;
+  /** 공지 안 버튼 — maskPdf = '가린 PDF 내려받기'(실제 분석 서류의 마스킹 미리보기 공지만) */
+  action?: 'maskPdf';
 }
 
 export type PlaceholderActionKey = 'trySample' | 'retryDoc' | 'retryFile';
@@ -458,6 +476,9 @@ export function fitZoom(m: ViewerMetrics): number {
 /** 도구 줄이 줄어드는 뷰어 폭(원본 vCompact: 700px 미만) */
 export const VIEWER_COMPACT_MAX = 700;
 
+/** 마스킹 미리보기 공지 — 탐지 위치를 눌러 항목별로 가림을 고른다 */
+export const MASK_NOTICE_TEXT = '탐지 위치를 누를 때마다 그 항목을 가리거나 다시 보여 줍니다. 화면에서만 가리며 원본 파일은 바뀌지 않습니다.';
+
 export interface ViewerModel {
   doc: AnalysisDoc | null;
   docName: string;
@@ -480,6 +501,8 @@ export interface ViewerModel {
   /** 마스킹 미리보기 켬(스위치 상태) */
   mask: boolean;
   noMask: boolean;
+  /** 마스킹 미리보기 중 — 탐지 위치를 누르면 고르는 대신 그 항목의 가림을 켜고 끈다 */
+  maskPicking: boolean;
   notices: NoticeModel[];
   pageAria: string;
   scan: boolean;
@@ -519,6 +542,8 @@ export interface LiveBoxModel {
   tag: boolean;
   /** 마스킹 미리보기 — 검은 상자로 가린다 */
   masked: boolean;
+  /** 마스킹 미리보기 중에만 — 누르면 가림을 켜고 끈다(가림이면 true · aria-pressed) */
+  pressed?: boolean;
   vars: HighlightVars;
 }
 
@@ -567,6 +592,10 @@ export function viewerModel(a: Analysis, s: DetailUiState, x: DetailFacts, metri
   }
 
   const mask = s.mask && showFind;
+  /** 마스킹 미리보기에서 이 항목을 가리는지 — 항목별로 고른 값(고른 적 없으면 오탐이 아닌 항목만) */
+  const maskOf = (f: Finding): boolean => mask && maskPicked(s.maskPick, f);
+  /** 탐지 위치 버튼 이름 — 마스킹 미리보기 중에는 누르면 가림을 켜고 끈다(aria-pressed 와 함께) */
+  const findAria = (f: Finding, R: RiskView): string => f.id + ' ' + f.cat + ' ' + R.label + (mask ? ' — 가리기' : ' — 탐지 항목 보기');
   const markVars: HighlightVars = { soft: tone.bg, solid: tone.line, onBg: tone.bg, pc: tone.line, ph: tone.halo };
   const selfFocus = !!focus && focus.kind === 'finding';
 
@@ -580,13 +609,14 @@ export function viewerModel(a: Analysis, s: DetailUiState, x: DetailFacts, metri
       if (f) {
         const R = riskView(f.risk);
         const fp = f.status === 'false_positive';
+        const masked = maskOf(f);
         return {
           kind: 'hl',
           anchor: p.a,
           findingId: f.id,
           text: p.x,
-          shown: mask && !fp && p.m ? p.m : p.x,
-          aria: f.id + ' ' + f.cat + ' ' + R.label + ' — 탐지 항목 보기',
+          shown: masked && p.m ? p.m : p.x,
+          aria: findAria(f, R),
           on,
           fp,
           tag,
@@ -597,6 +627,7 @@ export function viewerModel(a: Analysis, s: DetailUiState, x: DetailFacts, metri
             pc: selfFocus ? R.solid : tone.line,
             ph: selfFocus ? R.halo : tone.halo,
           },
+          ...(mask ? { pressed: masked } : {}),
         };
       }
       if (on) return { kind: 'mark', anchor: p.a, text: mask && p.m ? p.m : p.x, tag, vars: markVars };
@@ -669,7 +700,9 @@ export function viewerModel(a: Analysis, s: DetailUiState, x: DetailFacts, metri
       tone: 'accent',
       icon: 'dg-i-eye-off',
       title: '마스킹 미리보기',
-      text: '화면에서만 가려 보는 미리보기입니다. 원본 파일은 바뀌지 않으며, 마스킹한 파일을 만드는 기능과는 다릅니다.',
+      text: MASK_NOTICE_TEXT,
+      // 실제 분석 서류 — 올린 원본 파일로 가린 PDF 를 만들 수 있다(데모에는 원본 파일이 없다)
+      ...(source ? { action: 'maskPdf' as const } : {}),
     });
   if (hasPage && !showFind)
     notices.push({ tone: 'run', icon: 'dg-i-info', title: '탐지 위치 표시 전', text: '분석이 끝나면 이 문서에서 찾은 정보의 위치를 강조해 표시합니다.' });
@@ -692,6 +725,7 @@ export function viewerModel(a: Analysis, s: DetailUiState, x: DetailFacts, metri
     noPage: !hasPage,
     mask: s.mask,
     noMask: !hasPage || !showFind,
+    maskPicking: mask,
     notices,
     pageAria: doc ? docName(doc) + ' ' + page + '쪽' : '',
     scan: !!(doc && doc.scan),
@@ -708,15 +742,16 @@ export function viewerModel(a: Analysis, s: DetailUiState, x: DetailFacts, metri
             boxes: liveBoxSrc.map(({ f, b }): LiveBoxModel => {
               const R = riskView(f.risk);
               const on = fset.has(b.a);
-              const fp = f.status === 'false_positive';
+              const masked = maskOf(f);
               return {
                 anchor: b.a,
                 findingId: f.id,
                 points: b.points.map((pt) => ({ x: pt.x, y: pt.y })),
-                aria: f.id + ' ' + f.cat + ' ' + R.label + ' — 탐지 항목 보기',
+                aria: findAria(f, R),
                 on,
                 tag: on && b.a === first,
-                masked: mask && !fp,
+                masked,
+                ...(mask ? { pressed: masked } : {}),
                 vars: {
                   soft: R.soft,
                   solid: R.solid,
@@ -770,10 +805,12 @@ export interface FindingModel {
   canUnconfirm: boolean;
   canFp: boolean;
   canRestore: boolean;
+  /** 마스킹 미리보기에서 이 항목을 가린다(항목별로 고른 값 — 고른 적 없으면 오탐이 아닌 항목만) */
+  maskPicked: boolean;
 }
 
 /** 탐지 항목 행(원본 findingVM) */
-export function findingModel(a: Analysis, f: Finding, focus: DetailFocus | null): FindingModel {
+export function findingModel(a: Analysis, f: Finding, focus: DetailFocus | null, maskPick: DetailUiState['maskPick'] = {}): FindingModel {
   const R = riskView(f.risk);
   const st = Object.prototype.hasOwnProperty.call(FSTATUS, f.status) ? FSTATUS[f.status] : FSTATUS.open;
   const d = a.docs.find((x) => x.id === f.docId);
@@ -823,6 +860,7 @@ export function findingModel(a: Analysis, f: Finding, focus: DetailFocus | null)
     canUnconfirm: f.status === 'confirmed',
     canFp: !fp,
     canRestore: fp,
+    maskPicked: maskPicked(maskPick, f),
   };
 }
 
@@ -973,6 +1011,8 @@ export interface ResultsModel {
   chips: { value: FindingFilter; label: string; count: number }[];
   findings: FindingModel[];
   shownText: string;
+  /** 마스킹 미리보기 중 — 행마다 가림 버튼, 머리에 '모두 가림 · 모두 해제'(보이는 행 기준). 미리보기가 아니면 null */
+  maskPick: MaskPickModel | null;
   /* 검토 필요 */
   keep: string | null;
   nOpen: number;
@@ -996,6 +1036,20 @@ export interface ResultsModel {
   readOnly: boolean;
 }
 
+/** 탐지 항목 목록 머리의 가림 고르기(마스킹 미리보기 중) — 지금 보이는(필터 · 현재 문서만 보기를 거친) 행 기준 */
+export interface MaskPickModel {
+  /** 보이는 행의 탐지 항목 ID — '모두 가림 · 모두 해제'가 바꾼다 */
+  ids: string[];
+  /** 보이는 행 가운데 가리는 수 */
+  picked: number;
+  /** '가림 3/12' */
+  text: string;
+  /** 보이는 행이 모두 가림 — '모두 가림'을 막는다 */
+  allOn: boolean;
+  /** 보이는 행이 모두 보임 — '모두 해제'를 막는다 */
+  allOff: boolean;
+}
+
 /** 검토사항이 없을 때 설명 줄(데모만 — 원본 문구) */
 export const ITEMS_EMPTY_TEXT = '판독 실패, 잘린 페이지, 값 불일치, 연결 근거 부족 같은 문제가 발견되면 이곳에 표시됩니다.';
 
@@ -1016,6 +1070,12 @@ export function resultsModel(a: Analysis, s: DetailUiState, x: DetailFacts): Res
 
   const hi = fAll.filter((f) => f.risk === 'high' && f.status !== 'false_positive').length;
   const issues = a.items.some((i) => !i.resolved && (i.type === 'unreadable' || i.type === 'cutoff' || i.type === 'failed'));
+  const findings = items.map((f) => findingModel(a, f, focus, s.maskPick));
+  const picked = findings.filter((f) => f.maskPicked).length;
+  const maskPick: MaskPickModel | null =
+    s.mask && x.hasResults
+      ? { ids: findings.map((f) => f.id), picked, text: '가림 ' + picked + '/' + findings.length, allOn: picked === findings.length, allOff: picked === 0 }
+      : null;
 
   const tabLabel: Record<DetailTab, string> = { findings: '탐지 항목', review: '검토 필요', links: '문서 간 연결', summary: '분석 요약' };
   const tabCount: Record<DetailTab, number | undefined> = { findings: fAll.length, review: x.openItems, links: a.links.length, summary: undefined };
@@ -1035,8 +1095,9 @@ export function resultsModel(a: Analysis, s: DetailUiState, x: DetailFacts): Res
       { value: 'medium', label: riskView('medium').label, count: cnt((f) => f.risk === 'medium') },
       { value: 'low', label: riskView('low').label, count: cnt((f) => f.risk === 'low') },
     ],
-    findings: items.map((f) => findingModel(a, f, focus)),
+    findings,
     shownText: items.length + '건 표시 · 확인 ' + x.reviewed + '/' + fAll.length,
+    maskPick,
     keep: hi > 0 && issues ? '이미 발견한 고위험 정보 ' + hi + '건은 아래 판독 실패 · 누락과 관계없이 그대로 표시하고 유지합니다. 아직 읽지 못한 부분에 추가 정보가 있을 수 있습니다.' : null,
     nOpen: x.openItems,
     nDone: a.items.length - x.openItems,

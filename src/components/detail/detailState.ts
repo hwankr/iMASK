@@ -84,6 +84,11 @@ export interface DetailUiState {
   zoom: number | null;
   /** 마스킹 미리보기(화면에서만 가림) */
   mask: boolean;
+  /**
+   * 마스킹 미리보기에서 항목별로 고른 가림 — 탐지 항목 ID → true(가림) · false(보임).
+   * 고른 적 없는 항목은 기본값(오탐이 아니면 가림 — maskPicked). 화면 상태라 저장하지 않는다.
+   */
+  maskPick: Readonly<Record<string, boolean>>;
   /** 휴대폰 화면 전환 탭 */
   mTab: MobileTab;
   /** 왼쪽 문서 목록 펼침 — null 이면 기본(데스크톱 펼침 · 태블릿 접힘) */
@@ -178,6 +183,27 @@ export function passesFilter(filter: FindingFilter, f: { status: string; risk: s
   return filter === 'all' || (filter === 'open' ? f.status === 'open' : f.risk === filter);
 }
 
+/* ---------- 마스킹 미리보기 — 항목별 가림 ---------- */
+
+type MaskPick = DetailUiState['maskPick'];
+
+/** 마스킹 미리보기에서 이 탐지 항목을 가리는지 — 고른 값이 있으면 그 값, 없으면 오탐이 아닌 항목만 */
+export function maskPicked(pick: MaskPick, f: { id: string; status: string }): boolean {
+  return Object.prototype.hasOwnProperty.call(pick, f.id) ? pick[f.id] : f.status !== 'false_positive';
+}
+
+/** 항목 하나의 가림을 뒤집은 새 값 */
+export function toggledMaskPick(pick: MaskPick, f: { id: string; status: string }): MaskPick {
+  return { ...pick, [f.id]: !maskPicked(pick, f) };
+}
+
+/** 여러 항목(탐지 항목 ID)을 한꺼번에 가림(on) · 보임(off)으로 둔 새 값 */
+export function withMaskPick(pick: MaskPick, ids: readonly string[], on: boolean): MaskPick {
+  const next: Record<string, boolean> = { ...pick };
+  ids.forEach((id) => (next[id] = on));
+  return next;
+}
+
 /* ---------- 처음 상태 ---------- */
 
 /** 기본값(원본 baseState · detailState) */
@@ -191,6 +217,7 @@ export function baseDetailState(a: Analysis | null): DetailUiState {
     page: 1,
     zoom: null,
     mask: false,
+    maskPick: {},
     mTab: 'doc',
     leftOpen: null,
     modal: null,

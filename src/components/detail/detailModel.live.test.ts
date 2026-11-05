@@ -7,6 +7,7 @@ import { analysisOut, contractResult } from '@/services/api/testing';
 import type { Analysis } from '@/services/types';
 import { READ_ONLY_ACTIONS } from './detailActions';
 import {
+  MASK_NOTICE_TEXT,
   REVIEW_UNAVAILABLE_TITLE,
   bannerModel,
   detailFacts,
@@ -142,6 +143,42 @@ describe('실제 분석 상세 — 고정 자료 → toAnalysis → 화면 모�
     const off = viewer(a, { docId: 'doc-0', page: 1, mask: false });
     expect(off.live!.boxes.some((x) => x.masked)).toBe(false);
     expect(off.notices.map((n) => n.title)).not.toContain('마스킹 미리보기');
+  });
+
+  it('마스킹 미리보기 — 항목별 가림: 보이게 고른 항목의 상자만 빠지고, 상자는 가림을 켜고 끄는 버튼(누름 상태 · 이름)', () => {
+    const v = viewer(a, { docId: 'doc-0', page: 1, focus: null, mask: true, maskPick: { 'D1-05': false } });
+    expect(v.maskPicking).toBe(true);
+    const boxes = v.live!.boxes;
+    expect(boxes.filter((x) => !x.masked).map((x) => x.anchor)).toEqual(['D1-05#1', 'D1-05#2', 'D1-05#3', 'D1-05#4', 'D1-05#5', 'D1-05#6']);
+    expect(boxes.every((x) => x.pressed === x.masked)).toBe(true);
+    expect(boxes.find((x) => x.anchor === 'D1-02#1')!.aria).toBe('D1-02 고유식별정보 높음 — 가리기');
+    expect(v.notices.find((n) => n.title === '마스킹 미리보기')?.text).toBe(MASK_NOTICE_TEXT);
+    // 실제 분석 서류의 공지에는 '가린 PDF 내려받기' 버튼
+    expect(v.notices.find((n) => n.title === '마스킹 미리보기')?.action).toBe('maskPdf');
+    // 미리보기를 끄면 고른 값과 관계없이 가리지 않고 누름 상태도 없다(누르면 항목 고르기)
+    const off = viewer(a, { docId: 'doc-0', page: 1, focus: null, mask: false, maskPick: { 'D1-01': true } });
+    expect(off.maskPicking).toBe(false);
+    expect(off.live!.boxes.some((x) => x.masked || 'pressed' in x)).toBe(false);
+    expect(off.live!.boxes.find((x) => x.anchor === 'D1-02#1')!.aria).toBe('D1-02 고유식별정보 높음 — 탐지 항목 보기');
+  });
+
+  it('마스킹 미리보기 — 결과 패널: 보이는 행 기준 가림 수와 모두 가림 · 모두 해제, 행마다 가림 여부', () => {
+    const s = stateOf(a, { mask: true, maskPick: { 'D1-02': false } });
+    const rs = resultsModel(a, s, detailFacts(a, s));
+    const n = rs.findings.length;
+    expect(rs.maskPick).toEqual({ ids: rs.findings.map((f) => f.id), picked: n - 1, text: '가림 ' + (n - 1) + '/' + n, allOn: false, allOff: false });
+    expect(rs.findings.filter((f) => !f.maskPicked).map((f) => f.id)).toEqual(['D1-02']);
+    // 현재 문서만 보기 — 그 서류 행만 세고 바꾼다
+    const one = stateOf(a, { mask: true, onlyDoc: true, docId: 'doc-1', maskPick: { 'D1-02': false } });
+    const rsOne = resultsModel(a, one, detailFacts(a, one));
+    const doc1 = a.findings.filter((f) => f.docId === 'doc-1').map((f) => f.id);
+    expect(rsOne.maskPick?.ids.slice().sort()).toEqual(doc1.slice().sort());
+    expect(rsOne.maskPick).toMatchObject({ picked: doc1.length, allOn: true, allOff: false });
+    // 모두 보임이면 '모두 해제'를 막는다
+    const none = stateOf(a, { mask: true, maskPick: Object.fromEntries(a.findings.map((f) => [f.id, false])) });
+    expect(resultsModel(a, none, detailFacts(a, none)).maskPick).toMatchObject({ picked: 0, allOn: false, allOff: true });
+    // 미리보기가 꺼져 있으면 없다
+    expect(resultsModel(a, stateOf(a), detailFacts(a, stateOf(a))).maskPick).toBeNull();
   });
 
   it("위치 없는 항목은 상자에서 빠지고, 고르면 '위치 확인 필요' 공지 — page null(D3-02) · boxes [](D5-03)", () => {

@@ -109,6 +109,33 @@
 .noticeText {
   color: var(--ink-2);
 }
+/* 공지 안 버튼(실제 분석 마스킹 미리보기 — '가린 PDF 내려받기').
+   공지 폭(.notices 컨테이너)이 넓으면 [아이콘 · 글 · 버튼] 한 줄(버튼은 세로 가운데),
+   좁으면(휴대폰 · 좁은 뷰어 · 작은 배율) 버튼이 글 아래 줄 — 글과 같은 열이라 아이콘 · 글과 겹치지 않는다.
+   휴대폰 sm 버튼(40)은 공통 Button 의 ::after 가 위아래 2 씩 넓혀 44 — 위는 줄 간격(8), 아래는 공지 안쪽 여백(10) 안이다. */
+.notices {
+  container: dg-notices / inline-size;
+}
+.withAct {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: var(--space-10);
+}
+.noticeAct {
+  display: flex;
+  align-self: center;
+}
+@container dg-notices (max-width: 560px) {
+  .withAct {
+    grid-template-columns: auto minmax(0, 1fr);
+    row-gap: var(--space-8);
+  }
+  .noticeAct {
+    grid-column: 2;
+    align-self: start;
+  }
+}
+
 /* 여러 줄 안내(실제 분석 기타 서류 안내) — 제목 아래 줄을 바꿔 글자 그대로 */
 .noticePre {
   display: block;

@@ -3,6 +3,7 @@
 import { Button, FindingStatusLabel, Icon, RiskBadge, cx } from '@/components/ui';
 import type { DetailActions } from './detailActions';
 import type { FindingModel } from './detailModel';
+import { Tip } from './Tip';
 import styles from './FindingRow.module.css';
 
 export interface FindingRowProps {
@@ -16,6 +17,8 @@ export interface FindingRowProps {
   /** '원문 확인' — 휴대폰이면 원문 탭으로 */
   onReveal: (fid: string) => void;
   actions: DetailActions;
+  /** 마스킹 미리보기 중 — 행 왼쪽 가림 버튼(누르면 이 항목의 가림을 켜고 끈다). 없으면 버튼이 없다 */
+  onMaskPick?: (fid: string) => void;
 }
 
 /**
@@ -24,11 +27,27 @@ export interface FindingRowProps {
  * 위치가 없는 항목은 '위치 확인 필요'(강조 대신 근거 문구와 쪽 번호).
  * 실제 분석은 적용 규칙이 없으면 그 줄을 빼고, 분류 확인 필요 · 인식 신뢰도 낮음 안내를 보인다.
  * readOnly(검토 기록을 불러오지 못한 실제 분석)면 검토 동작 버튼만 막는다(안내 문구는 없다).
+ * 마스킹 미리보기 중(onMaskPick)에는 행 왼쪽에 가림 버튼이 붙는다 — 가림이면 검은 칸(원문의 검은 상자와 같은 색)에 가린 눈.
+ * 화면 상태만 바꾸므로 검토 완료 · 읽기 전용이어도 쓸 수 있다.
  */
-export function FindingRow({ f, locked, readOnly = false, onToggle, onReveal, actions }: FindingRowProps) {
+export function FindingRow({ f, locked, readOnly = false, onToggle, onReveal, actions, onMaskPick }: FindingRowProps) {
   const off = locked || readOnly;
   return (
-    <article data-card={f.id} className={cx(styles.row, f.open && styles.open)}>
+    <article data-card={f.id} className={cx(styles.row, f.open && styles.open, onMaskPick && styles.picking)}>
+      {onMaskPick ? (
+        <Tip label={f.maskPicked ? '가림 해제' : '가리기'} side="right" className={styles.pickTip}>
+          <button
+            type="button"
+            aria-pressed={f.maskPicked}
+            aria-label={f.id + ' 가리기'}
+            onClick={() => onMaskPick(f.id)}
+            className={cx(styles.pick, f.maskPicked && styles.pickOn)}
+            data-slot="mask-pick"
+          >
+            <Icon name={f.maskPicked ? 'dg-i-eye-off' : 'dg-i-eye'} size={16} strokeWidth={2.2} />
+          </button>
+        </Tip>
+      ) : null}
       <button type="button" aria-expanded={f.open} aria-label={f.aria} onClick={() => onToggle(f.id)} className={styles.toggle}>
         <span className={styles.body}>
           <span className={styles.line1}>

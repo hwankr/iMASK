@@ -8,6 +8,10 @@
    - 이동 주소는 지금 기준 경로(useRouteBase)로 만든다(src/lib/routes.ts) — `/demo` 아래에서는 `/demo` 밖으로 나가지 않는다.
    - 서비스 변경 알림이 오면 훅이 다시 불러와 진행(대기 → 분석 중 → 문서별 완료 → 완료)이 그대로 반영된다.
    - 화면 상태는 useDetailUi(리듀서 하나), 검토 동작은 useDetailActions, 모달은 ReviewModal.
+   - 마스킹 미리보기 중에는 원문의 탐지 위치를 누르면 그 항목의 가림을 켜고 끈다(결과 패널 행 · '모두 가림 · 모두 해제'도 같다).
+     항목별 가림은 화면 상태(maskPick)라 저장하지 않는다.
+     실제 분석은 마스킹 미리보기 공지의 '가린 PDF 내려받기'로 지금 고른 항목을 검게 칠한 그림 PDF 를 내려받는다(useMaskedPdf —
+     원본 파일 · 서버 데이터는 그대로, 검토 이력에 남지 않음).
    - DetailView 는 실제 분석 상세(LiveDetailScreen — 완료된 공통 계약 결과)도 그린다(live 옵션):
      원문 자리에 원본 파일(useLiveFile — 한 번 받음), 결과 패널에 검토 필요(서버가 계산한 검토사항) · '분석 요약' 탭(useLiveStages).
      검토 동작은 데모와 같은 useDetailActions(실제 분석 서비스가 서버에 저장한다). 검토 기록을 불러오지 못한
@@ -50,6 +54,7 @@ import { FailedBody } from './FailedBody';
 import { useLiveFile } from './liveFile';
 import { ResultsPanel } from './ResultsPanel';
 import { useDetailUi } from './useDetailUi';
+import { useMaskedPdf } from './useMaskedPdf';
 import styles from './DetailScreen.module.css';
 
 /** 휴대폰 화면 전환 탭 · 패널 id 앞부분 */
@@ -145,6 +150,8 @@ export function DetailView({ analysis: a, initial, live, onDelete }: DetailViewP
   const liveFile = useLiveFile(liveId, liveExtras);
   const liveStages = useLiveStages(liveId, liveExtras, a.raw?.result ?? null);
   const s = ui.state;
+  // 가린 PDF 내려받기 — 실제 분석만(데모는 원본 파일이 없다)
+  const maskPdf = useMaskedPdf(a, s.maskPick, live ? liveFile.state : null);
   const mobile = ui.mobile;
 
   const x = detailFacts(a, s);
@@ -209,10 +216,11 @@ export function DetailView({ analysis: a, initial, live, onDelete }: DetailViewP
               onZoomIn={() => ui.setZoom(v.zoom + 0.1)}
               onFit={ui.fit}
               onToggleMask={ui.toggleMask}
-              onPickFinding={(fid) => ui.pickFinding(fid, { fromDoc: true })}
+              /* 마스킹 미리보기 중에는 탐지 위치를 누르면 고르는 대신 그 항목의 가림을 켜고 끈다 */
+              onPickFinding={(fid) => (v.maskPicking ? ui.toggleMaskPick(fid) : ui.pickFinding(fid, { fromDoc: true }))}
               onRetryDoc={(docId) => actions.retry(docId)}
               panel={panel('doc')}
-              live={live ? { file: liveFile.state, paperW: ui.metrics?.paperW ?? 0, onRetryFile: liveFile.retry, onPageReady: ui.recenter } : undefined}
+              live={live ? { file: liveFile.state, paperW: ui.metrics?.paperW ?? 0, onRetryFile: liveFile.retry, onPageReady: ui.recenter, maskPdf } : undefined}
             />
           ) : null}
           {showResults ? (
@@ -228,6 +236,8 @@ export function DetailView({ analysis: a, initial, live, onDelete }: DetailViewP
               onClearFilter={ui.clearFilter}
               onToggleFinding={(fid) => ui.pickFinding(fid, { toggle: true })}
               onRevealFinding={(fid) => ui.pickFinding(fid, { reveal: true })}
+              onMaskPick={ui.toggleMaskPick}
+              onMaskPickAll={ui.setMaskPick}
               onItemEvidence={ui.pickItemEvidence}
               onOpenLink={ui.openLink}
               onLinkDoc={ui.pickLinkDoc}

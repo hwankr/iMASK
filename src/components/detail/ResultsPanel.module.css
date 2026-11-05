@@ -59,6 +59,21 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 마스킹 미리보기 중 — 가림 수 · 모두 가림 · 모두 해제(보이는 행 기준) */
+.maskText {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  font-size: var(--fs-13);
+  font-weight: var(--fw-bold);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.maskBtns {
+  display: inline-flex;
+  gap: var(--space-6);
+}
+
 .list {
   list-style: none;
   margin: 0;
@@ -109,6 +124,11 @@
   }
   .sticky > [role='group'] {
     row-gap: var(--space-8);
+  }
+  /* 마스킹 미리보기 줄(작은 버튼 40 — 공통 Button 이 위아래 2씩 넓혀 44): 위 스위치 줄이 아래로 12 를 쓰므로
+     줄 간격 10 에 4 를 더해(14 = 12 + 2) 넓힌 영역이 겹치지 않게 한다. 아래는 머리 아래 여백(12) 안에 들어간다. */
+  .maskRow {
+    margin-top: var(--space-4);
   }
 }
 /* 휴대폰: 보이는 높이 38 은 그대로, 투명 ::after 로 누름 영역만 44 이상(위아래 3px 씩 — 주변에 다른 버튼 없음) */

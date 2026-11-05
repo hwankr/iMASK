@@ -84,7 +84,43 @@ describe('원문 뷰어 모델', () => {
     expect(fp.fp).toBe(true);
     expect(fp.shown).toBe(fp.text);
     expect(v.notices.map((n) => n.title)).toContain('마스킹 미리보기');
+    // 데모에는 원본 파일이 없다 — '가린 PDF 내려받기' 버튼 없음
+    expect(v.notices.find((n) => n.title === '마스킹 미리보기')?.action).toBeUndefined();
     expect(v.noMask).toBe(false);
+  });
+
+  it('마스킹 미리보기 — 항목별 가림: 보이게 고른 항목은 원래 값, 오탐도 가리게 고르면 마스킹 값 · 누름 상태와 이름', async () => {
+    const a = await analysis('A1');
+    const s = stateOf(a, { focus: null, docId: 'd1', page: 1, mask: true, maskPick: { 'F-01': false, 'F-10': true } });
+    const v = viewerModel(a, s, detailFacts(a, s), M);
+    expect(v.maskPicking).toBe(true);
+    const hls = allSegs(v).filter((x): x is Extract<SegmentModel, { kind: 'hl' }> => x.kind === 'hl');
+    // 같은 위치를 기본 선택(고른 값 없음)으로 본 값 — 오탐이 아닌 F-01 은 마스킹 값, 오탐 F-10 은 원래 값
+    const base = viewerModel(a, { ...s, maskPick: {} }, detailFacts(a, s), M);
+    const baseHls = allSegs(base).filter((x): x is Extract<SegmentModel, { kind: 'hl' }> => x.kind === 'hl');
+    const rrn = hls.find((x) => x.anchor === 'd1p1-rrn')!;
+    const rrnMasked = baseHls.find((x) => x.anchor === 'd1p1-rrn')!.shown;
+    expect(rrn).toMatchObject({ findingId: 'F-01', pressed: false, aria: 'F-01 고유식별정보 높음 — 가리기' });
+    // 보이게 고름 — 원래 값 그대로(가림 글자 없음), 마스킹 값과 다르다
+    expect(rrn.shown).toBe(rrn.text);
+    expect(rrn.shown).not.toContain('*');
+    expect(rrn.shown).not.toBe(rrnMasked);
+    expect(rrnMasked).toContain('*');
+    const fp = hls.find((x) => x.findingId === 'F-10')!;
+    expect(fp).toMatchObject({ fp: true, pressed: true });
+    // 오탐을 가리게 고름 — 원래 값이 아니라 마스킹 값(가림 글자)
+    const fpBase = baseHls.find((x) => x.anchor === fp.anchor)!;
+    expect(fpBase.shown).toBe(fp.text);
+    expect(fp.shown).not.toBe(fp.text);
+    expect(fp.shown).toContain('*');
+    // 고르지 않은 항목은 기본값(가림)
+    expect(hls.filter((x) => x.findingId !== 'F-01' && x.findingId !== 'F-10').every((x) => x.pressed === true)).toBe(true);
+    // 미리보기를 끄면 고른 값과 관계없이 원래 값 · 누름 상태 없음 · 이름은 '탐지 항목 보기'
+    const off = viewerModel(a, { ...s, mask: false }, detailFacts(a, s), M);
+    expect(off.maskPicking).toBe(false);
+    const offHls = allSegs(off).filter((x): x is Extract<SegmentModel, { kind: 'hl' }> => x.kind === 'hl');
+    expect(offHls.every((x) => x.shown === x.text && !('pressed' in x))).toBe(true);
+    expect(offHls.find((x) => x.anchor === 'd1p1-rrn')!.aria).toBe('F-01 고유식별정보 높음 — 탐지 항목 보기');
   });
 
   it('검토사항 근거는 표시(mark) — 판독 불가 블록 테두리 · 주황 이름표', async () => {

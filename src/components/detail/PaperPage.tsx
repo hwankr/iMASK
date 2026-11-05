@@ -45,6 +45,7 @@ function Segs({ segs, ctx, place = 'text' }: { segs: SegmentModel[]; ctx: Render
               type="button"
               data-anchor={s.anchor}
               aria-label={s.aria}
+              aria-pressed={s.pressed}
               className={cx(styles.hl, s.fp && styles.fp, s.on && styles.on, s.on && ctx.ring, place === 'stamp' && styles.stampHl)}
               style={hlStyle(s.vars, s.on)}
               onClick={() => ctx.onPick(s.findingId)}

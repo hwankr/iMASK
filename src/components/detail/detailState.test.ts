@@ -7,6 +7,7 @@ import {
   createDetailState,
   detailReducer,
   focusAnchors,
+  maskPicked,
   normalizeZoom,
   planGoPending,
   planOpenLink,
@@ -17,6 +18,8 @@ import {
   planPickLinkDoc,
   resolveLeftOpen,
   SCROLL_TOP,
+  toggledMaskPick,
+  withMaskPick,
   type DetailUiState,
 } from './detailState';
 
@@ -203,5 +206,50 @@ describe('선택 · 이동 계획 — 원본 상세 동작', () => {
     expect(state.focus).toBeNull();
     expect(state.docId).toBe(a.docs[0].id);
     expect(plan.viewer).toBe(SCROLL_TOP);
+  });
+});
+
+describe('마스킹 미리보기 — 항목별 가림', () => {
+  const open = { id: 'F-01', status: 'open' };
+  const fp = { id: 'F-10', status: 'false_positive' };
+
+  it('처음에는 고른 값이 없고, 오탐이 아닌 항목만 가린다', async () => {
+    const a = await analysis('A1');
+    expect(createDetailState(a).state.maskPick).toEqual({});
+    expect(maskPicked({}, open)).toBe(true);
+    expect(maskPicked({}, fp)).toBe(false);
+  });
+
+  it('고른 값이 기본값보다 먼저 — 오탐도 가릴 수 있고, 오탐이 아닌 항목도 보이게 할 수 있다', () => {
+    expect(maskPicked({ 'F-01': false }, open)).toBe(false);
+    expect(maskPicked({ 'F-10': true }, fp)).toBe(true);
+    // 다른 항목의 값은 상관없다 · 객체 기본 속성 이름도 고른 값으로 보지 않는다
+    expect(maskPicked({ 'F-02': false }, open)).toBe(true);
+    expect(maskPicked({}, { id: 'constructor', status: 'open' })).toBe(true);
+  });
+
+  it('하나 뒤집기 — 지금 값의 반대를 남기고, 원래 값은 바꾸지 않는다', () => {
+    const before = {};
+    const once = toggledMaskPick(before, open);
+    expect(once).toEqual({ 'F-01': false });
+    expect(before).toEqual({});
+    expect(toggledMaskPick(once, open)).toEqual({ 'F-01': true });
+    expect(toggledMaskPick({}, fp)).toEqual({ 'F-10': true });
+  });
+
+  it('한꺼번에 — 준 ID 만 그 값으로, 나머지 고른 값은 그대로', () => {
+    const pick = { 'F-01': false, 'F-03': true };
+    expect(withMaskPick(pick, ['F-01', 'F-02'], true)).toEqual({ 'F-01': true, 'F-02': true, 'F-03': true });
+    expect(withMaskPick(pick, ['F-03'], false)).toEqual({ 'F-01': false, 'F-03': false });
+    expect(withMaskPick(pick, [], false)).toEqual(pick);
+    expect(pick).toEqual({ 'F-01': false, 'F-03': true });
+  });
+
+  it('리듀서 apply 로 고른 값을 바꾼다(다른 화면 상태는 그대로)', async () => {
+    const a = await analysis('A1');
+    const s = createDetailState(a).state;
+    const next = detailReducer(s, { type: 'apply', patch: { maskPick: toggledMaskPick(s.maskPick, open) } });
+    expect(next.maskPick).toEqual({ 'F-01': false });
+    expect({ ...next, maskPick: {} }).toEqual(s);
   });
 });

@@ -100,6 +100,75 @@
   transform: rotate(180deg);
 }
 
+/* ---------- 마스킹 미리보기 중 — 행 왼쪽 가림 버튼 ----------
+   행을 두 칸(가림 버튼 · 행 머리)으로 나누고, 펼친 내용은 두 칸에 걸친다.
+   가림이면 검은 칸(원문 마스킹 미리보기의 검은 상자와 같은 --doc-mask)에 가린 눈, 보임이면 테두리만.
+   첫 칸(가림 버튼 칸, x 0–44)은 버튼의 휴대폰 누름 영역(44 — 아래 ::after)을 통째로 품는다: 버튼 x 12–44 · y 8–40,
+   누름 영역은 행 왼쪽 끝에 붙여 x 0–44 · y 2–46(버튼 가운데 기준이 아니라 왼쪽으로 — 오른쪽 끝이 버튼 끝 x 44 와 같다),
+   첫 칸 높이 46 이상(아래 여백 6). 행 머리(펼치기 버튼)는 x 44 에서 시작해 두 누름 영역은 만나기만 하고 겹치지 않으며,
+   행 머리 글자 위치(x 54)와 보이는 배치는 전과 같다. */
+.picking {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+.picking > .detail {
+  grid-column: 1 / -1;
+}
+.picking .toggle {
+  padding-left: var(--space-10);
+}
+.pickTip {
+  align-self: start;
+  margin: var(--space-8) 0 var(--space-6) var(--space-12);
+}
+.pick {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--size-32);
+  height: var(--size-32);
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: var(--radius-8);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line-2);
+  color: var(--ink-3);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-color) var(--ease),
+    color var(--dur-color) var(--ease),
+    transform var(--dur-press) var(--ease);
+}
+@media (hover: hover) {
+  .pick:not(.pickOn):hover {
+    background: var(--fill);
+    color: var(--ink);
+  }
+}
+.pick:active {
+  transform: scale(.92);
+}
+.pickOn {
+  background: var(--doc-mask);
+  box-shadow: none;
+  color: var(--on-solid);
+}
+/* 휴대폰: 보이는 크기(32)는 그대로, 투명 ::after 로 누름 영역만 44 — 세로는 가운데, 가로는 행 왼쪽 끝(버튼 왼쪽 여백 12 만큼
+   왼쪽)부터 44 라 오른쪽 끝이 버튼 끝(행 머리 시작)과 같다. 첫 칸 밖으로 나가지 않는다(위 .pickTip). */
+@media (max-width: 767.98px) {
+  .pick::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: calc(var(--space-12) * -1);
+    width: var(--touch-min);
+    height: var(--touch-min);
+    transform: translateY(-50%);
+  }
+}
+
 /* 펼친 내용 */
 .detail {
   display: flex;

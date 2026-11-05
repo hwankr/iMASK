@@ -18,6 +18,18 @@ import viewerStyles from './DocViewer.module.css';
 /** 결과 탭 · 패널 id 앞부분 */
 export const RESULT_TABS_ID = 'dg-res';
 
+/**
+ * '모두 가림 · 모두 해제'를 누르면 누른 버튼이 막혀(모두 가림 → 모두 가림 막힘) 포커스가 문서 맨 앞으로 빠진다.
+ * 다시 그린 뒤 포커스가 빠졌으면 다른 버튼(slot)으로 옮긴다.
+ */
+function keepBulkFocus(slot: 'mask-all' | 'mask-none') {
+  requestAnimationFrame(() => {
+    const cur = document.activeElement;
+    if (cur instanceof HTMLButtonElement ? !cur.disabled : cur && cur !== document.body && cur.isConnected) return;
+    document.querySelector<HTMLButtonElement>(`[data-slot="${slot}"]:not(:disabled)`)?.focus();
+  });
+}
+
 export interface ResultsPanelProps {
   rs: ResultsModel;
   mobile: boolean;
@@ -30,6 +42,10 @@ export interface ResultsPanelProps {
   onClearFilter: () => void;
   onToggleFinding: (fid: string) => void;
   onRevealFinding: (fid: string) => void;
+  /** 마스킹 미리보기 중 — 탐지 항목 하나의 가림을 켜고 끈다 */
+  onMaskPick: (fid: string) => void;
+  /** 마스킹 미리보기 중 — 보이는 행을 모두 가림(on) · 보임 */
+  onMaskPickAll: (fids: readonly string[], on: boolean) => void;
   onItemEvidence: (rid: string, idx: number) => void;
   onOpenLink: (lid: string) => void;
   onLinkDoc: (lid: string, idx: number) => void;
@@ -77,6 +93,7 @@ function Waiting({ w }: { w: WaitingModel }) {
  * 펼치는 행), 검토 필요, 문서 간 연결, 결과를 기다리는 동안의 안내, 검토 메모(편집은 T7).
  * 실제 분석은 탭이 탐지 항목 · 검토 필요 · (문서 간 연결 — 있을 때만, 읽기 전용) · 분석 요약(summary 를 그린다)이다. 검토 기록을 불러오지 못했으면(rs.readOnly)
  * 검토 동작(해결 · 다시 열기 포함) · 메모 버튼만 막는다.
+ * 마스킹 미리보기 중(rs.maskPick)에는 탐지 항목 머리에 '가림 n/m · 모두 가림 · 모두 해제'(보이는 행 기준), 행마다 가림 버튼이 붙는다.
  */
 export function ResultsPanel({
   rs,
@@ -90,6 +107,8 @@ export function ResultsPanel({
   onClearFilter,
   onToggleFinding,
   onRevealFinding,
+  onMaskPick,
+  onMaskPickAll,
   onItemEvidence,
   onOpenLink,
   onLinkDoc,
@@ -98,6 +117,7 @@ export function ResultsPanel({
   summary,
 }: ResultsPanelProps) {
   const tabPanel = rs.hasTabs ? tabPanelProps(RESULT_TABS_ID, rs.tab) : null;
+  const mp = rs.maskPick;
   return (
     /* data-focus-region · data-focus-home: 동작 뒤 행이 목록에서 빠지면 포커스를 이어 줄 구역과 기준 자리(focusRescue) */
     <section aria-label="탐지 결과와 검토 항목" className={cx(styles.panel, mobile && styles.mobile)} data-focus-region="results" {...panel}>
@@ -115,9 +135,52 @@ export function ResultsPanel({
                 <Switch checked={onlyDoc} onChange={(on) => onOnlyDoc(on)} label="현재 문서만 보기" />
                 <span className={styles.shown}>{rs.shownText}</span>
               </div>
+              {mp ? (
+                <div role="group" aria-label="가릴 항목" className={cx(styles.stickyRow, styles.maskRow)}>
+                  <span aria-live="polite" className={styles.maskText}>
+                    <Icon name="dg-i-eye-off" size={15} strokeWidth={2.2} />
+                    {mp.text}
+                  </span>
+                  <span className={styles.maskBtns}>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={mp.allOn}
+                      onClick={() => {
+                        onMaskPickAll(mp.ids, true);
+                        keepBulkFocus('mask-none');
+                      }}
+                      data-slot="mask-all"
+                    >
+                      모두 가림
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={mp.allOff}
+                      onClick={() => {
+                        onMaskPickAll(mp.ids, false);
+                        keepBulkFocus('mask-all');
+                      }}
+                      data-slot="mask-none"
+                    >
+                      모두 해제
+                    </Button>
+                  </span>
+                </div>
+              ) : null}
             </div>
             {rs.findings.map((f) => (
-              <FindingRow key={f.id} f={f} locked={rs.locked} readOnly={rs.readOnly} onToggle={onToggleFinding} onReveal={onRevealFinding} actions={actions} />
+              <FindingRow
+                key={f.id}
+                f={f}
+                locked={rs.locked}
+                readOnly={rs.readOnly}
+                onToggle={onToggleFinding}
+                onReveal={onRevealFinding}
+                actions={actions}
+                onMaskPick={mp ? onMaskPick : undefined}
+              />
             ))}
             {rs.findings.length === 0 ? (
               <div className={styles.noItems}>

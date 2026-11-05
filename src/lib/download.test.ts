@@ -66,6 +66,53 @@ describe('downloadFile — 브라우저 다운로드', () => {
     expect(timers).toHaveLength(0);
   });
 
+  it('바이너리(Uint8Array) — 바이트 그대로 담고 mime 을 붙인다', async () => {
+    const { env, blobs, log } = fakeEnv();
+    const data = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x00, 0xff, 0x80]);
+    const PDF = { name: 'iMASK_DG-20261105-0001_마스킹.pdf', mime: 'application/pdf', data };
+    expect(downloadFile(PDF, env)).toEqual({ state: 'handed' });
+    expect(log).toEqual(['create', 'click blob:fake/1 ' + PDF.name]);
+    expect(blobs[0].type).toBe('application/pdf');
+    expect(Array.from(new Uint8Array(await blobs[0].arrayBuffer()))).toEqual(Array.from(data));
+  });
+
+  it('바이너리(일부만 보는 Uint8Array) — 보는 범위의 바이트만 담는다', async () => {
+    const { env, blobs } = fakeEnv();
+    const whole = new Uint8Array([1, 2, 3, 4, 5, 6]);
+    downloadFile({ name: 'a.pdf', mime: 'application/pdf', data: whole.subarray(2, 5) }, env);
+    expect(Array.from(new Uint8Array(await blobs[0].arrayBuffer()))).toEqual([3, 4, 5]);
+  });
+
+  it('바이너리(Blob) — 형식이 같으면 그대로, 다르면 mime 으로 다시 담는다', async () => {
+    const same = new Blob([new Uint8Array([7, 8])], { type: 'application/pdf' });
+    const a = fakeEnv();
+    downloadFile({ name: 'a.pdf', mime: 'application/pdf', data: same }, a.env);
+    expect(a.blobs[0]).toBe(same);
+    const other = new Blob([new Uint8Array([9])]);
+    const b = fakeEnv();
+    downloadFile({ name: 'b.pdf', mime: 'application/pdf', data: other }, b.env);
+    expect(b.blobs[0].type).toBe('application/pdf');
+    expect(Array.from(new Uint8Array(await b.blobs[0].arrayBuffer()))).toEqual([9]);
+  });
+
+  it('바이너리 — 앵커를 누르다 실패하면 failed 와 원본 문구, URL 은 바로 해제', () => {
+    const { env, log, timers } = fakeEnv({
+      clickAnchor: () => {
+        throw new Error('blocked');
+      },
+    });
+    expect(downloadFile({ name: 'a.pdf', mime: 'application/pdf', data: new Uint8Array([1]) }, env)).toEqual({ state: 'failed', message: DOWNLOAD_FAILED_MESSAGE });
+    expect(log).toEqual(['create', 'revoke blob:fake/1']);
+    expect(timers).toHaveLength(0);
+  });
+
+  it('바이너리 — 내용이 Uint8Array · Blob 이 아니면 던지지 않고 failed', () => {
+    const { env, log } = fakeEnv();
+    const bad = { name: 'a.pdf', mime: 'application/pdf', data: [1, 2, 3] as unknown as Uint8Array };
+    expect(downloadFile(bad, env)).toEqual({ state: 'failed', message: DOWNLOAD_FAILED_MESSAGE });
+    expect(log).toEqual([]);
+  });
+
   it('객체 URL 을 만들지 못해도 던지지 않고 failed', () => {
     const { env } = fakeEnv({
       createObjectURL: () => {

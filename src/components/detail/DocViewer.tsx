@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { Icon, IconButton, SkeletonCard, Spinner, cx } from '@/components/ui';
+import { Button, Icon, IconButton, SkeletonCard, Spinner, cx } from '@/components/ui';
 import { useReplayToggle } from '@/lib/hooks';
 import { newAnalysisHref, type RouteBase } from '@/lib/routes';
 import { useRouteBase } from '@/services/react';
@@ -11,6 +11,7 @@ import { liveFilePlaceholder, type PlaceholderModel, type ViewerModel } from './
 import type { PanelProps } from './DocList';
 import { LivePaper } from './LivePaper';
 import type { LiveFileState } from './liveFile';
+import { MASK_PDF_BUSY_LABEL, MASK_PDF_LABEL } from './maskPdf';
 import { PaperPage } from './PaperPage';
 import { Tip } from './Tip';
 import styles from './DocViewer.module.css';
@@ -49,6 +50,18 @@ export interface DocViewerLive {
   onRetryFile: () => void;
   /** 쪽 크기를 알게 됐다 — 고른 위치로 다시 스크롤 */
   onPageReady: () => void;
+  /** 마스킹 미리보기 공지의 '가린 PDF 내려받기'(useMaskedPdf) */
+  maskPdf: { ready: boolean; busy: boolean; run: () => void };
+}
+
+/** 공지 안 버튼 — 지금은 '가린 PDF 내려받기' 하나(실제 분석 서류의 마스킹 미리보기 공지) */
+function NoticeAction({ live }: { live: DocViewerLive }) {
+  const m = live.maskPdf;
+  return (
+    <Button size="sm" variant="outline" icon="dg-i-download" loading={m.busy} disabled={!m.ready} onClick={m.run} data-slot="mask-pdf">
+      {m.busy ? MASK_PDF_BUSY_LABEL : MASK_PDF_LABEL}
+    </Button>
+  );
 }
 
 /**
@@ -157,16 +170,25 @@ export function DocViewer({
         </div>
         {v.notices.length ? (
           <div className={cx(styles.fit, styles.notices)}>
-            {v.notices.map((nt) => (
-              <div key={nt.tone + nt.title} role="note" className={cx(styles.notice, styles[nt.tone])}>
-                <span className={styles.noticeIcon}>
-                  <Icon name={nt.icon} size={17} strokeWidth={2.1} />
-                </span>
-                <div>
-                  <strong className={styles.noticeTitle}>{nt.title}</strong> <span className={cx(styles.noticeText, nt.pre && styles.noticePre)}>{nt.text}</span>
+            {v.notices.map((nt) => {
+              // 공지 안 버튼(실제 분석만) — 공지 폭이 넓으면 오른쪽, 좁으면(휴대폰 · 좁은 뷰어 · 작은 배율) 글 아래(CSS 컨테이너 쿼리)
+              const act = nt.action === 'maskPdf' && live ? live : null;
+              return (
+                <div key={nt.tone + nt.title} role="note" className={cx(styles.notice, styles[nt.tone], act && styles.withAct)}>
+                  <span className={styles.noticeIcon}>
+                    <Icon name={nt.icon} size={17} strokeWidth={2.1} />
+                  </span>
+                  <div>
+                    <strong className={styles.noticeTitle}>{nt.title}</strong> <span className={cx(styles.noticeText, nt.pre && styles.noticePre)}>{nt.text}</span>
+                  </div>
+                  {act ? (
+                    <div className={styles.noticeAct}>
+                      <NoticeAction live={act} />
+                    </div>
+                  ) : null}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : null}
         {v.live && live ? (

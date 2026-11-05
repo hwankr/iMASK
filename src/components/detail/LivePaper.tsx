@@ -8,6 +8,7 @@
      쪽 · 배율이 바뀌면 그리던 것을 취소하고 새 캔버스에 그린 뒤 바꿔 끼운다(배율만 바뀌면 그동안 앞 캔버스를 늘여 보인다).
    - 위치 상자: 0~1 비율 꼭짓점 → 쪽 위 사각형(px, boxRect). 진짜 버튼이고, 누르면 그 탐지 항목을 고른다.
      고른 항목의 상자는 테두리 · 신호(dg-ring-a/b) · 첫 상자 위 이름표, 마스킹 미리보기면 검은 상자로 가린다(글자 없음).
+     마스킹 미리보기 중에는 누르면 그 항목의 가림을 켜고 끈다(aria-pressed — 화면이 onPickFinding 을 바꿔 넘긴다).
    - 캔버스만 그린다(주석 · 텍스트 레이어 없음). 쪽 크기를 알게 되면 onPageReady 로 알려 고른 위치로 다시 스크롤하게 한다.
    - 휴대폰에서만 누름 영역을 넓힌다(hitAreas — 화면 44px · 배율 보정, 서로 다른 항목끼리는 가운데에서 나눠 겹치지 않음).
      보이는 상자 · 마스킹 크기는 그대로이고, 넓힌 영역은 투명 ::after(--hit-* 변수)라 데스크톱 · 태블릿은 전과 같다.
@@ -170,6 +171,7 @@ export function LivePaper({ live, file, ariaLabel, zoom, paperW, pageKey, pageFl
             data-selected={b.on ? 'true' : undefined}
             data-masked={b.masked ? 'true' : undefined}
             aria-label={b.aria}
+            aria-pressed={b.pressed}
             className={cx(styles.box, b.on && styles.on, b.on && ring, b.masked && styles.masked)}
             style={style}
             onClick={() => onPickFinding(b.findingId)}

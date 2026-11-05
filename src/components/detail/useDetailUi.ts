@@ -33,6 +33,8 @@ import {
   planSetPage,
   resolveLeftOpen,
   SCROLL_TOP,
+  toggledMaskPick,
+  withMaskPick,
   type DetailAction,
   type DetailModal,
   type DetailModalPatch,
@@ -102,6 +104,10 @@ export interface DetailUi {
   setZoom: (zoom: number) => void;
   fit: () => void;
   toggleMask: () => void;
+  /** 마스킹 미리보기 — 탐지 항목 하나의 가림을 켜고 끈다 */
+  toggleMaskPick: (fid: string) => void;
+  /** 마스킹 미리보기 — 여러 탐지 항목을 한꺼번에 가림(on) · 보임 */
+  setMaskPick: (fids: readonly string[], on: boolean) => void;
   /* 선택 동기화 */
   pickFinding: (fid: string, opt?: PickFindingOptions) => void;
   pickItemEvidence: (rid: string, idx: number) => void;
@@ -261,6 +267,11 @@ export function useDetailUi(analysis: Analysis, initial?: Partial<DetailUiState>
     setZoom: (zoom) => apply({ zoom: normalizeZoom(zoom) }),
     fit: () => apply({ zoom: null }),
     toggleMask: () => apply({ mask: !state.mask }),
+    toggleMaskPick: (fid) => {
+      const f = analysis.findings.find((x) => x.id === fid);
+      if (f) apply({ maskPick: toggledMaskPick(state.maskPick, f) });
+    },
+    setMaskPick: (fids, on) => apply({ maskPick: withMaskPick(state.maskPick, fids, on) }),
     pickFinding: (fid, opt = {}) => run(planPickFinding(state, analysis, fid, opt, mobile)),
     pickItemEvidence: (rid, idx) => run(planPickItemEvidence(analysis, rid, idx, false, mobile)),
     pickItem: (rid) => run(planPickItem(analysis, rid, mobile)),

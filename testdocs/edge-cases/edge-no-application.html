@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>합성 시험 문서 — 신청서 없는 묶음(FATCA/CRS 본인확인서 + 상속 위임장)</title>
+<style>
+  @page { size: A4; margin: 11mm 12mm; }
+  body { font-family: "Malgun Gothic", sans-serif; font-size: 9.6pt; color: #111; margin: 0; }
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  .dense { font-size: 8.7pt; }
+  .mark { text-align: right; font-size: 8.5pt; color: #b00000; border-bottom: 1px dashed #b00000; padding-bottom: 1mm; margin-bottom: 2.5mm; }
+  .head { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #1a8f74; padding-bottom: 1.5mm; margin-bottom: 2.5mm; }
+  h1 { font-size: 17pt; margin: 0; color: #0d6e58; }
+  h1 .tag { font-size: 11pt; color: #1a8f74; margin-left: 2mm; }
+  .c { text-align: center; }
+  .r { text-align: right; }
+  .sec { font-weight: bold; color: #0d6e58; margin: 2.2mm 0 1mm; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 2.2mm; }
+  th, td { border: 1px solid #555; padding: 1.2mm 1.8mm; text-align: left; vertical-align: middle; }
+  th { background: #e9f4f0; font-weight: bold; }
+  table.appr { width: auto; margin: 0; }
+  table.appr th, table.appr td { text-align: center; min-width: 15mm; font-size: 8.5pt; padding: 0.8mm 1.5mm; }
+  table.appr td { height: 9mm; }
+  table.plain th, table.plain td { border: none; border-bottom: 1px solid #999; background: none; }
+  table.grid th, table.grid td { text-align: center; }
+  .note { font-size: 8.2pt; color: #333; }
+  .box { border: 1px solid #555; padding: 1.5mm 2.5mm; margin: 2mm 0; }
+  .seal { color: #c00000; font-weight: bold; }
+  .sign { text-align: right; margin: 1.5mm 0; }
+  .blank { height: 5.5mm; }
+  .nw { white-space: nowrap; }
+</style></head><body>
+<!-- 원본: testdocs/team-forms/fatca-crs.html + inheritance-poa.html 쪽을 그대로 이어 붙임(신청서 없음). 만든 도구: 작업 폴더 inputs/T4/make_edge.py. -->
+<div class="page">
+<div class="mark">합성 시험 문서 · 실제 고객 아님 · 모든 값은 지어낸 값(가상뱅크 견본)</div>
+<div class="head"><h1>FATCA / CRS 본인확인서 <span class="tag">[개인용]</span></h1><table class="appr"><tr><th>담당자</th><th>책임자</th></tr><tr><td>직원갑</td><td>직원을</td></tr></table></div>
+<div class="box note">본 서식은 「정보교환협정에 따른 금융정보자동교환 이행규정」과 「대한민국 정부와 미합중국 정부 간의 납세의무 촉진을 위한 협정에 따른 금융정보자동교환 이행규정」에 따라 당행과 거래시 본인확인을 하기 위해 작성이 요구되는 필수서식입니다.</div>
+<table style="width:55%"><tr><th>귀속년도</th><td>☐ 직전년도 &nbsp;&nbsp; ☑ 당해년도</td></tr></table>
+<div class="sec">1. 고객정보</div>
+<table><tr><th>성명</th><td>오예시</td><th>생년월일</th><td>1992-02-02</td><th>국적</th><td>대한민국</td></tr>
+<tr><th>영문성(Last Name)</th><td>OH</td><th>영문명(First Name)</th><td>YESI</td><th>전화번호</th><td>010-0000-2201</td></tr>
+<tr><th>주 소</th><td colspan="5">가상시 견본구 연습로 8, 202동 302호</td></tr></table>
+<div class="sec">2. 확인사항 <span class="note">(다음 ①, ② 가운데 해당하는 항목에 모두 체크해 주시기 바랍니다)</span></div>
+<p style="margin:1mm 0"><b>☑ ① 조세목적상 한국 거주자에 해당합니다.</b> (아래 해당 항목을 선택 후 관련 증빙자료 필수 제출)</p>
+<p style="margin:0 0 1mm 4mm">☑ 내국인 주민번호 보유자 (재외국민 선택불가)<br>☐ 외국인등록증/영주증 보유자<br>☐ 관할세무서 발행 거주자증명서 보유자<br>☐ 외국국적동포 국내거소신고증 보유자<br>☐ 그 외 공인된 정부단체가 발급한 서류 (주소 필수 포함) 보유자 ▶ 서류명 : ________</p>
+<p style="margin:1mm 0"><b>☑ ② 한국 이외에 조세목적상 국가가 있습니다.</b> (미국, 아르헨티나, 멕시코, 헝가리 국적자는 필수 기재)</p>
+<table class="dense">
+<tr><th rowspan="2" class="c">1</th><th>조세목적상 국가</th><td>UNITED STATES</td><th>납세자번호</th><td>000-00-0000</td><th>납세자번호 미제출 사유</th><td></td></tr>
+<tr><th>(영문) 조세목적상 국가 내 주소</th><td>국가(Country): USA</td><td colspan="2">상세주소(House, Apt, Suite): Apt 0, 100 Sample St</td><td>시,군,구(City): Testville</td><td>우편번호(Postcode): 00000</td></tr>
+<tr><th rowspan="2" class="c">2</th><th>조세목적상 국가</th><td>AUSTRALIA</td><th>납세자번호</th><td></td><th>납세자번호 미제출 사유</th><td>제출불요 국가</td></tr>
+<tr><th>(영문) 조세목적상 국가 내 주소</th><td>국가(Country):</td><td colspan="2">상세주소(House, Apt, Suite):</td><td>시,군,구(City):</td><td>우편번호(Postcode):</td></tr>
+<tr><th rowspan="2" class="c">3</th><th>조세목적상 국가</th><td></td><th>납세자번호</th><td></td><th>납세자번호 미제출 사유</th><td></td></tr>
+<tr><th>(영문) 조세목적상 국가 내 주소</th><td>국가(Country):</td><td colspan="2">상세주소(House, Apt, Suite):</td><td>시,군,구(City):</td><td>우편번호(Postcode):</td></tr>
+</table>
+<p class="note">주1) 납세자 번호: 국가별 납세자 식별번호 &nbsp; 주2) 미제출 사유: ① 미발급 국가 ② 제출불요 국가 ③ 미취득(사유기재 필수) &nbsp; 주3) 조세목적상 국가 내 주소를 보유하지 않는 경우에만 현 주소지를 영문으로 기재</p>
+<div class="sec">3. 본인확인</div>
+<div class="box">■ 본인은 본 확인서를 작성함에 있어 기재 내용에 오류 또는 허위가 없음을 확인하며, 기재 내용에 변경이 있을 경우 60일 이내에 귀 은행에 통지하겠습니다.<br>■ 귀 은행으로부터 본인확인서 재작성 또는 증빙자료를 요청받는 경우 요청일로부터 60일 이내에 제출하겠습니다.
+<p class="c" style="margin:1.5mm 0">2026 년 10 월 22 일</p>
+<table style="margin:0"><tr><th style="width:15%">본인 신청시</th><td>성명 &nbsp; 오예시 &nbsp;&nbsp; (인/서명) <span class="seal">㊞</span></td><th style="width:15%">대리인 신청시</th><td>본인 ________ 의 (법정) 대리인 성명 ________ (인/서명)</td></tr></table></div>
+<div class="box">※ 직원확인란 &nbsp; ☑ 국적과 조세목적상 국가의 차이를 주의하여 증빙검토를 수행하였음<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ☑ 본인확인서 내 필수 항목이 기재되어 있고, 모두 통합단말에 등록된 내용과 일치함을 확인하였음</div>
+</div>
+<div class="page">
+<div class="mark">합성 시험 문서 · 실제 고객 아님 · 모든 값은 지어낸 값(가상뱅크 견본)</div>
+<div class="head"><h1 style="letter-spacing:8mm;margin-left:30mm">위임장</h1><table class="appr"><tr><th>확인자</th><th>책임자</th><th>지점장</th></tr><tr><td>직원갑</td><td>직원을</td><td>직원병</td></tr></table></div>
+<p>(주)가상뱅크 <u>&nbsp;&nbsp;예시&nbsp;&nbsp;</u> 지점 귀중</p>
+<p>&nbsp;&nbsp;본인은 아래의 상속재산에 대하여 각서(상속관련 손해담보용) 등 상속관련 서류의 자필연서가 불가능하여 관련 상속예금의 해지(지급) 등에 관한 모든 일체의 사항을 아래의 대리인에게 위임하여 신청합니다.</p>
+<p class="c">아 &nbsp;&nbsp;&nbsp; 래</p>
+<div class="sec">1. 상속재산</div>
+<table><tr><th style="width:16%">예금주<br>(피상속인)</th><td>오선대</td><th style="width:16%">생년월일</th><td>550505</td></tr></table>
+<table class="grid"><tr><th style="width:18%">예금과목</th><th>계좌번호</th><th style="width:20%">잔 액</th><th style="width:20%">비 고</th></tr><tr><td>적금</td><td>000-0000-000041</td><td>3,200,000원</td><td>만기 2027-01-15</td></tr><tr><td>자유적립식예금</td><td>000-0000-000042</td><td>870,000원</td><td></td></tr><tr><td class="blank"></td><td></td><td></td><td></td></tr><tr><td class="blank"></td><td></td><td></td><td></td></tr><tr><td class="blank"></td><td></td><td></td><td></td></tr></table>
+<div class="sec">2. 대리인 인적사항</div>
+<table><tr><th style="width:16%">성 명</th><td>정대리</td><th style="width:16%">생년월일</th><td>900909</td></tr>
+<tr><th>주 소</th><td>가상시 시험구 표본로 3, 11층</td><th>본인과의 관계</th><td>배우자</td></tr></table>
+<div class="sec">3. 위임인</div>
+<table class="grid"><tr><th style="width:16%">성 명</th><th style="width:18%">생년월일</th><th>주 소</th><th style="width:12%">(인)</th></tr><tr><td>오예시</td><td>920202</td><td>가상시 견본구 연습로 8, 202동 302호</td><td class='c'><span class="seal">㊞</span></td></tr><tr><td>오동생</td><td>940404</td><td>가상시 모의구 시험로 40, 2층</td><td class='c'><span class="seal">㊞</span></td></tr><tr><td class="blank"></td><td></td><td></td><td></td></tr><tr><td class="blank"></td><td></td><td></td><td></td></tr><tr><td class="blank"></td><td></td><td></td><td></td></tr><tr><td class="blank"></td><td></td><td></td><td></td></tr></table>
+<p class="c" style="margin:3mm 0">2026 년 10 월 22 일</p>
+<p class="note">㈜ 1. 대리인의 실명확인증표 징구.<br>&nbsp;&nbsp;&nbsp;&nbsp; 2. 위임인의 개인인감 날인 및 개인인감증명서(위임사실을 입증할 수 있는 서류)를 첨부.</p>
+</div>
+</body></html>

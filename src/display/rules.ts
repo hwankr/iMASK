@@ -130,7 +130,7 @@ export interface ReviewItemTypeView {
   readonly icon: IconName;
 }
 
-/** 앞 6개는 디자인(데모) 종류, 뒤 3개(missing·lowconf·other)는 실제 분석 검토사항 종류다.
+/** 앞 6개는 디자인(데모) 종류, 그 뒤(format·duplicate·missing·lowconf·other)는 실제 분석 검토사항 종류다.
  *  백엔드 imask_backend 의 종류 표가 이 키·라벨·순서를 그대로 가진다(pytest 가 이 파일을 읽어 맞춰 본다). */
 export const RTYPE = {
   unreadable: { label: '판독 불가', icon: 'dg-i-eye-off' },
@@ -139,6 +139,8 @@ export const RTYPE = {
   weaklink: { label: '연결 근거 부족', icon: 'dg-i-link-off' },
   nolocation: { label: '위치 확인 필요', icon: 'dg-i-pin-q' },
   failed: { label: '분석 실패', icon: 'dg-i-x-circle' },
+  format: { label: '형식 오류', icon: 'dg-i-pencil' },
+  duplicate: { label: '같은 서식 여러 건', icon: 'dg-i-copy' },
   missing: { label: '필수 항목 없음', icon: 'dg-i-alert' },
   lowconf: { label: '인식 확인 필요', icon: 'dg-i-eye-half' },
   other: { label: '기타 서류', icon: 'dg-i-file' },
@@ -181,7 +183,7 @@ export type RuleId = keyof typeof RULES;
 /* ---------- 실제 분석 서류 종류 ---------- */
 
 /** 워크플로우 분류 코드 → 한국어 이름(실제 분석). 모르는 코드는 docTypeName 이 그대로 돌려준다.
- *  이름은 백엔드 imask_backend/final_flow.py 의 FINAL_DOC_TYPES 와 같다(최종 흐름 워크플로우의 분류 코드 14개 + 'other') */
+ *  이름은 백엔드 imask_backend/final_flow.py 의 FINAL_DOC_TYPES 와 같다(최종 흐름 워크플로우의 분류 코드 14개 + 설정 60 서식 코드 10개 + 'other') */
 export const DOC_TYPE_NAMES: Record<string, string> = {
   loan_application: '대출신청서',
   consent_form: '동의서',
@@ -197,6 +199,16 @@ export const DOC_TYPE_NAMES: Record<string, string> = {
   fatca_crs_certification: 'FATCA/CRS 본인확인서',
   retirement_pension_application: '퇴직연금 신청서',
   Other: '기타',
+  자동이체신청서: '자동이체 신청서',
+  휴면예금지급신청서: '휴면예금 지급신청서',
+  FATCA_CRS_본인확인서: 'FATCA/CRS 본인확인서',
+  위임장_상속: '상속예금 위임장',
+  지급보증거래_신청서: '지급보증거래 신청서',
+  소비자피해보상금_지급신청서: '소비자피해보상금 지급신청서',
+  외국인_세대구성원_확인서: '외국인 세대구성원 확인서',
+  체크카드_가입신청서: '체크카드 가입신청서',
+  IRP_계약해지신청서: 'IRP 계약해지신청서',
+  IRP_신규신청서: 'IRP 신규신청서',
   other: '기타',
 };
 

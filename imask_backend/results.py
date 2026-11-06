@@ -27,6 +27,15 @@
 #  - 이름으로 못 찾을 때 step_type 으로: document-parse·document-classify·match(서류_대조)·validate(필수항목_검증)·
 #    merge(병합-1). instruct 는 여럿이라 이름으로만 찾는다.
 #  - summarize 의 키는 그대로다(scripts/api_e2e.py 가 결과 모양을 비교한다).
+#
+#  설정 60(v2_full) 응답 — is_v2 가 **설정 번호가 아니라 응답 모양으로** 가른다(둘 다 처리한다, 옛 경로는 그대로):
+#    단계 이름이 대상_확인·단위_확인·필수_확인·형식_확인·일치_확인·상_확인·내용_검토·판정_* (상태 무관)이거나
+#    "Information Extract - <10서식 코드>" 이거나 분류 코드가 10서식 중 하나면 v2 다.
+#  - 이름 판정은 " - " 뒤의 노드 이름으로 한다. 저장된 key 는 믿지 않는다 — 옛 코드는 step_type validate 라서 사슬 노드를
+#    필수항목_검증 으로 저장했을 수 있다. stage_key·_key_of 가 이 이름들을 새 정규 키로 돌려 서류별 검증 경로에 들어가지 않게 한다
+#    (판정_* 은 모두 STAGE_V2_VERDICT 하나 — 지금 없는 판정_하 도 같다).
+#  - summarize(v2): risk_level = 판정 JSON 의 risk_level(final_flow.read_verdict), final_stage = 그 등급의 다음 단계
+#    (검토 필요 → 검토_안내, 상·중·하 → 권장_조치, 못 읽음 → None), other_document_count = 분류 코드 Other 서류 수.
 # ==========================================================================
 
 from __future__ import annotations
@@ -49,6 +58,33 @@ STAGE_OTHER = "기타_서류_안내"
 # 최종 흐름에만 있는 단계
 STAGE_MATCH = "서류_대조"
 STAGE_BUNDLE_CHECK = "묶음_검증"
+# 설정 60(v2_full)에만 있는 단계 — 검증 사슬(앞에서 red 면 뒤는 돌지 않는다)·상 항목 확인·내용 검토·판정(판정_* 모두)
+STAGE_V2_TARGET = "대상_확인"
+STAGE_V2_UNIT = "단위_확인"
+STAGE_V2_REQUIRED = "필수_확인"
+STAGE_V2_FORMAT = "형식_확인"
+STAGE_V2_CONSISTENT = "일치_확인"
+STAGE_V2_HIGH = "상_확인"
+STAGE_V2_CONTENT = "내용_검토"
+STAGE_V2_VERDICT = "판정"
+V2_CHAIN = (STAGE_V2_TARGET, STAGE_V2_UNIT, STAGE_V2_REQUIRED, STAGE_V2_FORMAT, STAGE_V2_CONSISTENT)
+_V2_NAMED = frozenset({*V2_CHAIN, STAGE_V2_HIGH, STAGE_V2_CONTENT})
+V2_VERDICT_PREFIX = "판정_"
+V2_EXTRACT_PREFIX = "Information Extract - "
+# 설정 60 의 서식 코드(분류 코드·추출 노드 이름). 이름은 final_flow.FINAL_DOC_TYPES
+V2_FORM_CODES = (
+    "자동이체신청서",
+    "휴면예금지급신청서",
+    "FATCA_CRS_본인확인서",
+    "위임장_상속",
+    "지급보증거래_신청서",
+    "소비자피해보상금_지급신청서",
+    "외국인_세대구성원_확인서",
+    "체크카드_가입신청서",
+    "IRP_계약해지신청서",
+    "IRP_신규신청서",
+)
+_V2_FORM_SET = frozenset(V2_FORM_CODES)
 
 STAGE_KEYS = (
     STAGE_PARSE,
@@ -62,6 +98,10 @@ STAGE_KEYS = (
     STAGE_OTHER,
     STAGE_MATCH,
     STAGE_BUNDLE_CHECK,
+    *V2_CHAIN,
+    STAGE_V2_HIGH,
+    STAGE_V2_CONTENT,
+    STAGE_V2_VERDICT,
 )
 
 # 정규 이름과 다르게 오는 실제 이름(output[].model)
@@ -98,12 +138,35 @@ def _loads(value: Any) -> Any:
     return value
 
 
+def _node_name(name: str) -> str:
+    """단계 이름의 노드 이름 — "Validate - 대상_확인" 의 첫 " - " 뒤. 없으면 이름 그대로."""
+    _, sep, node = name.partition(" - ")
+    return node if sep else name
+
+
+def _v2_key(name: Any) -> str | None:
+    """설정 60 에만 있는 단계 이름 → 정규 키. 그 밖은 None(이름만 본다 — 저장된 key·상태와 무관)."""
+    if not isinstance(name, str):
+        return None
+    node = _node_name(name)
+    if node in _V2_NAMED:
+        return node
+    if node.startswith(V2_VERDICT_PREFIX):
+        return STAGE_V2_VERDICT
+    if name.startswith(V2_EXTRACT_PREFIX) and node in _V2_FORM_SET:
+        return STAGE_EXTRACT
+    return None
+
+
 def stage_key(name: Any, step_type: Any = None) -> str | None:
     """output[].model(과 step_type)을 정규 단계 이름으로. 모르는 단계는 None.
 
-    순서: 1. information-extract 는 이름과 상관없이 민감정보_추출 2. 이름(정규 이름·별칭·" - <정규 이름>")
+    순서: 0. 설정 60 이름(_v2_key) 1. information-extract 는 이름과 상관없이 민감정보_추출 2. 이름(정규 이름·별칭·" - <정규 이름>")
     3. 그 밖의 step_type(_STEP_TYPE_STAGES).
     """
+    v2 = _v2_key(name)
+    if v2 is not None:
+        return v2
     if isinstance(step_type, str) and step_type in _STEP_TYPE_FIRST:
         return _STEP_TYPE_FIRST[step_type]
     if isinstance(name, str):
@@ -172,6 +235,9 @@ def _as_stages(response_or_stages: Any) -> list[Mapping[str, Any]]:
 
 
 def _key_of(stage: Mapping[str, Any]) -> str | None:
+    v2 = _v2_key(stage.get("name"))  # 저장된 key 보다 먼저 — 옛 코드가 사슬 노드를 필수항목_검증 으로 저장했을 수 있다
+    if v2 is not None:
+        return v2
     key = stage.get("key")
     if key in STAGE_KEYS:
         return key
@@ -237,6 +303,26 @@ def _risk_level(stage: Mapping[str, Any]) -> str | None:
     return None
 
 
+def is_v2(response_or_stages: Any) -> bool:
+    """설정 60(v2_full) 모양의 응답인지 — 설정 번호를 보지 않는다(머리 주석). 못 읽는 입력(아주 깊은 JSON 등)은 False, 예외 없음."""
+    try:
+        stages = _as_stages(response_or_stages)
+        if any(_v2_key(s.get("name")) is not None for s in stages):
+            return True
+        return any(
+            _document_type(c) in _V2_FORM_SET for s in stages_for(stages, STAGE_CLASSIFY) for c in _contents_of(s)
+        )
+    except Exception:  # 응답 경계 — 뒤따르는 읽기가 값 없는 경고를 남긴다
+        return False
+
+
+def v2_next_stage(level: Any) -> str | None:
+    """설정 60 판정 등급의 다음 단계 — 검토 필요 → 검토_안내, 상·중·하 → 권장_조치, 그 밖 None."""
+    if level == "검토 필요":
+        return STAGE_REVIEW
+    return STAGE_ACTION if level in ("상", "중", "하") else None
+
+
 def summarize(response_or_stages: Any) -> dict[str, Any]:
     """응답(또는 parse_stages 결과)에서 요약값을 뽑는다. 못 찾은 값은 None, 예외 없음.
 
@@ -249,6 +335,7 @@ def summarize(response_or_stages: Any) -> dict[str, Any]:
       final_stage              권장_조치·검토_안내 중 나온 단계의 정규 이름
       other_document_count     기타_서류_안내 output 항목 중 본문(text)이 있는 수
     세 개수와 document_types 는 하나도 읽지 못했으면(단계 없음 포함) None.
+    설정 60 응답(is_v2): risk_level·final_stage·other_document_count 는 머리 주석대로 판정 JSON·분류 코드로 읽는다.
     """
     stages = _as_stages(response_or_stages)
     names = [s.get("name") for s in stages if isinstance(s.get("name"), str)]
@@ -262,11 +349,17 @@ def summarize(response_or_stages: Any) -> dict[str, Any]:
 
     extracted = sum(1 for s in _usable_for(stages, STAGE_EXTRACT) if isinstance(s.get("data"), Mapping))
 
-    risk_level = next((r for r in (_risk_level(s) for s in _usable_for(stages, STAGE_RISK)) if r), None)
+    if is_v2(stages):
+        from .final_flow import read_verdict  # 순환 import(final_flow → findings → results) — 여기서 늦게
 
-    final_stage = next((k for k in (_key_of(s) for s in stages if _usable(s)) if k in FINAL_STAGES), None)
-
-    others = sum(1 for s in _usable_for(stages, STAGE_OTHER) if _has_text_or_object(s.get("data")))
+        decision = read_verdict(stages)
+        risk_level = decision.get("risk_level") if isinstance(decision, Mapping) else None
+        final_stage = v2_next_stage(risk_level)
+        others = sum(1 for t in document_types if t.lower() == "other")
+    else:
+        risk_level = next((r for r in (_risk_level(s) for s in _usable_for(stages, STAGE_RISK)) if r), None)
+        final_stage = next((k for k in (_key_of(s) for s in stages if _usable(s)) if k in FINAL_STAGES), None)
+        others = sum(1 for s in _usable_for(stages, STAGE_OTHER) if _has_text_or_object(s.get("data")))
 
     return {
         "stage_names": list(dict.fromkeys(names)),

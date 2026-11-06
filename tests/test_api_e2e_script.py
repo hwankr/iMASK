@@ -3241,3 +3241,137 @@ def test_s2_risk_label_matches_the_backend(script: Any) -> None:
     assert script._risk_label({"overall": {"level": "검토 필요"}}) == "검토 필요"
     assert script._risk_label({"overall": {"level": None}, "summary": {"risk_level": " 검토 필요 "}}) == "검토 필요"
     assert script._risk_label({"overall": {"level": "모르는 값"}}) == "미평가"
+
+
+# --- 설정 60(v2_full) 응답 — 합성 묶음 고정 기대값 대신 계약 모양만 본다(옛 모양 경로의 출력·판정은 그대로) ------------------
+# 고정 응답(tests/fixtures/v2/ — 실제 응답 21건의 모양, 값은 가상)을 저장 꼴로 만들어 실제 조회·검토 로직으로 응답한다.
+
+V2_FIXTURES = ROOT / "tests" / "fixtures" / "v2"
+V2_CASES = tuple("ABCDEFGHIJKLMNOPQRSTU")
+
+
+def _v2_result(case: str) -> dict[str, Any]:
+    from imask_backend.analyses import build_result
+
+    return build_result(json.loads((V2_FIXTURES / f"case_{case}.json").read_bytes().decode("utf-8")), "60")
+
+
+def _v2_view(case: str) -> dict[str, Any]:
+    from imask_backend.analyses import result_out
+
+    return result_out(_v2_result(case))
+
+
+def _v2_texts(case: str) -> list[str]:
+    """출력에 나오면 안 되는 글자 — 탐지 value·masked, 연결 fields(3자 이상만)."""
+    view = _v2_view(case)
+    texts = [f["value"] for f in view["findings"]] + [f["masked"] for f in view["findings"]]
+    for link in view["links"]:
+        texts += [d["fields"] for d in link["docs"]]
+    return [t for t in texts if isinstance(t, str) and len(t) >= 3]
+
+
+@pytest.mark.parametrize("case", V2_CASES)
+def test_script_contract_checks_accept_every_v2_result(script: Any, case: str) -> None:
+    view = _v2_view(case)
+    assert script._is_v2(view)
+    assert script._final_problems(view) == []
+    assert script._view_problems(view) == []
+    assert script._items_shape_problems(view["items"], view) == []
+    want, reason = script._expected_items(view)
+    assert want is not None and reason == ""
+    own = [i for i in view["items"] if i["id"].startswith(script.V2_OWN_ITEMS)]
+    assert script._items_compare(own, want, skip=("number",)) == []
+
+
+@pytest.mark.parametrize("case", V2_CASES)
+def test_v2_analysis_id_mode_only_reads_and_passes(script: Any, capsys: Any, case: str) -> None:
+    api = FakeApi(poll_mode="done", result=_v2_result(case))
+    assert _run(script, api, FakeUpstageServer(), ["--analysis-id", ANALYSIS_ID]) == 0
+    assert [r for r in api.requests if r.method != "GET"] == []
+    out = capsys.readouterr().out
+    assert "새 모양" not in out and ": 불일치" not in out
+    assert "결과: 기대대로 (기존 분석 확인)" in out
+    assert "설정 60 응답" in out
+    assert [n for n, text in enumerate(_v2_texts(case)) if text in out] == []  # 위치만(값은 메시지에 넣지 않는다)
+
+
+@pytest.mark.parametrize("case", ["A", "B", "L", "U", "P"])
+def test_v2_full_flow_with_review_actions_passes(script: Any, capsys: Any, case: str) -> None:
+    api = FakeApi(poll_mode="done", result=_v2_result(case))
+    code = _run(script, api, _done_upstage(), [])
+    out = capsys.readouterr().out
+    assert code == 0, [line for line in out.splitlines() if "불일치" in line or "실패" in line]
+    assert "새 모양" not in out and "결과: 기대대로" in out
+    assert f"검토 동작 확인: {REVIEW_STEPS}/{REVIEW_STEPS} 통과" in out
+    assert [n for n, text in enumerate(_v2_texts(case)) if text in out] == []
+
+
+@pytest.mark.parametrize("case", ["R", "S"])
+def test_v2_file_with_few_findings_skips_review_actions(script: Any, capsys: Any, case: str) -> None:
+    # 빈 서식·대상 외 서류 — 검토 동작을 보낼 항목이 없어도 '새 모양' 실패가 아니다
+    api = FakeApi(poll_mode="done", result=_v2_result(case))
+    code = _run(script, api, _done_upstage(), [])
+    out = capsys.readouterr().out
+    assert code == 0, [line for line in out.splitlines() if "불일치" in line or "실패" in line]
+    assert "검토 동작 확인 건너뜀(설정 60 응답 — 검토 가능 항목 0개)" in out
+
+
+def _tampered_v2(script: Any, capsys: Any, tamper: Any, case: str = "U") -> str:
+    api = FakeApi(poll_mode="done", result=_v2_result(case), tamper=tamper)
+    assert _run(script, api, FakeUpstageServer(), ["--analysis-id", ANALYSIS_ID]) == 1
+    return capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("tamper", "message"),
+    [
+        (lambda r, _i: r["decision"].pop("reason"), "decision: 키·순서가 계약과 다름"),
+        (lambda r, _i: r["decision"].update(high_risk_items="글자"), "decision.high_risk_items"),
+        (lambda r, _i: r["decision"].update(recommended_action=5), "decision.recommended_action"),
+        (lambda r, _i: r["decision"].update(risk_level="최상"), "decision.risk_level"),
+        (lambda r, _i: r["overall"].update(next_stage="권장_조치"), "decision 과 같음: 불일치"),
+        (lambda r, _i: r["bundle_check"].update(verdict="blue"), "bundle_check.verdict"),
+        (lambda r, _i: r["links"][0].update(state="모름"), "links[0].state·status"),
+    ],
+    ids=["keys", "list", "action", "risk", "overall", "verdict", "link"],
+)
+def test_v2_contract_problems_still_fail(script: Any, capsys: Any, tamper: Any, message: str) -> None:
+    assert message in _tampered_v2(script, capsys, tamper)
+
+
+def test_v2_expected_items_are_still_compared(script: Any, capsys: Any) -> None:
+    # nolocation·lowconf·other 는 따로 계산한 기대값과 같아야 한다
+    def tamper(result: dict[str, Any], _include: bool) -> None:
+        next(i for i in result["items"] if i["id"].startswith("lowconf:"))["title"] = "다른 글"
+
+    out = _tampered_v2(script, capsys, tamper)
+    assert "따로 계산한 기대값(nolocation·lowconf·other 만 — 나머지 종류는 계약 모양만)" in out and "기대값과 다름" in out
+
+
+def test_link_item_rule_splits_by_id_form(script: Any) -> None:
+    targets = {"link:1:0": 0}
+    base = {"document_index": 0}
+    assert script._link_id_ok({**base, "id": "mismatch:0:규칙", "type": "mismatch", "link_id": None}, targets)
+    assert script._link_id_ok({**base, "id": "review:mismatch", "type": "mismatch", "link_id": None}, targets)
+    assert script._link_id_ok({**base, "id": "mismatch:1:0", "type": "mismatch", "link_id": "link:1:0"}, targets)
+    assert script._link_id_ok({**base, "id": "weaklink:1:0", "type": "weaklink", "link_id": "link:1:0"}, targets)
+    assert not script._link_id_ok({**base, "id": "mismatch:1:0", "type": "mismatch", "link_id": None}, targets)
+    assert not script._link_id_ok({**base, "id": "weaklink:1:0", "type": "weaklink", "link_id": None}, targets)
+    assert not script._link_id_ok({**base, "id": "mismatch:0:규칙", "type": "mismatch", "link_id": "link:1:0"}, targets)
+    assert not script._link_id_ok({**base, "id": "format:0:규칙", "type": "format", "link_id": "link:1:0"}, targets)
+
+
+def test_script_item_types_match_the_backend(script: Any) -> None:
+    from imask_backend.items import ITEM_TYPES
+
+    assert script.ITEM_TYPES == ITEM_TYPES
+
+
+def test_v2_retry_flow_with_no_findings_passes(script: Any, monkeypatch: pytest.MonkeyPatch, capsys: Any) -> None:
+    # --retry-flow 도 탐지 항목이 없는 파일(대상 외 서류)에서 실패하지 않는다
+    response = json.loads((V2_FIXTURES / "case_R.json").read_bytes().decode("utf-8"))
+    code, _ctx, _ = _app_run(script, monkeypatch, ["--retry-flow"], response=response)
+    out = capsys.readouterr().out
+    assert code == 0, [line for line in out.splitlines() if ": 불일치" in line or "실패" in line]
+    assert "검토 동작 하나 뒤 이력 순서 확인 건너뜀(설정 60 응답 — 검토 가능 항목 0개)" in out

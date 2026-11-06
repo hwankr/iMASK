@@ -46,6 +46,27 @@
 #  빈 결과(documents []·findings []·overall 빈 값·items []·links []·decision null·bundle_check null)를 돌려준다 —
 #  조회가 500 이 되지 않게.
 #  final_flow 는 이 모듈의 짝짓기 함수를 쓰므로(순환 import) 함수 안에서 늦게 import 한다.
+#
+#  설정 60(v2_full) 응답(results.is_v2 — 응답 모양으로 가른다, 옛 경로는 그대로)은 _build_view_v2 가 따로 만든다:
+#  - 항목 표와 PDF 상자의 원천은 Extract 값·좌표다. 항목 등급은 키 접두어 상_·중_·하_(risk_source workflow, risk_reason null)이고
+#    판정 JSON 으로 바꾸지 않는다. 문서 등급은 판정 JSON 의 risk_level.
+#  - 접두어 칸: id "<서류 index>:<키>", field = 키. 표(접두어 칸이 있는 객체 행 목록): id "<서류 index>:<표>[<행 위치>].<칸>",
+#    field "<표>[<행 위치>].<칸>"(행 위치는 원래 목록의 0부터 — 객체가 아닌 행은 건너뛰되 자리는 차지한다), 메타
+#    additional_values[표][행 위치][칸](모양이 틀리면 위치 없음), label "<칸 이름> <행 번호>행". 서류 안에서 겹치는 이름은 '#2'(_UniqueIds —
+#    id 와 field 를 같이 바꿔 id = "<서류 index>:<field>" 를 지킨다). 접두어 칸의 값이 표가 아닌 목록이면 _value_text(JSON 문자열).
+#  - v2_is_item_key: 접두어 없는 칸과 incomplete_fields 는 탐지 항목으로 만들지 않는다(코디네이터 결정 — 요청서 '접두어 없는 키는 등급 대상이
+#    아니다', 기준표 '민감 항목 아님(서식명·선택 항목)'). 바꾸려면 이 함수만 고친다(등급이 없는 칸은 미평가로 나간다).
+#    V2_NOT_ITEM_KEYS 는 항목의 원천이 아닌 키다 — 표 판별(_is_v2_table)보다 먼저 빠져서, incomplete_fields 가 객체 행 목록이어도 항목·nolocation 이 생기지 않는다.
+#  - _v2_unreadable: incomplete_fields 가 없거나 null·빈 문자열·빈 목록·빈 객체·false 면 못 읽은 칸 없음(JMESPath 거짓 값 — 규칙의 `|| []` 와 같다).
+#    0 을 포함한 그 밖의 목록 아닌 값과 서류 키와 맞지 않는 항목은 칸을 가리키지 않는 일반 unreadable:<i> 후보다.
+#  - 대응표에 없는 접두어 키도 버리지 않는다(fields.v2_field_info). 빈 값 건너뛰기·좌표·쪽 검사·항목 하나 실패 격리는 옛 함수를 다시 쓴다.
+#  - documents[].validation 은 null, 서류별 checks 도 없다(검증은 묶음 하나의 사슬).
+#  - decision = final_flow.read_verdict(키 8개), overall = {level: risk_level, text: reason, next_text: recommended_action, next_stage},
+#    bundle_check = final_flow.chain_view, links = final_flow.read_v2_links → items.link_pairs·build_links,
+#    items = items.v2_parts(칸별 판독 불가·실패 규칙·연결) + 사유 보충(ReviewNote). 각각 실패해도 그 값만 빈 값이다(_quiet).
+#  - 차이 경고: 값이 있는 접두어 칸의 토큰(서류코드.칸 — 칸은 접두어를 뗀 키, 표 칸도 같은 꼴, 등급별)과 판정 목록 3키가 다르면 등급별 개수만
+#    경고 로그를 남긴다. 화면은 Extract 를 따르고 판정 목록은 그대로 보존한다.
+#  새 코드의 로그는 고정 글자 + 예외 종류 + 개수만이다(바깥 문자열을 넣지 않는다).
 # ==========================================================================
 
 from __future__ import annotations
@@ -54,12 +75,13 @@ import json
 import logging
 import math
 import re
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, TypeVar
 
-from .fields import field_info
-from .items import build_items, build_links, bundle_parts, link_pairs, mapped_label
+from .fields import V2_GRADE_PREFIXES, field_info, v2_bare_key, v2_field_info, v2_grade
+from .items import ReviewNote, UnreadablePart, build_items, build_links, bundle_parts, link_pairs, mapped_label, v2_parts
 from .masking import EXPOSED, STAR, exposure, masked
 from .results import (
     FINAL_STAGES,
@@ -70,10 +92,12 @@ from .results import (
     STAGE_VALIDATE,
     as_stages,
     document_type,
+    is_v2,
     parse_stages,
     stage_contents,
     summarize,
     usable_stages_for,
+    v2_next_stage,
 )
 
 logger = logging.getLogger("imask.findings")
@@ -604,11 +628,11 @@ def _overall(stages: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
 
 
 def _items(
-    documents: list[dict[str, Any]], findings: list[dict[str, Any]], checks: list[Any], bundle: Any = None
+    documents: list[dict[str, Any]], findings: list[dict[str, Any]], checks: list[Any], bundle: Any = None, review: ReviewNote | None = None
 ) -> list[dict[str, Any]]:
     """검토사항 — 계산이 실패해도 items [] 로만(documents·findings·overall 은 그대로). 값 없이 예외 종류만 남긴다."""
     try:
-        return build_items(documents, findings, checks, bundle)
+        return build_items(documents, findings, checks, bundle, review)
     except Exception as exc:
         logger.warning("검토사항을 만들지 못해 items 를 비웁니다: %s", type(exc).__name__)
         return []
@@ -687,8 +711,231 @@ def _bundle_check_view(raw: Any) -> dict[str, Any] | None:
     return {"verdict": raw.get("verdict"), "checks": rows}
 
 
+# --- 설정 60(v2_full) 화면용 결과 ---------------------------------------------------------------------------
+
+V2_INCOMPLETE_KEY = "incomplete_fields"
+# 탐지 항목의 원천이 아닌 최상위 키 — 판독 불가 재료(_v2_unreadable)로만 쓴다
+V2_NOT_ITEM_KEYS = frozenset({V2_INCOMPLETE_KEY})
+
+
+def v2_is_item_key(key: str) -> bool:
+    """탐지 항목이 되는 칸 키 — 접두어 칸만. 접두어 없는 칸·incomplete_fields 는 만들지 않는다(머리 주석의 코디네이터 결정 — 바꾸려면 여기만)."""
+    return key not in V2_NOT_ITEM_KEYS and v2_grade(key) is not None
+
+
+def _is_v2_table(key: str, raw: Any) -> bool:
+    """표 — 탐지 항목이 되는 칸이 하나라도 있는 객체 행이 있는 목록(키가 접두어여도 표로 본다, 그런 칸이 없으면 값 목록).
+    V2_NOT_ITEM_KEYS 의 키는 행 모양과 상관없이 표가 아니다."""
+    return (
+        key not in V2_NOT_ITEM_KEYS
+        and isinstance(raw, list)
+        and any(isinstance(row, Mapping) and any(isinstance(cell, str) and v2_is_item_key(cell) for cell in row) for row in raw)
+    )
+
+
+def v2_item_fields(data: Mapping[str, Any]) -> Iterator[tuple[str, Any]]:
+    """추출 data 에서 탐지 항목이 되는 최상위 칸(키, 값) — 항목 칸과 표."""
+    for key, raw in data.items():
+        if isinstance(key, str) and (v2_is_item_key(key) or _is_v2_table(key, raw)):
+            yield key, raw
+
+
+def _v2_finding(
+    index: int, field_name: str, info: Any, label: str, grade: str | None, raw: Any, meta_source: Callable[[], Any]
+) -> dict[str, Any] | None:
+    """칸 하나 → 탐지 항목(빈 값은 None). 값·메타를 읽다 실패하면 그 항목만 안전한 값 — 옛 _findings 와 같은 규칙, 로그는 예외 종류만."""
+    failed = False
+    try:
+        value = _value_text(raw)
+    except Exception as exc:
+        logger.warning("탐지 항목 값을 읽지 못해 대체 값으로 둠: %s", type(exc).__name__)
+        value = _fallback_value(raw)
+        failed = True
+    if value is None:
+        return None
+    if failed:
+        detail = _fallback_detail(value)
+    else:
+        try:
+            detail = _finding_detail(value, info.kind, _mapping(meta_source()))
+        except Exception as exc:
+            logger.warning("탐지 항목 하나를 대체 값으로 둠: %s", type(exc).__name__)
+            detail = _fallback_detail(value)
+    return {
+        "id": f"{index}:{field_name}",
+        "document_index": index,
+        "field": field_name,
+        "category": info.category,
+        "label": label if label.strip() else UNNAMED_LABEL,
+        "subject": info.subject,
+        "mapping_status": info.mapping_status,
+        "value": value,
+        "masked": detail["masked"],
+        "exposure": detail["exposure"],
+        "risk": GRADE_TO_RISK[grade] if grade is not None else UNRATED,
+        "risk_source": RISK_SOURCE if grade is not None else None,
+        "risk_reason": None,
+        "page": detail["page"],
+        "boxes": detail["boxes"],
+        "confidence": detail["confidence"],
+    }
+
+
+def _table_meta(additional: Mapping[str, Any], table: str, position: int, cell: str) -> Any:
+    rows = additional.get(table)
+    row = rows[position] if isinstance(rows, list) and position < len(rows) else None
+    return row.get(cell) if isinstance(row, Mapping) else None
+
+
+def _v2_findings(docs: Sequence[_Doc]) -> tuple[list[dict[str, Any]], dict[str, set[str]]]:
+    """추출 짝이 있는 서류마다 탐지 항목(키 순서, 표는 행·칸 순서)과 등급별 토큰(서류코드.칸 — 판정 목록과 비교용, 값 없음)."""
+    from . import final_flow
+
+    out: list[dict[str, Any]] = []
+    tokens: dict[str, set[str]] = {grade: set() for grade in V2_GRADE_PREFIXES.values()}
+
+    def add(doc: _Doc, ids: Any, cell: str, field_name: str, info: Any, label: str, raw: Any, meta: Callable[[], Any]) -> None:
+        if not v2_is_item_key(cell) or _is_empty_raw(raw):  # 값이 없으면 번호(#2)를 차지하지 않는다
+            return
+        grade = v2_grade(cell)
+        item = _v2_finding(doc.index, ids.next(field_name), info, label, grade, raw, meta)
+        if item is not None:
+            out.append(item)
+            if grade is not None and doc.type is not None:
+                tokens[grade].add(f"{doc.type}.{v2_bare_key(cell)}")
+
+    for doc in sorted(docs, key=lambda d: d.index):
+        if doc.extract is None:
+            continue
+        data, additional = doc.extract
+        ids = final_flow._UniqueIds()
+        for key, raw in v2_item_fields(data):
+            if _is_v2_table(key, raw):
+                for position, row in enumerate(raw):
+                    if not isinstance(row, Mapping):
+                        continue
+                    for cell, value in row.items():
+                        if not isinstance(cell, str):
+                            continue
+                        info = v2_field_info(cell, key)
+                        add(
+                            doc,
+                            ids,
+                            cell,
+                            f"{key}[{position}].{cell}",
+                            info,
+                            f"{info.label} {position + 1}행",
+                            value,
+                            partial(_table_meta, additional, key, position, cell),
+                        )
+            else:
+                info = v2_field_info(key)
+                add(doc, ids, key, key, info, info.label, raw, partial(additional.get, key))
+    return out, tokens
+
+
+def _warn_verdict_gap(tokens: Mapping[str, set[str]], decision: Any) -> None:
+    """값이 있는 접두어 칸의 토큰과 판정 목록 3키가 다르면 등급별 개수만 경고한다(읽지 못한 목록은 비교하지 않는다)."""
+    if not isinstance(decision, Mapping):
+        return
+    gaps = {}
+    for grade, key in (("상", "high_risk_items"), ("중", "medium_risk_items"), ("하", "low_risk_items")):
+        listed = decision.get(key)
+        gaps[grade] = len(tokens[grade] ^ set(listed)) if isinstance(listed, list) else 0
+    if any(gaps.values()):
+        logger.warning("판정 목록과 추출 칸이 다릅니다: 상 %d개 · 중 %d개 · 하 %d개", gaps["상"], gaps["중"], gaps["하"])
+
+
+def jmes_empty(value: Any) -> bool:
+    """JMESPath 거짓 값 — 빈 문자열·null·빈 목록·빈 객체·false 만. 0·공백만인 문자열은 값이다(일치_확인 의 [?@]·필수_확인 의 `|| []` 와 같다)."""
+    if value is None or value is False:
+        return True
+    return isinstance(value, (str, list, Mapping)) and not value
+
+
+def _v2_unreadable(doc: _Doc) -> list[UnreadablePart]:
+    """Extract incomplete_fields → 판독 불가 후보(사슬과 상관없이). 서류 키와 접두어 무시로 같은 항목은 칸마다 하나, 키와 안 맞거나 목록을 못
+    읽으면 칸을 가리키지 않는 하나. 항목의 원문 글자는 쓰지 않는다(key 는 서류의 실제 키)."""
+    if doc.extract is None:
+        return []
+    data = doc.extract[0]
+    listed = data.get(V2_INCOMPLETE_KEY)
+    if jmes_empty(listed):  # 없음·JMESPath 거짓 값 = 못 읽은 칸 없음(규칙의 `|| []` 와 같다)
+        return []
+    if not isinstance(listed, list):
+        return [UnreadablePart()]  # 0 을 포함한 그 밖의 값 — 목록을 못 읽음
+    known: dict[str, tuple[str, str | None]] = {}
+    for key, raw in data.items():
+        if not isinstance(key, str) or key == V2_INCOMPLETE_KEY:
+            continue
+        known.setdefault(v2_bare_key(key), (key, None))
+        if isinstance(raw, list):
+            for row in raw:
+                for cell in row if isinstance(row, Mapping) else ():
+                    if isinstance(cell, str):
+                        known.setdefault(v2_bare_key(cell), (cell, key))
+    parts: list[UnreadablePart] = []
+    seen: set[str] = set()
+    unmatched = False
+    for entry in listed:
+        hit = known.get(v2_bare_key(entry)) if isinstance(entry, str) else None
+        if hit is None:
+            unmatched = True
+            continue
+        key, table = hit
+        if key not in seen:
+            seen.add(key)
+            parts.append(UnreadablePart(key=key, label=v2_field_info(key, table).label))
+    if unmatched:
+        parts.append(UnreadablePart())
+    return parts
+
+
+def _v2_overall(decision: Any) -> dict[str, Any]:
+    if not isinstance(decision, Mapping):
+        return _empty_overall()
+    level = decision.get("risk_level")
+    return {
+        "level": level,
+        "text": decision.get("reason") or "",
+        "next_stage": v2_next_stage(level),
+        "next_text": decision.get("recommended_action") or "",
+    }
+
+
+def _build_view_v2(stages: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    from . import final_flow
+
+    docs, classify_count = _documents(stages)
+    _attach_extracts(stages, docs, classify_count)
+    _attach_text(stages, docs, STAGE_OTHER, "other_guide")
+    ordered = sorted(docs, key=lambda d: d.index)
+    documents = [d.out() for d in ordered]
+    findings, tokens = _v2_findings(docs)
+    decision = _quiet("read_verdict", lambda: final_flow.read_verdict(stages), None)
+    _quiet("verdict_gap", lambda: _warn_verdict_gap(tokens, decision), None)
+    chain = _quiet("read_chain_rules", lambda: final_flow.read_chain_rules(stages), None)
+    reads = _quiet("read_v2_links", lambda: final_flow.read_v2_links(stages), None)
+    pairs = _quiet("link_pairs", lambda: link_pairs(documents, findings, reads, _doc_names()), [])
+    unreadable = _quiet("unreadable", lambda: {d.index: _v2_unreadable(d) for d in ordered}, {})
+    rules = chain[0] if chain is not None else []
+    bundle = _quiet("v2_parts", lambda: v2_parts(documents, unreadable, rules, pairs, _doc_names()), None)
+    review = ReviewNote(reasons=decision.get("review_reasons"), level=decision.get("risk_level")) if decision is not None else ReviewNote()
+    return {
+        "documents": documents,
+        "findings": findings,
+        "overall": _v2_overall(decision),
+        "items": _items(documents, findings, [None] * len(ordered), bundle, review),
+        "links": _quiet("links", lambda: build_links(pairs), []),
+        "decision": decision,
+        "bundle_check": _quiet("bundle_check", lambda: final_flow.chain_view(chain), None),
+    }
+
+
 def _build_view(result: Any) -> dict[str, Any]:
     stages = view_stages(result)
+    if is_v2(stages):
+        return _build_view_v2(stages)
     docs, classify_count = _documents(stages)
     _attach_extracts(stages, docs, classify_count)
     _attach_checks(stages, docs)

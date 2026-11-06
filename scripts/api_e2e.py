@@ -118,6 +118,11 @@
 #                     --analysis-id 로 읽은 기존 분석은 지우지 않는다(만든 것이 아니므로).
 #  확인 요약: 끝에 확인 묶음마다 통과/실패를 한 줄씩 내고, 새 확인(목록·다시 분석·삭제)만 따로 모아 판정한다 — done 확인의
 #    고정 기대값(서류 6·탐지 29 등)이 실제 Upstage 결과와 어긋나는 문제와 섞이지 않게. 종료 코드는 모든 확인이 맞아야 0.
+#  설정 60(v2_full) 응답(_is_v2 — decision 에 high_risk_items 키가 있음): 합성 묶음의 고정 기대값(EXPECTED_SHAPES·EXPECTED_RISK)을 보지 않고
+#    계약 모양만 본다 — 옛 모양 경로의 출력·판정은 그대로다. 전환 뒤에 --file <임의 PDF> 로 돌렸을 때 '새 모양' 실패가 나오지 않게 하려는 것이다.
+#    판정 8키 순서·타입, bundle_check(fail·unknown 만), links, items 계약 모양, 기대 검토사항은 nolocation·lowconf·other 만 따로 계산해
+#    비교(번호는 전체 순서라 비교하지 않음)하고 나머지 종류는 계약 모양만 본다. 검토 가능 항목이 3개보다 적으면(빈 서식·대상 외 등) 검토 동작 확인을
+#    건너뛴다. mismatch 는 id 꼴이 mismatch:<정수>:<정수> 인 것만 연결 항목이다(그 밖 link_id null). 출력은 값 없이 개수·이름만이다.
 # ==========================================================================
 
 from __future__ import annotations
@@ -128,6 +133,7 @@ import json
 import math
 import mimetypes
 import os
+import re
 import sys
 import time
 from collections import Counter
@@ -234,6 +240,8 @@ ITEM_TYPES = {  # 화면 src/display/rules.ts RTYPE 의 키 → 라벨(이력 ta
     "weaklink": "연결 근거 부족",
     "nolocation": "위치 확인 필요",
     "failed": "분석 실패",
+    "format": "형식 오류",
+    "duplicate": "같은 서식 여러 건",
     "missing": "필수 항목 없음",
     "lowconf": "인식 확인 필요",
     "other": "기타 서류",
@@ -253,7 +261,8 @@ ITEM_OPEN_LABEL = "{p}쪽 열기"
 ITEM_VALUES_LABEL = "{p}쪽 값 보기"
 MSG_ITEM_NOT_FOUND = "검토사항을 찾을 수 없습니다."
 MSG_ITEM_STATE_CHANGED = "검토사항 상태가 바뀌었습니다. 새로 고친 뒤 다시 시도해 주세요."
-LINK_ITEM_TYPES = ("mismatch", "weaklink")  # link_id 가 문자열인 종류(연결 재료) — 그 밖은 null
+LINK_MISMATCH_ID = re.compile(r"mismatch:[0-9]+:[0-9]+")  # 연결 항목인 mismatch 의 id 꼴(설정 60 의 규칙 mismatch 는 연결이 아니다)
+V2_OWN_ITEMS = ("nolocation:", "lowconf:", "other:")  # 설정 60 에서 기대값을 따로 계산해 비교하는 항목의 id 머리
 
 # 최종 흐름 워크플로우 결과 계약(final-flow T3 A — links·decision·bundle_check). 백엔드 함수를 쓰지 않고 따로 적는다.
 # 옛 워크플로우(묶음_검증 없음)는 links [] · decision null · bundle_check null.
@@ -271,6 +280,17 @@ LINK_TEXT = {  # state → (basis, missing, check) — {label}{p} = 이름표(40
 DECISION_KEYS = ("risk_level", "document_types", "sensitive_categories", "review_reasons", "reason")
 DECISION_LIST_KEYS = ("document_types", "sensitive_categories", "review_reasons")
 DECISION_RISKS = ("상", "중", "하", "검토 필요")
+V2_DECISION_KEYS = (
+    "risk_level",
+    "document_types",
+    "high_risk_items",
+    "medium_risk_items",
+    "low_risk_items",
+    "review_reasons",
+    "recommended_action",
+    "reason",
+)
+V2_DECISION_LIST_KEYS = ("document_types", "high_risk_items", "medium_risk_items", "low_risk_items", "review_reasons")
 BUNDLE_KEYS = ("verdict", "checks")
 BUNDLE_CHECK_KEYS = ("id", "name", "severity", "status", "field", "label", "group")
 BUNDLE_VERDICTS = ("green", "yellow", "red")
@@ -606,6 +626,9 @@ def _print_summary(result: Mapping[str, Any]) -> bool:
     _say(f"  마지막 단계: {summary.get('final_stage')}")
     _say(f"  기타 서류 수: {summary.get('other_document_count')}")
     _say(f"  단계 이름: {summary.get('stage_names')}")
+    if _is_v2(result):
+        _say("  설정 60 응답 — 합성 묶음 기대값을 보지 않고 계약 모양만 봄")
+        return no_raw
     expected = _summary_ok(summary)
     pairs = " 또는 ".join(f"{s['documents']}·{s['kinds']['extracted']}" for s in EXPECTED_SHAPES)
     _say(f"  기대값(서류·추출 {pairs} · 위험도 {EXPECTED_RISK}): {_mark(expected)}")
@@ -614,6 +637,8 @@ def _print_summary(result: Mapping[str, Any]) -> bool:
 
 def _print_view(result: Mapping[str, Any]) -> bool:
     """화면용 결과의 개수·분포만 출력한다(value·masked·본문은 출력하지 않음)."""
+    if _is_v2(result):
+        return _print_view_v2(result)
     documents = [d for d in result.get("documents") or [] if isinstance(d, Mapping)]
     findings = [f for f in result.get("findings") or [] if isinstance(f, Mapping)]
     overall = result.get("overall") if isinstance(result.get("overall"), Mapping) else {}
@@ -657,6 +682,31 @@ def _print_view(result: Mapping[str, Any]) -> bool:
     return docs_ok and counts_ok and overall_ok and not problems
 
 
+def _print_view_v2(result: Mapping[str, Any]) -> bool:
+    """설정 60 응답의 화면용 결과 — 개수·분포 + 계약 모양(고정 기대값 없음). overall 은 decision 과 같은지 본다."""
+    documents = [d for d in result.get("documents") or [] if isinstance(d, Mapping)]
+    findings = [f for f in result.get("findings") or [] if isinstance(f, Mapping)]
+    overall = result.get("overall") if isinstance(result.get("overall"), Mapping) else {}
+    decision = result.get("decision") if isinstance(result.get("decision"), Mapping) else {}
+    level = decision.get("risk_level")
+    want_next = "검토_안내" if level == "검토 필요" else "권장_조치" if level in DECISION_RISKS else None
+    same = overall.get("level") == level and overall.get("next_stage") == want_next
+    _say("화면용 결과(documents·findings·overall):")
+    _say(f"  documents: {len(documents)} · kind {dict(Counter(str(d.get('kind')) for d in documents))}")
+    _say(f"  findings: {len(findings)} · boxes 있는 항목 {sum(1 for f in findings if f.get('boxes'))}")
+    _say(f"  risk 분포: {dict(Counter(str(f.get('risk')) for f in findings))}")
+    _say(f"  risk_source 분포: {dict(Counter(str(f.get('risk_source')) for f in findings))}")
+    _say(f"  exposure 분포: {dict(Counter(str(f.get('exposure')) for f in findings))}")
+    _say(f"  mapping_status 분포: {dict(Counter(str(f.get('mapping_status')) for f in findings))}")
+    _say(f"  confidence 분포: {dict(Counter(str(f.get('confidence')) for f in findings))}")
+    _say(f"  overall: level={_kind(overall.get('level'), DECISION_RISKS)} · next_stage={_kind(overall.get('next_stage'), ('권장_조치', '검토_안내'))} · decision 과 같음: {_mark(same)}")
+    problems = _view_problems(result)
+    _say(f"  계약 모양(키·허용 값·id 중복·document_index·boxes 0~1): {'맞음' if not problems else f'문제 {len(problems)}개'}")
+    for problem in problems[:10]:
+        _say(f"    - {_short(problem)}")
+    return same and not problems
+
+
 # --- 최종 흐름 결과(links·decision·bundle_check) 확인 — final-flow T3 A ----------------------------------
 # 계약 모양은 따로 적어 확인한다(백엔드 imask_backend.items·findings 를 쓰지 않음). 출력은 개수·상태·키 이름만 —
 # 연결 제목·fields·판정 글·규칙 이름 같은 받은 글자는 출력하지 않는다(허용 목록의 상태 글자만).
@@ -677,6 +727,12 @@ def _kind(value: Any, allowed: tuple[str, ...] = ()) -> str:
 def _is_final(result: Mapping[str, Any]) -> bool:
     """최종 흐름 워크플로우 결과인지 — bundle_check 가 객체(묶음_검증 단계가 있음). 옛 워크플로우는 null."""
     return isinstance(result.get("bundle_check"), Mapping)
+
+
+def _is_v2(result: Any) -> bool:
+    """설정 60(v2_full) 응답인지 — decision 에 high_risk_items 키가 있음. 고정 기대값 대신 계약 모양만 본다."""
+    decision = result.get("decision") if isinstance(result, Mapping) else None
+    return isinstance(decision, Mapping) and "high_risk_items" in decision
 
 
 def _result_shape(result: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -776,16 +832,20 @@ def _link_problems(links: Any, result: Mapping[str, Any]) -> list[str]:
 
 
 def _decision_problems(decision: Any) -> list[str]:
-    """result.decision — null 또는 위험도_판정 키 5개(순서 그대로): risk_level 허용 값·null, 목록 키는 문자열 목록·null, reason 글·null."""
+    """result.decision — null 또는 위험도_판정 키 5개(순서 그대로)·설정 60 판정 키 8개: risk_level 허용 값·null, 목록 키는 문자열 목록·null,
+    reason·recommended_action 글·null."""
     if decision is None:
         return []
-    if not isinstance(decision, Mapping) or list(decision) != list(DECISION_KEYS):
+    v2 = isinstance(decision, Mapping) and "high_risk_items" in decision
+    if not isinstance(decision, Mapping) or list(decision) != list(V2_DECISION_KEYS if v2 else DECISION_KEYS):
         return ["decision: 키·순서가 계약과 다름"]
     checks = [
         (decision["risk_level"] is None or (isinstance(decision["risk_level"], str) and decision["risk_level"] in DECISION_RISKS), "risk_level"),
         (decision["reason"] is None or isinstance(decision["reason"], str), "reason"),
     ]
-    for key in DECISION_LIST_KEYS:
+    if v2:
+        checks.append((decision["recommended_action"] is None or isinstance(decision["recommended_action"], str), "recommended_action"))
+    for key in V2_DECISION_LIST_KEYS if v2 else DECISION_LIST_KEYS:
         value = decision[key]
         checks.append((value is None or (isinstance(value, list) and all(isinstance(v, str) for v in value)), key))
     return [f"decision.{name}" for passed, name in checks if not passed]
@@ -857,7 +917,7 @@ def _print_final(result: Mapping[str, Any]) -> bool:
     if isinstance(decision, Mapping):
         reason = decision.get("reason")
         parts = [f"risk_level={_kind(decision.get('risk_level'), DECISION_RISKS)}"]
-        for key in DECISION_LIST_KEYS:
+        for key in V2_DECISION_LIST_KEYS if _is_v2(result) else DECISION_LIST_KEYS:
             value = decision.get(key)
             parts.append(f"{key} {len(value)}개" if isinstance(value, list) else f"{key} {_kind(value)}")
         parts.append(f"reason {len(reason)}자" if isinstance(reason, str) else f"reason {_kind(reason)}")
@@ -882,6 +942,9 @@ def _print_final(result: Mapping[str, Any]) -> bool:
     for problem in problems[:10]:
         _say(f"    - {_short(problem)}")
     if not final:
+        return not problems
+    if _is_v2(result):
+        _say("  설정 60 응답 — 알려진 모양(연결 수·verdict) 비교 없이 계약 모양만 봄")
         return not problems
     verdict_ok = isinstance(verdict, str) and verdict in BUNDLE_VERDICTS
     _say(f"  묶음 검증 verdict 있음(서류별 validation 대신): {_mark(verdict_ok)}")
@@ -955,7 +1018,7 @@ def _expected_items(result: Mapping[str, Any]) -> tuple[list[dict[str, Any]] | N
     if not_green:
         return None, f"새 모양 — 검증 결과가 green 이 아닌 서류 {not_green}개(checks 를 볼 수 없어 missing 항목을 계산할 수 없음)"
     bundle = result.get("bundle_check")
-    if isinstance(bundle, Mapping):
+    if isinstance(bundle, Mapping) and not _is_v2(result):  # 설정 60 은 nolocation·lowconf·other 만 비교한다(_print_items)
         links = result.get("links") if isinstance(result.get("links"), list) else []
         unlinked = sum(1 for link in links if not (isinstance(link, Mapping) and link.get("state") == "linked"))
         if bundle.get("verdict") != "green" or unlinked:
@@ -1042,11 +1105,17 @@ def _link_targets(links: Any) -> dict[str, Any]:
     return out
 
 
+def _is_link_item(item: Mapping[str, Any]) -> bool:
+    """연결 항목(link_id 가 있어야 함) — weaklink 와 id 꼴이 mismatch:<정수>:<정수> 인 mismatch."""
+    kind, item_id = item.get("type"), item.get("id")
+    return kind == "weaklink" or (kind == "mismatch" and isinstance(item_id, str) and LINK_MISMATCH_ID.fullmatch(item_id) is not None)
+
+
 def _link_id_ok(item: Mapping[str, Any], link_targets: Mapping[str, Any]) -> bool:
-    """검토사항의 link_id(final-flow T3 B): mismatch·weaklink 는 같은 결과 links[] 의 id 이고 그 연결의 대상 서류가 이 항목의 서류,
-    그 밖 종류는 null."""
-    link_id, kind = item.get("link_id"), item.get("type")
-    if not (isinstance(kind, str) and kind in LINK_ITEM_TYPES):
+    """검토사항의 link_id(final-flow T3 B): 연결 항목(_is_link_item)은 같은 결과 links[] 의 id 이고 그 연결의 대상 서류가 이 항목의 서류,
+    그 밖은 null."""
+    link_id = item.get("link_id")
+    if not _is_link_item(item):
         return link_id is None
     if not isinstance(link_id, str) or link_id not in link_targets:
         return False
@@ -1057,7 +1126,7 @@ def _link_id_ok(item: Mapping[str, Any], link_targets: Mapping[str, Any]) -> boo
 def _items_shape_problems(items: Any, result: Mapping[str, Any]) -> list[str]:
     """result.items 의 계약 모양(값은 출력하지 않고 'items[n].키' 위치만): 키·순서·타입, R-nn 1부터 연속, id 겹치지 않음,
     document_index 가 보이는 서류, page·근거 page 가 그 서류 화면 쪽 범위 안, finding_id·finding_ids 가 그 서류의 탐지 항목,
-    link_id 가 연결 종류(mismatch·weaklink)만 그 서류를 대상으로 하는 연결 id(그 밖 null)."""
+    link_id 가 연결 항목(_is_link_item)만 그 서류를 대상으로 하는 연결 id(그 밖 null)."""
     if not isinstance(items, list):
         return ["result.items 가 목록이 아님"]
     spans = {d["index"]: (d["page_start"], max(d["page_start"], d["page_end"])) for d in _visible_docs(result.get("documents"))}
@@ -1108,14 +1177,16 @@ def _items_shape_problems(items: Any, result: Mapping[str, Any]) -> list[str]:
     return problems
 
 
-def _items_compare(got: list[Any], want: list[dict[str, Any]]) -> list[str]:
-    """받은 result.items 와 따로 계산한 기대값을 비교 — 다른 자리만('items[n].키' — 값은 출력하지 않는다)."""
+def _items_compare(got: list[Any], want: list[dict[str, Any]], *, skip: tuple[str, ...] = ()) -> list[str]:
+    """받은 result.items 와 따로 계산한 기대값을 비교 — 다른 자리만('items[n].키' — 값은 출력하지 않는다). skip 의 키는 보지 않는다."""
     problems = [f"개수 {len(got)}(기대 {len(want)})"] if len(got) != len(want) else []
     for n, (item, expected) in enumerate(zip(got, want, strict=False)):
         if not isinstance(item, Mapping):
             problems.append(f"items[{n}]: 객체가 아님")
             continue
-        problems += [f"items[{n}].{key}: 기대값과 다름" for key in ITEM_KEYS if key != "evidence" and item.get(key) != expected[key]]
+        problems += [
+            f"items[{n}].{key}: 기대값과 다름" for key in ITEM_KEYS if key != "evidence" and key not in skip and item.get(key) != expected[key]
+        ]
         evidence = item.get("evidence")
         if not isinstance(evidence, list) or len(evidence) != len(expected["evidence"]):
             problems.append(f"items[{n}].evidence: 개수가 기대와 다름")
@@ -1153,6 +1224,13 @@ def _print_items(result: Mapping[str, Any]) -> bool:
     if want is None:
         _say(f"  따로 계산한 기대값: 계산할 수 없음 — {reason}: 불일치")
         return False
+    if _is_v2(result):
+        own = [i for i in got if isinstance(i, Mapping) and isinstance(i.get("id"), str) and i["id"].startswith(V2_OWN_ITEMS)]
+        differs = _items_compare(own, want, skip=("number",))  # 번호는 전체 순서라 보지 않는다
+        _say(f"  따로 계산한 기대값(nolocation·lowconf·other 만 — 나머지 종류는 계약 모양만): {len(want)}개 · 종류 {_kinds(want)}: {_mark(not differs)}")
+        for problem in differs[:10]:
+            _say(f"    - {_short(problem)}")
+        return not shape and not differs
     differs = _items_compare(got, want)
     _say(
         f"  따로 계산한 기대값(documents·findings → nolocation·lowconf·other, 검증 모두 green·null → missing 0"
@@ -1782,6 +1860,9 @@ def _check_reviews(run: Run, analysis_id: str) -> bool:
     targets = _review_targets(first.get("result"))
     problems = _first_review_problems(first, targets)
     if len({t["id"] for t in targets}) < 3:
+        if _is_v2(first.get("result")) and not problems:  # 빈 서식·대상 외 서류처럼 탐지 항목이 적은 파일 — 보낼 대상이 없다
+            _say(f"  검토 동작 확인 건너뜀(설정 60 응답 — 검토 가능 항목 {len(targets)}개)")
+            return True
         problems.append(f"검토 가능 항목이 3개보다 적음({len(targets)})")
     items = _result_items(first)  # 서버가 계산한 검토사항(모양·기대값은 done 확인이 본다)
     flow = _ReviewFlow(run, analysis_id, first)
@@ -2349,6 +2430,9 @@ def _check_retry_history(
         _say("  검토 동작 하나 뒤 이력 순서 확인 건너뜀(--no-review)")
         return
     if not targets:
+        if _is_v2(row.get("result")):  # 설정 60 응답은 탐지 항목이 없는 파일도 있다(빈 서식·대상 외 서류)
+            _say("  검토 동작 하나 뒤 이력 순서 확인 건너뜀(설정 60 응답 — 검토 가능 항목 0개)")
+            return
         checks.report("검토 동작 하나 뒤 이력 순서", ["검토 가능 항목 없음"])
         return
     flow = _ReviewFlow(run, analysis_id, row, checks)

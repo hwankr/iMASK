@@ -68,6 +68,28 @@
 #    서류별 후보 재료(DocBundle 의 새 필드)로 나눠 넘긴다. 여기서는 DocContext.bundle 을 받는 재료를 MATERIALS 에 더한다.
 #    서류를 가리킬 수 없는 실패는 첫 보이는 서류에 둔다(bundle:·absent: 처럼 서류 index 없는 계약 id). _from_checks 는 서류별
 #    검증의 묶음 모양(value 가 null·목록)을 계속 '묶음 모양 실패'로만 적는다(묶음_검증은 서류별 검증 단계가 아니다).
+#
+#  설정 60(v2_full) 재료 — findings 가 v2 응답일 때만 v2_parts 로 서류별로 나눠 넘긴다(옛 응답은 비어 있다). 종류 format·duplicate 를 더했다.
+#    글은 고정 문구 + 칸 이름 + 번호만. 규칙의 reason·value, incomplete_fields 의 원문 글자는 쓰지 않는다(id 의 <키> 도 서류의 실제 키).
+#
+#      재료                                                    | 종류       | 계약 id                 | 근거
+#      incomplete_fields 항목이 서류 키와 접두어 무시로 같음   | unreadable | unreadable:<i>:<키>     | 첫 쪽(사슬과 상관없이)
+#      항목이 키와 안 맞음·목록을 못 읽음, 또는 <코드>_못읽은칸_없음 실패인데 칸별 항목 없음 | unreadable | unreadable:<i> | 첫 쪽
+#      필수_확인 실패(못읽은칸 규칙 제외)                      | missing    | missing:<i>:<규칙>      | 첫 쪽
+#      형식_확인 실패                                          | format     | format:<i>:<규칙>       | 그 칸 탐지 항목 쪽 '값 보기', 없으면 첫 쪽
+#      일치_확인 실패                                          | mismatch   | mismatch:<i>:<규칙>     | 위와 같음(link_id null)
+#      단위_확인 실패 <코드>_한건                              | duplicate  | duplicate:<코드>        | 첫 쪽
+#
+#    규칙 → 서류: ChainRule.code(조건 트리 양쪽 피연산자의 nodeName → path 의 extract."<코드>" → 규칙 이름의 <코드>_)의 첫 보이는 서류. 못 찾거나 묶음에
+#    그 서식이 없으면 첫 보이는 서류. 칸 이름 L: RULE_LABELS → 트리에서 대응표 이름이 있는 첫 칸(조건마다 왼쪽 → 오른쪽) → 규칙 이름.
+#    서류간_본인성명_같음·지급보증_신청인에_* 는 연결의 unmatched 쌍이 있으면 만들지 않는다(연결의 mismatch 항목과 겹친다).
+#    대상_확인 실패는 기존 other:<i> 가 맡고, 내용_검토·상_확인 은 규칙 항목을 만들지 않는다. 숫자로만 된 일치 규칙 이름은 만들지 않는다
+#    (연결 항목 id mismatch:<정수>:<정수> 와 섞이지 않게 — 아래 사유 보충이 대신한다).
+#    사유 보충(_review_items, build_items 의 review 인자): 판정 review_reasons 의 알려진 사유 중 그 사유의 종류 항목이 하나도 없는 것마다 첫 보이는
+#    서류에 review:<종류> 하나(title 은 사유 글자, 예: 내용_검토 모순은 실패 규칙이 없다). 모르는 사유 글자는 쓰지 않고 verdict:<i>(VERDICT_* 문구).
+#    등급이 검토 필요 인데 항목이 하나도 없을 때도 verdict:<i>. 이 항목들은 첫 보이는 서류의 항목 뒤에 오고, 같은 사유가 두 번 와도 같은 계약 id 는 처음 것만이다.
+#    mismatch 는 이제 link_id 가 null 일 수 있다 — 연결 항목은 id 꼴 mismatch:<정수>:<정수> 인 것만이다.
+#    link_pairs: links 에 doc_fields 가 있으면(read_v2_links) 서류별 칸으로 찾고, fields 글은 그 서류 칸 이름 + masked, 글의 이름표는 label.
 # ==========================================================================
 
 from __future__ import annotations
@@ -80,7 +102,7 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Any
 
-from .fields import field_info
+from .fields import field_info, v2_field_info
 
 logger = logging.getLogger("imask.items")
 
@@ -92,6 +114,8 @@ ITEM_TYPES: dict[str, str] = {
     "weaklink": "연결 근거 부족",
     "nolocation": "위치 확인 필요",
     "failed": "분석 실패",
+    "format": "형식 오류",
+    "duplicate": "같은 서식 여러 건",
     "missing": "필수 항목 없음",
     "lowconf": "인식 확인 필요",
     "other": "기타 서류",
@@ -122,6 +146,10 @@ LINK_CHECK = "check"  # links[].status — 그 밖
 CHECK_FAIL = "fail"
 CHECK_ABSENT = "absent"
 SEVERITY_ERROR = "error"
+NODE_UNIT = "단위_확인"
+NODE_REQUIRED = "필수_확인"
+NODE_FORMAT = "형식_확인"
+NODE_CONSISTENT = "일치_확인"
 
 # --- 글(BRIEF §5.3 표 — {…} 만 바뀐다) -----------------------------------------------------------
 MISSING_DESC = "필수 항목 검증을 통과하지 못했습니다."
@@ -151,6 +179,37 @@ LINK_DIFFERENT = "두 서류의 {label}{p} 다릅니다."
 LINK_NOTHING = "비교할 {label}{p} 없습니다."  # weaklink 설명과 같다
 LINK_CHECK_LINKED = "두 서류를 함께 보관·전달할 때 열람 권한을 확인해 주세요."
 LINK_NO_VALUE = "{label} 값 없음"
+# 설정 60 재료의 글
+UNREADABLE_FIELD_TITLE = "{label}{p} 판독되지 않았습니다"
+UNREADABLE_TITLE = "판독되지 않은 칸이 있습니다"
+UNREADABLE_DESC = "글자를 읽을 수 없는 칸입니다."
+FORMAT_TITLE = "{label} 형식이 맞지 않습니다"
+FORMAT_DESC = "형식 검증을 통과하지 못했습니다."
+RULE_MISMATCH_TITLE = "{label} 값이 맞지 않습니다"
+RULE_MISMATCH_DESC = "값 일치 검증을 통과하지 못했습니다."
+DUPLICATE_TITLE = "{name} 여러 건"
+DUPLICATE_DESC = "같은 서식이 여러 건 있습니다."
+# 규칙 이름 → 글에 넣을 칸 이름(필드로 이름이 안 나오는 규칙만)
+RULE_LABELS = {
+    "FATCA_납세의무_예이면_행마다_번호또는사유": "납세자번호 또는 미제출 사유",
+    "휴면_대리신청이면_대리인": "대리인 성명",
+    "FATCA_미국국적_납세의무": "해외납세의무 여부",
+    "서류간_본인성명_같음": "본인 성명",
+}
+GUARANTEE_RULE_PREFIX = "지급보증_신청인에_"  # 지급보증_신청인에_<서식>_본인포함
+GUARANTEE_RULE_LABEL = "신청인 성명"
+BETWEEN_DOCS_RULE = "서류간_본인성명_같음"
+UNREADABLE_RULE_SUFFIX = "_못읽은칸_없음"
+DUPLICATE_RULE_SUFFIX = "_한건"
+# 판정 review_reasons 의 알려진 사유 → (사유 보충 항목의 종류, desc, next, 이 사유를 이미 다룬 것으로 보는 종류)
+REVIEW_REASONS: dict[str, tuple[str, str, str, frozenset[str]]] = {
+    "값 불일치": ("mismatch", RULE_MISMATCH_DESC, MISSING_NEXT, frozenset({"mismatch"})),
+    "필수 항목 누락 또는 판독 불가": ("missing", MISSING_DESC, MISSING_NEXT, frozenset({"missing", "unreadable"})),
+    "형식 오류": ("format", FORMAT_DESC, MISSING_NEXT, frozenset({"format"})),
+    "같은 서식 여러 건": ("duplicate", DUPLICATE_DESC, MISSING_NEXT, frozenset({"duplicate"})),
+    "대상 외 서류": ("other", OTHER_DESC, OTHER_NEXT, frozenset({"other"})),
+}
+REVIEW_LEVEL = "검토 필요"
 
 # --- 표시 값 ---------------------------------------------------------------------------
 UNNAMED_FINDING = "이름 없는 항목"  # 화면 contract.ts UNNAMED_FINDING(reviews 도 이 값을 쓴다)
@@ -271,6 +330,7 @@ class VisibleFinding:
     page: int  # 파일 쪽(화면 쪽 범위 안 page, 아니면 서류 page_start)
     located: bool  # 위치 있음(범위 안 page + 비지 않은 boxes)
     low: bool  # 신뢰도 low
+    field: str = ""  # 추출 키(표 칸은 '<표>[<행>].<칸>') — 설정 60 규칙 근거가 쓴다
 
 
 @dataclass(frozen=True)
@@ -308,11 +368,54 @@ class LinkPair:
 
 
 @dataclass(frozen=True)
+class ChainRule:
+    """설정 60 검증 사슬의 실패·unknown 규칙 하나(final_flow.read_chain_rules 가 만든다) — 값은 없다."""
+
+    node: str  # 노드 이름(대상_확인 …·내용_검토)
+    name: str  # 규칙 이름
+    severity: str | None
+    status: str  # fail · unknown
+    field: str | None  # 조건 트리의 첫 칸 키(rowField 가 있으면 그 값)
+    label: str | None  # 그 칸의 대응표 이름(없으면 None)
+    code: str | None  # 규칙이 가리키는 10서식 코드(nodeName → path → 규칙 이름)
+    cell: tuple[str | None, str] | None  # 트리에서 대응표 이름이 있는 첫 칸 (표, 칸)
+    cell_label: str | None  # 그 칸의 대응표 이름
+
+
+@dataclass(frozen=True)
+class UnreadablePart:
+    """판독 불가 후보 하나 — key 는 서류의 실제 키(None 이면 칸을 가리키지 못한 항목), label 은 자르기 전 칸 이름."""
+
+    key: str | None = None
+    label: str = ""
+
+
+@dataclass(frozen=True)
+class RulePart:
+    """설정 60 실패 규칙 하나가 서류 하나에 내는 후보 재료(v2_parts 가 만든다)."""
+
+    kind: str  # missing · format · mismatch · duplicate
+    name: str  # 규칙 이름(duplicate 는 서식 코드)
+    label: str  # 글에 넣을 이름(L, duplicate 는 서식 이름). 자르기 전
+    cell: tuple[str | None, str] | None = None  # 근거로 찾을 칸 (표, 칸)
+
+
+@dataclass(frozen=True)
+class ReviewNote:
+    """판정 JSON 의 사유·등급(사유 보충 재료) — 모양은 _review_items 가 본다."""
+
+    reasons: Any = None
+    level: Any = None
+
+
+@dataclass(frozen=True)
 class DocBundle:
-    """서류 하나에 붙는 묶음 재료(findings.build_view 가 bundle_parts 로 나눠 build_items(bundle=…)에 넘긴다)."""
+    """서류 하나에 붙는 묶음 재료(findings.build_view 가 bundle_parts·v2_parts 로 나눠 build_items(bundle=…)에 넘긴다)."""
 
     checks: tuple[BundleCheck, ...] = ()  # 묶음_검증 규칙 순서
     links: tuple[LinkPair, ...] = ()  # 이 서류가 대상인 쌍(쌍 순서)
+    unreadable: tuple[UnreadablePart, ...] = ()  # 설정 60 판독 불가
+    rules: tuple[RulePart, ...] = ()  # 설정 60 실패 규칙(사슬 순서)
 
 
 EMPTY_BUNDLE = DocBundle()
@@ -352,6 +455,7 @@ def _visible_finding(finding: Mapping[str, Any], num: str, start: int, end: int)
         page=_file_page(page, start, end),
         located=in_range and isinstance(boxes, list) and len(boxes) > 0,
         low=isinstance(confidence, str) and confidence == LOW,
+        field=_text(finding.get("field")),
     )
 
 
@@ -596,6 +700,177 @@ def _from_bundle_checks(ctx: DocContext) -> list[Maker]:
     return [partial(_bundle_item, ctx, part) for part in ctx.bundle.checks]
 
 
+# --- 재료 V: 설정 60 판독 불가·실패 규칙 ----------------------------------------------------------------
+
+
+def _unreadable_item(ctx: DocContext, part: UnreadablePart) -> dict[str, Any]:
+    if part.key is None:
+        item_id, title = f"unreadable:{ctx.index}", UNREADABLE_TITLE
+    else:
+        shown = clip_name(part.label)
+        item_id = f"unreadable:{ctx.index}:{part.key}"
+        title = UNREADABLE_FIELD_TITLE.format(label=shown, p=subject_particle(shown))
+    return _item(
+        ctx,
+        "unreadable",
+        item_id,
+        page=ctx.start,
+        finding_id=None,
+        title=title,
+        desc=UNREADABLE_DESC,
+        next_step=MISSING_NEXT,
+        evidence=[_first_page(ctx)],
+    )
+
+
+def _from_unreadable(ctx: DocContext) -> list[Maker]:
+    return [partial(_unreadable_item, ctx, part) for part in ctx.bundle.unreadable]
+
+
+def split_cell(field: str) -> tuple[str | None, str]:
+    """탐지 항목 field → (표, 칸) — '<표>[<행>].<칸>' 꼴이면 그 표·칸, 아니면 (None, field)."""
+    head, sep, cell = field.rpartition("].")
+    if not sep:
+        return None, field
+    table, bracket, _ = head.rpartition("[")
+    return (table, cell) if bracket else (None, field)
+
+
+def _cell_evidence(ctx: DocContext, cell: tuple[str | None, str] | None, hits: Mapping[tuple[str | None, str], list[VisibleFinding]]) -> dict[str, Any]:
+    """그 칸 탐지 항목이 있으면 첫 항목 쪽 '값 보기'(같은 쪽의 그 칸 항목 모두), 없으면 서류 첫 쪽."""
+    found = hits.get(cell) if cell is not None else None
+    if not found:
+        return _first_page(ctx)
+    page = found[0].page
+    return _evidence(VALUES_LABEL.format(p=ctx.inner(page)), page, [f.id for f in found if f.page == page and f.id is not None], None)
+
+
+def _rule_item(ctx: DocContext, part: RulePart, hits: Mapping[tuple[str | None, str], list[VisibleFinding]]) -> dict[str, Any] | None:
+    if part.kind == "missing":
+        return _missing_item(ctx, part.name, part.label)
+    shown = clip_name(part.label)
+    if part.kind == "duplicate":
+        return _item(
+            ctx,
+            "duplicate",
+            f"duplicate:{part.name}",
+            page=ctx.start,
+            finding_id=None,
+            title=DUPLICATE_TITLE.format(name=shown),
+            desc=DUPLICATE_DESC,
+            next_step=MISSING_NEXT,
+            evidence=[_first_page(ctx)],
+        )
+    if part.kind == "format":
+        kind, title, desc = "format", FORMAT_TITLE.format(label=shown), FORMAT_DESC
+    elif part.kind == "mismatch":
+        kind, title, desc = "mismatch", RULE_MISMATCH_TITLE.format(label=shown), RULE_MISMATCH_DESC
+    else:
+        return None
+    evidence = _cell_evidence(ctx, part.cell, hits)
+    return _item(
+        ctx,
+        kind,
+        f"{kind}:{ctx.index}:{part.name}",
+        page=evidence["page"],
+        finding_id=None,
+        title=title,
+        desc=desc,
+        next_step=MISSING_NEXT,
+        evidence=[evidence],
+    )
+
+
+def _from_chain_rules(ctx: DocContext) -> list[Maker]:
+    if not ctx.bundle.rules:
+        return []
+    hits: dict[tuple[str | None, str], list[VisibleFinding]] = {}
+    for finding in ctx.findings:  # 서류의 탐지 항목을 칸별로 한 번만 나눈다(규칙마다 다시 훑지 않게)
+        if finding.id is not None:
+            hits.setdefault(split_cell(finding.field), []).append(finding)
+    return [partial(_rule_item, ctx, part, hits) for part in ctx.bundle.rules]
+
+
+def _rule_label(rule: ChainRule) -> str:
+    """글에 넣을 칸 이름 L — RULE_LABELS → 트리에서 대응표 이름이 있는 첫 칸 → 규칙 이름."""
+    if rule.name in RULE_LABELS:
+        return RULE_LABELS[rule.name]
+    if rule.name.startswith(GUARANTEE_RULE_PREFIX):
+        return GUARANTEE_RULE_LABEL
+    return rule.cell_label or rule.name
+
+
+def _rule_part(rule: ChainRule, name: str, names: Mapping[str, str], unmatched: bool) -> RulePart | None:
+    """실패 규칙 → 후보 재료(만들지 않는 규칙은 None). 못읽은칸 규칙은 v2_parts 가 따로 본다."""
+    if rule.node == NODE_UNIT:
+        code = name[: -len(DUPLICATE_RULE_SUFFIX)] if name.endswith(DUPLICATE_RULE_SUFFIX) else None
+        if code is None or code not in names or rule.code != code:
+            return None
+        return RulePart("duplicate", code, names[code])
+    if rule.node == NODE_REQUIRED:
+        return RulePart("missing", name, _rule_label(rule))
+    if rule.node == NODE_FORMAT:
+        return RulePart("format", name, _rule_label(rule), rule.cell)
+    if rule.node == NODE_CONSISTENT:
+        if unmatched and (name == BETWEEN_DOCS_RULE or name.startswith(GUARANTEE_RULE_PREFIX)):
+            return None  # 연결의 mismatch 항목과 겹친다
+        if name.isascii() and name.isdigit():
+            return None  # id 가 연결 항목 꼴 mismatch:<정수>:<정수> 가 된다
+        return RulePart("mismatch", name, _rule_label(rule), rule.cell)
+    return None  # 대상_확인(other:<i> 가 맡는다)·내용_검토(사유 보충이 맡는다)
+
+
+def v2_parts(
+    documents: Any,
+    unreadable: Mapping[int, Sequence[UnreadablePart]],
+    rules: Iterable[ChainRule],
+    pairs: Sequence[LinkPair],
+    names: Mapping[str, str],
+) -> dict[int, DocBundle]:
+    """설정 60 재료 → 보이는 서류 index → DocBundle. 규칙 하나를 나누다 실패하면 그것만 버린다(값 없는 경고).
+
+    unreadable = 서류 index → 칸별·판독 불가 후보(findings 가 Extract 에서 만든다), rules = 사슬 순서의 규칙,
+    pairs = link_pairs 쌍, names = 서식 코드 → 짧은 이름.
+    """
+    visible = [doc for _, doc in visible_documents(documents)]
+    if not visible:
+        return {}
+    first = visible[0]["index"]
+    by_code: dict[str, int] = {}
+    for doc in visible:
+        if isinstance(doc.get("type"), str):
+            by_code.setdefault(doc["type"], doc["index"])
+    links = {index: parts.links for index, parts in bundle_parts(documents, None, pairs).items()}
+    unmatched = any(pair.state == LINK_UNMATCHED for pair in pairs)
+    fields = {doc["index"]: list(unreadable.get(doc["index"], ())) for doc in visible}
+    placed: dict[int, list[RulePart]] = {}
+    for rule in rules:
+        try:
+            if rule.status != CHECK_FAIL:
+                continue
+            name = _rule_name(rule.name)
+            if name is None:
+                continue
+            index = by_code.get(rule.code, first) if isinstance(rule.code, str) else first
+            if rule.node == NODE_REQUIRED and name.endswith(UNREADABLE_RULE_SUFFIX):
+                if not any(part.key is not None for part in fields[index]):
+                    fields[index].append(UnreadablePart())  # 같은 계약 id 는 build_items 가 처음 것만 둔다
+                continue
+            part = _rule_part(rule, name, names, unmatched)
+            if part is not None:
+                placed.setdefault(index, []).append(part)
+        except Exception as exc:  # 그 규칙만
+            logger.warning("검증 규칙 하나를 나누지 못해 건너뜀: %s", type(exc).__name__)
+    return {
+        doc["index"]: DocBundle(
+            links=links.get(doc["index"], ()),
+            unreadable=tuple(fields[doc["index"]]),
+            rules=tuple(placed.get(doc["index"], ())),
+        )
+        for doc in visible
+    }
+
+
 # --- 재료 L: 서류_대조(최종 흐름) --------------------------------------------------------------------
 
 
@@ -715,8 +990,8 @@ class _Hit:
     page: int  # 파일 쪽
 
 
-def _field_hits(visible: Mapping[int, Mapping[str, Any]], findings: Any, field: str) -> dict[int, _Hit]:
-    """보이는 서류마다 field 가 같은 첫 탐지 항목(계약 순서, id 가 문자열인 것) — 탐지 항목을 한 번만 훑는다."""
+def _field_hits(visible: Mapping[int, Mapping[str, Any]], findings: Any, field: str | Mapping[int, str]) -> dict[int, _Hit]:
+    """보이는 서류마다 field(또는 서류 index → 그 서류의 칸)가 같은 첫 탐지 항목(계약 순서, id 가 문자열인 것) — 탐지 항목을 한 번만 훑는다."""
     hits: dict[int, _Hit] = {}
     for finding in findings if isinstance(findings, list) else []:
         if not isinstance(finding, Mapping):
@@ -726,7 +1001,8 @@ def _field_hits(visible: Mapping[int, Mapping[str, Any]], findings: Any, field: 
             if not _is_int(index) or index not in visible or index in hits:
                 continue
             raw_id = finding.get("id")
-            if not isinstance(raw_id, str) or finding.get("field") != field:
+            wanted = field.get(index) if isinstance(field, Mapping) else field
+            if not isinstance(raw_id, str) or wanted is None or finding.get("field") != wanted:
                 continue
             doc = visible[index]
             start = doc["page_start"]
@@ -758,6 +1034,8 @@ def link_pairs(documents: Any, findings: Any, links: Any, names: Mapping[str, st
 
     기준 서류가 없거나(anchor_index None)·pairs 가 None·field 가 없으면 []. 기준·대상 서류가 둘 다 보이는 서류이고
     상태가 알려진 값인 쌍만, 같은 대상 서류는 첫 쌍만. 쌍 하나를 만들다 실패하면 그 쌍만 버린다(값 없는 경고).
+    links 에 doc_fields(설정 60 — 서류 index → 그 서류의 비교 칸)가 있으면 서류별 칸으로 찾고 fields 글은 그 서류 칸 이름 + masked,
+    글의 이름표는 links 의 label 이다. 없으면 대응표 label 하나로 쓴다.
     """
     if not isinstance(links, Mapping):
         return []
@@ -768,10 +1046,18 @@ def link_pairs(documents: Any, findings: Any, links: Any, names: Mapping[str, st
     anchor_doc = visible.get(anchor_index)
     if anchor_doc is None:
         return []
-    label = field_info(field).label
+    doc_fields = links.get("doc_fields")
+    by_doc = isinstance(doc_fields, Mapping)
+    given = links.get("label")
+    label = given if by_doc and isinstance(given, str) and given else field_info(field).label
     shown = clip_name(label)
-    hits = _field_hits(visible, findings, field)
-    anchor_side = _side(anchor_doc, hits.get(anchor_index), shown)
+    hits = _field_hits(visible, findings, doc_fields if by_doc else field)
+
+    def side_name(index: int) -> str:
+        key = doc_fields.get(index) if by_doc else None
+        return clip_name(v2_field_info(key).label) if isinstance(key, str) else shown
+
+    anchor_side = _side(anchor_doc, hits.get(anchor_index), side_name(anchor_index))
     anchor_name = _doc_name(anchor_doc, names)
     out: list[LinkPair] = []
     seen: set[int] = set()
@@ -796,7 +1082,7 @@ def link_pairs(documents: Any, findings: Any, links: Any, names: Mapping[str, st
                     anchor_name=anchor_name,
                     target_name=_doc_name(doc, names),
                     anchor=anchor_side,
-                    target=_side(doc, hits.get(target), shown),
+                    target=_side(doc, hits.get(target), side_name(target)),
                 )
             )
         except Exception as exc:  # 그 쌍만
@@ -930,6 +1216,8 @@ class Material:
 MATERIALS: tuple[Material, ...] = (
     Material("checks", "missing", _from_checks),  # 1 · 1′
     Material("bundle_checks", "missing", _from_bundle_checks),  # B1 · B1′ · B2
+    Material("unreadable", "unreadable", _from_unreadable),  # 설정 60 판독 불가
+    Material("chain_rules", "missing", _from_chain_rules),  # 설정 60 실패 규칙(missing·format·mismatch·duplicate)
     Material("links", "mismatch", _from_links),  # L1 · L2(weaklink)
     Material("nolocation", "nolocation", _from_unlocated),  # 2
     Material("lowconf", "lowconf", _from_low_confidence),  # 3
@@ -937,9 +1225,42 @@ MATERIALS: tuple[Material, ...] = (
 )
 
 
-def build_items(documents: Any, findings: Any, checks: Any = None, bundle: Any = None) -> list[dict[str, Any]]:
+def _review_item(ctx: DocContext, reason: str) -> dict[str, Any]:
+    """알려진 사유 하나의 보충 항목 review:<종류> — title 은 사유 글자(REVIEW_REASONS 의 고정 글자)."""
+    kind, desc, next_step, _ = REVIEW_REASONS[reason]
+    return _item(
+        ctx,
+        kind,
+        f"review:{kind}",
+        page=ctx.start,
+        finding_id=None,
+        title=reason,
+        desc=desc,
+        next_step=next_step,
+        evidence=[_first_page(ctx)],
+    )
+
+
+def _review_items(ctx: DocContext, items: Sequence[Mapping[str, Any]], note: ReviewNote) -> list[dict[str, Any]]:
+    """사유 보충(설정 60) — 머리 주석. items = 재료로 만든 전체 항목."""
+    kinds = {item["type"] for item in items}
+    reasons = note.reasons if isinstance(note.reasons, list) else []
+    out: list[dict[str, Any]] = []
+    unknown = False
+    for reason in reasons:
+        known = REVIEW_REASONS.get(reason) if isinstance(reason, str) else None
+        if known is None:
+            unknown = True
+        elif not known[3] & kinds:
+            out.append(_review_item(ctx, reason))
+    if unknown or (note.level == REVIEW_LEVEL and not items and not out):
+        out.append(_verdict_item(ctx))
+    return out
+
+
+def build_items(documents: Any, findings: Any, checks: Any = None, bundle: Any = None, review: ReviewNote | None = None) -> list[dict[str, Any]]:
     """화면용 documents·findings + 서류별 checks 원래 값(documents 와 같은 위치, 없으면 None) + 묶음 재료
-    (bundle — bundle_parts 의 서류 index → DocBundle, 없으면 None) → result.items[].
+    (bundle — bundle_parts·v2_parts 의 서류 index → DocBundle, 없으면 None) + 판정 사유(review — 설정 60, 없으면 None) → result.items[].
 
     후보 하나·재료 하나의 예외는 그것만 버린다(값 없는 경고). 맥락 만들기가 실패하면 [](값 없는 경고) — 부르는 쪽
     (findings.build_view)도 한 번 더 받는다.
@@ -951,7 +1272,8 @@ def build_items(documents: Any, findings: Any, checks: Any = None, bundle: Any =
         return []
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
-    for ctx in contexts:
+    first_end = 0  # 첫 보이는 서류의 항목 끝(사유 보충이 들어갈 자리)
+    for position, ctx in enumerate(contexts):
         for material in MATERIALS:
             try:
                 makers = list(material.make(ctx))
@@ -968,6 +1290,18 @@ def build_items(documents: Any, findings: Any, checks: Any = None, bundle: Any =
                     continue
                 seen.add(item["id"])
                 out.append(item)
+        if position == 0:
+            first_end = len(out)
+    if review is not None and contexts:
+        try:
+            extra: list[dict[str, Any]] = []
+            for item in _review_items(contexts[0], out, review):  # 같은 사유가 두 번 와도 같은 계약 id 는 처음 것만
+                if item["id"] not in seen:
+                    seen.add(item["id"])
+                    extra.append(item)
+            out[first_end:first_end] = extra
+        except Exception as exc:  # 사유 보충만 버린다
+            logger.warning("검토사항 사유 보충을 만들지 못해 건너뜀: %s", type(exc).__name__)
     for number, item in enumerate(out, 1):
         item["number"] = f"R-{number:02d}"
     return out

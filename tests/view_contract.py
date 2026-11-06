@@ -3,9 +3,10 @@
 #  findings·API·e2e 테스트가 같이 쓴다. 실패하면 AssertionError(어느 항목·키인지 메시지에).
 #  items(검토사항, review-items BRIEF §5.3): 키·순서, R-nn 이 1부터 이어짐, id 겹치지 않음, document_index 가 보이는 서류,
 #  page·근거 page 가 그 서류의 화면 쪽 범위 안, finding_id·finding_ids 가 그 서류의 탐지 항목 id,
-#  link_id 는 mismatch·weaklink 만 'link:<기준>:<그 서류>'(links[] 에 있는 id), 그 밖 null(final-flow T3).
+#  link_id 는 연결 항목만 'link:<기준>:<그 서류>'(links[] 에 있는 id), 그 밖 null(final-flow T3). 연결 항목 = weaklink 와 id 꼴이
+#  mismatch:<정수>:<정수> 인 mismatch — 설정 60 의 mismatch:<서류>:<규칙>·review:mismatch 는 link_id null 이다.
 #  links·decision·bundle_check(final-flow T3): 키·순서·허용 값, L-nn 이 1부터 이어짐, 쌍의 두 서류가 보이는 서류이고
-#  쪽·탐지 항목 id 가 그 서류 안, decision 은 null 또는 키 5개, bundle_check 는 null 또는 {verdict, checks[키 7개]}.
+#  쪽·탐지 항목 id 가 그 서류 안, decision 은 null 또는 키 5개(옛 응답)·8개(설정 60), bundle_check 는 null 또는 {verdict, checks[키 7개]}.
 # ==========================================================================
 
 from __future__ import annotations
@@ -40,8 +41,8 @@ RISKS = {"high", "medium", "low", "unrated"}
 # 검토사항(review-items BRIEF §5.3) — 키는 이 순서 그대로(link_id 는 final-flow T3 에서 맨 뒤에)
 ITEM_KEYS = ("id", "number", "type", "document_index", "page", "finding_id", "title", "desc", "next", "evidence", "link_id")
 EVIDENCE_KEYS = ("label", "page", "finding_ids", "finding_id")
-ITEM_TYPE_KEYS = {"unreadable", "cutoff", "mismatch", "weaklink", "nolocation", "failed", "missing", "lowconf", "other"}
-LINK_ITEM_TYPES = {"mismatch", "weaklink"}
+ITEM_TYPE_KEYS = {"unreadable", "cutoff", "mismatch", "weaklink", "nolocation", "failed", "format", "duplicate", "missing", "lowconf", "other"}
+LINK_MISMATCH_ID = re.compile(r"mismatch:[0-9]+:[0-9]+")
 NUMBER = re.compile(r"R-\d{2,}")
 MAX_EVIDENCE = 20
 # 화면용 결과의 최상위 키(build_view — API result 에는 format·job·summary 등이 더 있다)
@@ -54,6 +55,17 @@ LINK_STATUS = {"linked": "confirmed", "unmatched": "check", "insufficient": "che
 MAX_LINK_FIELDS = 80
 DECISION_KEYS = ("risk_level", "document_types", "sensitive_categories", "review_reasons", "reason")
 DECISION_LIST_KEYS = {"document_types", "sensitive_categories", "review_reasons"}
+V2_DECISION_KEYS = (
+    "risk_level",
+    "document_types",
+    "high_risk_items",
+    "medium_risk_items",
+    "low_risk_items",
+    "review_reasons",
+    "recommended_action",
+    "reason",
+)
+V2_DECISION_LIST_KEYS = {"document_types", "high_risk_items", "medium_risk_items", "low_risk_items", "review_reasons"}
 BUNDLE_CHECK_KEYS = ("id", "name", "severity", "status", "field", "label", "group")
 
 
@@ -151,12 +163,17 @@ def assert_item(item: Any, spans: Mapping[int, tuple[int, int]], finding_ids: Ma
     assert isinstance(item["evidence"], list) and len(item["evidence"]) <= MAX_EVIDENCE, where
     for evidence in item["evidence"]:
         assert_evidence(evidence, where, span, own)
-    if item["type"] in LINK_ITEM_TYPES:
+    if is_link_item(item):
         link_id = item["link_id"]
         assert isinstance(link_id, str) and re.fullmatch(r"link:\d+:\d+", link_id), where
         assert link_id.rsplit(":", 1)[1] == str(index), where  # 대상 서류(이 항목의 서류)의 쌍
     else:
         assert item["link_id"] is None, where
+
+
+def is_link_item(item: Mapping[str, Any]) -> bool:
+    """연결 항목(link_id 가 있어야 한다) — weaklink 와 id 꼴이 mismatch:<정수>:<정수> 인 mismatch."""
+    return item["type"] == "weaklink" or (item["type"] == "mismatch" and LINK_MISMATCH_ID.fullmatch(item["id"]) is not None)
 
 
 def _spans_and_ids(documents: list[Any], findings: list[Any]) -> tuple[dict[int, tuple[int, int]], dict[int, set[str]]]:
@@ -188,7 +205,7 @@ def assert_items(items: Any, documents: list[Any], findings: list[Any], links: l
     if links is not None:
         link_ids = {link["id"] for link in links}
         for item in items:
-            if item["type"] in LINK_ITEM_TYPES:
+            if is_link_item(item):
                 assert item["link_id"] in link_ids, item["id"]
 
 
@@ -236,13 +253,17 @@ def assert_links(links: Any, documents: list[Any], findings: list[Any]) -> None:
 
 
 def assert_decision(decision: Any) -> None:
-    """null 또는 위험도_판정 키 5개(read_decision 그대로)."""
+    """null 또는 위험도_판정 키 5개(read_decision 그대로) 또는 설정 60 판정 키 8개(read_verdict 그대로)."""
     if decision is None:
         return
-    assert isinstance(decision, Mapping) and list(decision) == list(DECISION_KEYS), decision
+    assert isinstance(decision, Mapping), decision
+    v2 = "high_risk_items" in decision
+    assert list(decision) == list(V2_DECISION_KEYS if v2 else DECISION_KEYS), decision
     assert decision["risk_level"] in ("상", "중", "하", "검토 필요", None), decision
     assert _str_or_none(decision["reason"]), decision
-    for key in DECISION_LIST_KEYS:
+    if v2:
+        assert _str_or_none(decision["recommended_action"]), decision
+    for key in V2_DECISION_LIST_KEYS if v2 else DECISION_LIST_KEYS:
         value = decision[key]
         assert value is None or (isinstance(value, list) and all(isinstance(v, str) for v in value)), key
 

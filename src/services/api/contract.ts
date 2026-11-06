@@ -31,7 +31,10 @@
      검토사항의 link_id 가 같은 결과의 연결(live.id)이면 그 연결의 화면 번호를 linkId 로 둔다('연결 보기').
    - 위험도 판정 키(readDecision)와 묶음 검증(readBundleCheck): result.decision · result.bundle_check 를 방어적으로 읽는다
      (객체가 아니면 null, 못 읽은 값은 null — 확인된 빈 목록과 섞지 않는다). 목록은 앞 N개만, 글은 safeText(mask 를 주면 원문 값을
-     가린 글 — 보고서 사유), 서류 종류 코드는 식별자.
+     가린 글 — 보고서 사유), 서류 종류 코드는 식별자. 판정 모양은 둘이다: 옛 키 5개(최종 흐름 워크플로우) · 키 8개(설정 60 v2_full —
+     high_risk_items 키가 있으면 v2, shape 'v2'). 등급별 항목 토큰('서식코드.칸')은 받은 글자 그대로이고 목록 한도는 500개(옛 모양은 50개).
+   - 검토사항 · 연결의 계약 id 는 어떤 글자든 그대로 다룬다: 표 칸 탐지 항목(`<i>:<표>[<행>].<칸>`), review:<종류> · verdict:<i> · format ·
+     duplicate 같은 설정 60 id 도 Map · 자기 속성으로만 찾고 CSS 선택자 · 주소에 넣지 않는다(화면 id 는 번호 D1-01 · R-01 · L-01).
    - 한도 · 서로게이트 규칙은 '바깥 글 · 목록 한도' 절(MAX_* · finalText · safeText · identifier)에 한 자리로 모았다.
      글은 자르지 않는다(넘으면 통째로 버림).
    ========================================================================== */
@@ -162,8 +165,10 @@ export const MAX_LINK_DOCS = 10;
 export const MAX_LINK_FINDING_IDS = 50;
 /** 연결 근거 줄은 앞 20줄만(백엔드는 0~1줄) */
 export const MAX_LINK_BASIS = 20;
-/** 판정 키 목록(서류 종류 · 정보 종류 · 검토 사유)은 앞 50개만(백엔드 MAX_DECISION_ITEMS 와 같다) */
+/** 옛 판정 키 목록(서류 종류 · 정보 종류 · 검토 사유)은 앞 50개만(백엔드 MAX_DECISION_ITEMS 와 같다) */
 export const MAX_DECISION_ITEMS = 50;
+/** 설정 60 판정 목록(서류 종류 · 등급별 항목 토큰 · 검토 사유)은 앞 500개만(백엔드 V2_MAX_DECISION_ITEMS 와 같다 — 옛 50 한도는 묶음에서 넘을 수 있다) */
+export const MAX_V2_DECISION_ITEMS = 500;
 /** 묶음 검증 규칙은 앞 200개만 센다(백엔드 MAX_CHECKS 와 같다) */
 export const MAX_BUNDLE_CHECKS = 200;
 /** 화면 · 보고서 글 코드 포인트 한도(백엔드 MAX_DECISION_VALUE_LENGTH 와 같다) — 가린 결과가 넘으면 그 글을 통째로 버린다 */
@@ -238,9 +243,9 @@ function text(v: unknown, mask?: Masker | null): string | null {
   return s ? s : null;
 }
 
-/** 판정 글 목록 — 배열이 아니면 null(못 읽음), 배열이면 앞 MAX_DECISION_ITEMS 개 중 text 가 비지 않은 것만(버린 글은 그 항목을 버림) */
-function textList(v: unknown, mask?: Masker | null): string[] | null {
-  const items = head(v, MAX_DECISION_ITEMS);
+/** 판정 글 목록 — 배열이 아니면 null(못 읽음), 배열이면 앞 max 개 중 text 가 비지 않은 것만(버린 글은 그 항목을 버림) */
+function textList(v: unknown, mask: Masker | null | undefined, max: number): string[] | null {
+  const items = head(v, max);
   if (!items) return null;
   const out: string[] = [];
   for (const x of items) {
@@ -250,9 +255,9 @@ function textList(v: unknown, mask?: Masker | null): string[] | null {
   return out;
 }
 
-/** 식별자 목록(서류 종류 코드) — 배열이 아니면 null, 배열이면 앞 MAX_DECISION_ITEMS 개 중 다듬은 값이 식별자인 것만 */
-function idList(v: unknown): string[] | null {
-  const items = head(v, MAX_DECISION_ITEMS);
+/** 식별자 목록(서류 종류 코드) — 배열이 아니면 null, 배열이면 앞 max 개 중 다듬은 값이 식별자인 것만 */
+function idList(v: unknown, max: number): string[] | null {
+  const items = head(v, max);
   if (!items) return null;
   const out: string[] = [];
   for (const x of items) {
@@ -263,18 +268,32 @@ function idList(v: unknown): string[] | null {
 }
 
 /**
- * result.decision(위험도_판정 본문의 키 5개) → RawDecision. 객체가 아니면 null(옛 결과 · 못 읽음).
+ * result.decision → RawDecision. 객체가 아니면 null(옛 결과 · 못 읽음). 모양은 응답으로 가른다:
+ * high_risk_items 키가 자기 속성이면 설정 60 의 키 8개(shape 'v2' — 목록 한도 MAX_V2_DECISION_ITEMS), 아니면 옛 키 5개(위험도_판정 본문 — 한도 MAX_DECISION_ITEMS).
  * 글은 모두 safeText 를 지난다. mask 가 없으면 원래 글(상세 판정 표 — 최종 규칙만), 있으면 원문 값을 가린 글
  * (보고서 · 내보내기의 주요 위험 사유 — 자르지 않은 응답 값에서 바로 만든다).
  */
 export function readDecision(result: unknown, mask?: Masker | null): RawDecision | null {
   if (!isObj(result) || !isObj(result.decision)) return null;
   const d = result.decision;
+  if (own(d, 'high_risk_items')) {
+    return {
+      shape: 'v2',
+      riskLevel: text(d.risk_level, mask),
+      documentTypes: idList(d.document_types, MAX_V2_DECISION_ITEMS),
+      highRiskItems: textList(d.high_risk_items, mask, MAX_V2_DECISION_ITEMS),
+      mediumRiskItems: textList(d.medium_risk_items, mask, MAX_V2_DECISION_ITEMS),
+      lowRiskItems: textList(d.low_risk_items, mask, MAX_V2_DECISION_ITEMS),
+      reviewReasons: textList(d.review_reasons, mask, MAX_V2_DECISION_ITEMS),
+      recommendedAction: text(d.recommended_action, mask),
+      reason: text(d.reason, mask),
+    };
+  }
   return {
     riskLevel: text(d.risk_level, mask),
-    documentTypes: idList(d.document_types),
-    sensitiveCategories: textList(d.sensitive_categories, mask),
-    reviewReasons: textList(d.review_reasons, mask),
+    documentTypes: idList(d.document_types, MAX_DECISION_ITEMS),
+    sensitiveCategories: textList(d.sensitive_categories, mask, MAX_DECISION_ITEMS),
+    reviewReasons: textList(d.review_reasons, mask, MAX_DECISION_ITEMS),
     reason: text(d.reason, mask),
   };
 }

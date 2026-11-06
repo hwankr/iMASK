@@ -3,7 +3,7 @@
    - 파일 검사(개수 1 · PDF·PNG·JPEG · 20MB 이하), 분석명, 진행 단계, 폴링 여부,
      경과·걸린 시간 문구(시작 시각 = startedAt, 없으면 createdAt — timingStart)
    - 결과 요약 줄(result.summary), 단계별 결과 목록(result.stages), 서류 종류·위험도·단계 라벨
-   - 최종 흐름 워크플로우: 위험도 판정 키 표(raw.decision), 결과 요약에 더하는 묶음 검증 · 문서 간 연결 줄(값이 있을 때만)
+   - 최종 흐름 워크플로우 · 설정 60: 위험도 판정 키 표(raw.decision — 옛 5줄 · v2 7줄), 결과 요약에 더하는 묶음 검증 · 문서 간 연결 줄(값이 있을 때만)
    결과 모양은 T2 '결과 저장 형식'(imask-upstage-v1)의 summary·stages 다. 모양이 달라도 예외 없이 빈 값으로.
    ========================================================================== */
 
@@ -262,11 +262,24 @@ export function summaryRows(
 const joined = (list: readonly string[] | null): string => (list && list.length ? list.join(', ') : '-');
 
 /**
- * 위험도 판정 키 표(분석 요약 '위험도 판정' 칸) — 판정 키가 없으면 null(지금처럼 판정 본문을 보인다).
- * 위험도 · 서류 종류(코드 → 이름) · 정보 종류 · 검토 사유 · 판단 근거, 못 읽은 값 · 빈 목록은 '-'.
+ * 위험도 판정 키 표(분석 요약 '위험도 판정' 칸) — 판정 키가 없으면 null(지금처럼 판정 본문을 보인다). 못 읽은 값 · 빈 목록은 '-'.
+ * 옛 모양: 위험도 · 서류 종류(코드 → 이름) · 정보 종류 · 검토 사유 · 판단 근거.
+ * 설정 60(shape 'v2'): 위험도 · 서류 종류 · 상 · 중 · 하 등급 항목(토큰 받은 글자 그대로) · 검토 사유 · 판단 근거.
+ * recommended_action 은 넣지 않는다 — 바로 아래 다음 단계 구역이 overall.next_text 로 같은 글을 보인다.
  */
 export function decisionRows(d: RawDecision | null | undefined): SummaryRow[] | null {
   if (!d) return null;
+  if (d.shape === 'v2') {
+    return [
+      { key: 'risk_level', label: '위험도', value: d.riskLevel ?? '-' },
+      { key: 'document_types', label: '서류 종류', value: joined(d.documentTypes ? d.documentTypes.map(docTypeName) : null) },
+      { key: 'high_risk_items', label: '상 등급 항목', value: joined(d.highRiskItems) },
+      { key: 'medium_risk_items', label: '중 등급 항목', value: joined(d.mediumRiskItems) },
+      { key: 'low_risk_items', label: '하 등급 항목', value: joined(d.lowRiskItems) },
+      { key: 'review_reasons', label: '검토 사유', value: joined(d.reviewReasons) },
+      { key: 'reason', label: '판단 근거', value: d.reason ?? '-' },
+    ];
+  }
   return [
     { key: 'risk_level', label: '위험도', value: d.riskLevel ?? '-' },
     { key: 'document_types', label: '서류 종류', value: joined(d.documentTypes ? d.documentTypes.map(docTypeName) : null) },

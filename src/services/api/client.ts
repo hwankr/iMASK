@@ -190,11 +190,11 @@ export type ReviewActionIn =
  * 실제 값은 매핑(contract.ts toLiveItems)이 방어적으로 읽는다(옛 결과에는 items 키가 없다).
  */
 export interface ReviewItemOut {
-  /** 계약 id(예 'missing:0:<규칙 이름>' · 'nolocation:<탐지 id>' · 'lowconf:0' · 'other:5') */
+  /** 계약 id(예 'missing:0:<규칙 이름>' · 'nolocation:<탐지 id>' · 'lowconf:0' · 'other:5' — 설정 60 은 'format:0:<규칙>' · 'duplicate:<코드>' · 'unreadable:0:<키>' · 'review:<종류>' · 'verdict:0' 도) */
   id: string;
   /** 화면 번호 'R-01'(100번째부터 3자리) */
   number: string;
-  /** 종류 — RTYPE 키(실제 분석은 missing · nolocation · lowconf · other, 최종 흐름 워크플로우는 mismatch · weaklink 도) */
+  /** 종류 — RTYPE 키(실제 분석은 missing · nolocation · lowconf · other, 최종 흐름 워크플로우는 mismatch · weaklink 도, 설정 60 은 format · duplicate · unreadable 도) */
   type: string;
   document_index: number;
   /** 파일 기준 쪽(1부터) */
@@ -205,7 +205,7 @@ export interface ReviewItemOut {
   desc: string;
   next: string;
   evidence: { label: string; page: number; finding_ids: string[]; finding_id: string | null }[];
-  /** 연결 재료(mismatch · weaklink)만 그 연결의 계약 id(result.links[].id), 그 밖 null. 옛 결과에는 키가 없다 */
+  /** 연결 재료(서류 쌍의 mismatch · weaklink)만 그 연결의 계약 id(result.links[].id), 그 밖 null(설정 60 일치_확인 규칙의 mismatch 도 null). 옛 결과에는 키가 없다 */
   link_id?: string | null;
 }
 
@@ -230,8 +230,8 @@ export interface DocLinkOut {
   check: string;
 }
 
-/** result.decision — 위험도_판정 본문의 키 5개(못 읽은 값은 null). 옛 결과는 null 또는 키 없음 */
-export interface DecisionOut {
+/** result.decision 옛 모양 — 위험도_판정 본문의 키 5개(못 읽은 값은 null). 옛 결과는 null 또는 키 없음 */
+export interface DecisionOldOut {
   risk_level: string | null;
   document_types: string[] | null;
   sensitive_categories: string[] | null;
@@ -239,7 +239,23 @@ export interface DecisionOut {
   reason: string | null;
 }
 
-/** result.bundle_check — 묶음_검증 요약. 옛 결과는 null 또는 키 없음 */
+/** result.decision 설정 60 모양 — 판정 JSON 의 키 8개(못 읽은 값은 null). high_risk_items 키가 있으면 이 모양이다 */
+export interface DecisionV2Out {
+  risk_level: string | null;
+  document_types: string[] | null;
+  /** 등급별 항목 토큰('서식코드.칸') — 받은 글자 그대로, 한도 500개 */
+  high_risk_items: string[] | null;
+  medium_risk_items: string[] | null;
+  low_risk_items: string[] | null;
+  review_reasons: string[] | null;
+  recommended_action: string | null;
+  reason: string | null;
+}
+
+/** result.decision */
+export type DecisionOut = DecisionOldOut | DecisionV2Out;
+
+/** result.bundle_check — 묶음_검증 요약 · 설정 60 검증 사슬(통과 규칙은 넣지 않는다 — status 는 fail · unknown 만). 옛 결과는 null 또는 키 없음 */
 export interface BundleCheckOut {
   verdict: 'green' | 'yellow' | 'red' | null;
   checks: { id: string; name: string; severity: string; status: 'pass' | 'fail' | 'absent' | 'unknown'; field: string | null; label: string | null; group: string | null }[];

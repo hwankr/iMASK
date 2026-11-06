@@ -13,6 +13,8 @@
    고정 자료 fixtures/final-flow-{C,D,E}.json = 최종 흐름 고정 응답(tests/fixtures/final_flow/)을 **백엔드가 만든** 조회 응답 result 그대로
    (tests/test_final_flow_fixture_sync.py 가 바이트까지 같은지 지킨다 — 손으로 고치지 않는다):
    C 불일치(mismatch · linked) · D 빈 신청인(weaklink · missing) · E 팀원 서식(linked 2 · other).
+   고정 자료 fixtures/v2-cases.json = 설정 60 고정 응답(tests/fixtures/v2 — 값은 가상)을 **백엔드가 만든** 조회 응답 result, 케이스 → result
+   (tests/test_v2_fixture_sync.py 가 바이트까지 같은지 지킨다 — 손으로 고치지 않는다): 판정 7갈래 A 상 · E 중 · L·M 형식 · N·U 불일치 · P·S 누락 · R 대상외 · T 중복.
    ========================================================================== */
 
 import type { AnalysisListItemOut, AnalysisOut, DocumentOut } from './client';
@@ -22,6 +24,7 @@ import finalFlowDFixture from './fixtures/final-flow-D.json';
 import finalFlowEFixture from './fixtures/final-flow-E.json';
 import finalFlowResultFixture from './fixtures/final-flow-result.json';
 import itemsResultFixture from './fixtures/items-result.json';
+import v2CasesFixture from './fixtures/v2-cases.json';
 
 /** 가짜 fetch 가 받은 요청 */
 export interface SeenRequest {
@@ -115,6 +118,14 @@ const FINAL_FLOW_RUNS = { C: finalFlowCFixture, D: finalFlowDFixture, E: finalFl
 /** 백엔드가 고정 응답으로 만든 최종 흐름 결과(fixtures/final-flow-{C,D,E}.json) — 깊은 복사본 */
 export function finalFlowRun(key: keyof typeof FINAL_FLOW_RUNS): Record<string, unknown> {
   return structuredClone(FINAL_FLOW_RUNS[key]) as unknown as Record<string, unknown>;
+}
+
+/** 설정 60 고정 자료의 케이스 */
+export type V2Case = keyof typeof v2CasesFixture;
+
+/** 백엔드가 설정 60 고정 응답으로 만든 결과(fixtures/v2-cases.json) — 깊은 복사본 */
+export function v2Case(key: V2Case): Record<string, unknown> {
+  return structuredClone(v2CasesFixture[key]) as unknown as Record<string, unknown>;
 }
 
 /** AnalysisOut */

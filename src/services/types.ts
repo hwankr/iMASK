@@ -433,9 +433,9 @@ export interface RawAnalysisInfo {
   reviewable: boolean;
   /** 계약 overall(묶음 전체 위험도 판정 · 다음 단계 안내). 없으면 null, 빠진 값은 '' */
   overall: RawOverall | null;
-  /** 계약 decision(최종 흐름 워크플로우 위험도_판정의 키 5개). 옛 결과 · 못 읽음은 null */
+  /** 계약 decision(최종 흐름 워크플로우 위험도_판정의 키 5개 · 설정 60 판정 JSON 의 키 8개). 옛 결과 · 못 읽음은 null */
   decision: RawDecision | null;
-  /** 계약 bundle_check(최종 흐름 워크플로우 묶음_검증 요약). 옛 결과 · 못 읽음은 null */
+  /** 계약 bundle_check(최종 흐름 워크플로우 묶음_검증 요약 · 설정 60 검증 사슬). 옛 결과 · 못 읽음은 null */
   bundleCheck: RawBundleCheck | null;
   /** 실패 이유(백엔드 문구 그대로) */
   error: string;
@@ -479,8 +479,9 @@ export interface RawOverall {
   nextText: string;
 }
 
-/** 계약 decision — 못 읽은 값은 null(확인된 빈 목록 [] 과 다르다) */
-export interface RawDecision {
+/** 계약 decision 옛 모양(최종 흐름 워크플로우 — 키 5개) — 못 읽은 값은 null(확인된 빈 목록 [] 과 다르다) */
+export interface RawDecisionOld {
+  shape?: undefined;
   /** 본문에 적힌 위험도(상·중·하·검토 필요) */
   riskLevel: string | null;
   /** 서류 종류 코드 목록 */
@@ -492,6 +493,32 @@ export interface RawDecision {
   /** 판단 근거 */
   reason: string | null;
 }
+
+/** 계약 decision 설정 60 모양(v2_full — 키 8개, result.decision 에 high_risk_items 키가 있으면) — 못 읽은 값은 null */
+export interface RawDecisionV2 {
+  shape: 'v2';
+  /** 위험도(상·중·하·검토 필요) */
+  riskLevel: string | null;
+  /** 서류 종류 코드 목록 */
+  documentTypes: string[] | null;
+  /** 상 등급 항목 토큰('서식코드.칸' — 받은 글자 그대로) */
+  highRiskItems: string[] | null;
+  /** 중 등급 항목 토큰 */
+  mediumRiskItems: string[] | null;
+  /** 하 등급 항목 토큰 */
+  lowRiskItems: string[] | null;
+  /** 옛 모양에만 있는 칸(이 모양에는 없다 — 두 모양을 가르지 않고 읽을 수 있게) */
+  sensitiveCategories?: undefined;
+  /** 검토 사유 목록 */
+  reviewReasons: string[] | null;
+  /** 권장 조치 · 검토 안내 글(화면은 overall.next_text 로 보인다 — 판정 표에 넣지 않는다) */
+  recommendedAction: string | null;
+  /** 판단 근거 */
+  reason: string | null;
+}
+
+/** 계약 decision — 모양은 shape 로 가른다(contract.ts readDecision) */
+export type RawDecision = RawDecisionOld | RawDecisionV2;
 
 /** 계약 bundle_check 요약 */
 export interface RawBundleCheck {

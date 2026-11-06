@@ -12,7 +12,8 @@
      원문은 블록 대신 원본 파일 쪽(live — 파일 기준 쪽 ·
      위치 상자)을 그린다. 검토사항(서버가 계산한 result.items)의 근거는 위치 상자 id 를 가리키므로 데모와 같은 규칙으로
      그 상자를 검토사항 색으로 강조하고 이름표를 단다 — 지금 쪽에 근거 상자가 없으면 원문 보기 안 item 안내(제목 'R-0n · 종류',
-     글 = 할 일). 검토사항이 없을 때 빈 화면은 제목만(데모의 설명 줄은 실제 분석이 만들지 않는 종류를 말해서 뺀다).
+     글 = 할 일). 검토사항이 없을 때 빈 화면은 제목만(데모의 설명 줄은 실제 분석에 넣지 않는다).
+     검토 필요 탭 위 '유지' 안내(keep)도 데모만이다(설정 60 은 등급 · 판독 불가가 있어 조건을 채우지만 실제 분석에 설명 글을 더하지 않는다).
      검토 완료 띠의 '보고서 보기'는 데모와 같다(실제 분석 보고서 — 보고서 화면이 reportGate 로 가른다).
      검토 기록을 불러오지 못한 실제 분석(raw.reviewable false)은 readOnly — 검토 동작 버튼(해결 · 다시 열기 포함)만 막는다
      (검토 완료 버튼 title 만 '검토 기록을 불러오지 못했습니다'). 데모 분석에는 raw 가 없어 값이 전과 같다.
@@ -789,6 +790,8 @@ export interface FindingModel {
   ruleName: string;
   /** 적용 규칙이 있다(실제 분석은 없음 — 줄을 뺀다) */
   hasRule: boolean;
+  /** 판단 근거 글이 있다(설정 60 항목은 등급만 있고 사유가 없다 — 줄을 뺀다) */
+  hasReason: boolean;
   /** 실제 분석 항목 안내(분류 확인 필요 · 인식 신뢰도 낮음) */
   notes: string[];
   locText: string;
@@ -846,6 +849,7 @@ export function findingModel(a: Analysis, f: Finding, focus: DetailFocus | null,
     rule: f.rule,
     ruleName: ruleName(f.rule),
     hasRule: !!f.rule,
+    hasReason: !!f.reason,
     notes: findingNotes(f.live),
     locText: f.anchors.length ? dName + ' ' + f.page + '쪽 · 원문 위치 확인됨' : dName + ' ' + f.page + '쪽 · 좌표 없음 (위치 확인 필요)',
     hasEvidence: !!f.evidence,
@@ -1098,7 +1102,7 @@ export function resultsModel(a: Analysis, s: DetailUiState, x: DetailFacts): Res
     findings,
     shownText: items.length + '건 표시 · 확인 ' + x.reviewed + '/' + fAll.length,
     maskPick,
-    keep: hi > 0 && issues ? '이미 발견한 고위험 정보 ' + hi + '건은 아래 판독 실패 · 누락과 관계없이 그대로 표시하고 유지합니다. 아직 읽지 못한 부분에 추가 정보가 있을 수 있습니다.' : null,
+    keep: !x.live && hi > 0 && issues ? '이미 발견한 고위험 정보 ' + hi + '건은 아래 판독 실패 · 누락과 관계없이 그대로 표시하고 유지합니다. 아직 읽지 못한 부분에 추가 정보가 있을 수 있습니다.' : null,
     nOpen: x.openItems,
     nDone: a.items.length - x.openItems,
     items: a.items

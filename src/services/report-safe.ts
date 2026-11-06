@@ -4,12 +4,12 @@
    - 실제 분석인지는 Analysis.raw 가 있는지로 가른다(실제 분석 서비스만 채운다). 데모 분석은 받은 값을 그대로 돌려준다.
    - 실제 분석이면 새 사본: 모든 탐지 항목의 evidence = '' · live.value = ''(다른 live 필드는 그대로), raw.result = null.
    - 워크플로우가 만든 글(주요 위험 사유 riskReasons 줄 · 권장 조치 recs 줄 · 탐지 항목 판단 근거 reason, 그리고 그 원문인
-     raw.overall 의 text · nextText 와 raw.decision 의 판단 근거 · 검토 사유 · 정보 종류)와 검토사항 글(서버가 만든 title · desc · next ·
+     raw.overall 의 text · nextText 와 raw.decision 의 판단 근거 · 검토 사유 · 정보 종류, 설정 60 의 등급별 항목 토큰 · 권장 조치)와 검토사항 글(서버가 만든 title · desc · next ·
      근거 label) · 문서 간 연결 글(서버가 만든 title · 서류별 fields · basis · missing · check)에 어떤 탐지 항목의 원문 값이
      그대로 들어 있으면 그 자리를 그 항목의 masked 로 바꾼다(검토사항 · 연결 글은 원래 고정 문구 · 이름 · 번호 · 마스킹 값으로만
      만들지만 한 겹 더 막는다 — 연결 글은 읽을 때(api/contract.ts toLiveLinks)도 이미 한 번 거친다).
      바꾸는 함수 rawValueMasker 는 raw-mask.ts 에 있다(여기서 다시 내보낸다). 대상 원문 값 = 원래 live.value 가 비지 않았고 2 코드 포인트 이상이며 그 항목의 masked 와 다른 것(같은 값이 여러 항목이면
-     처음 항목의 masked). 정규식 · 엔진 검색 없이 KMP 로 맞추는 한 번의 훑기다 — 커서 뒤 가장 이른 일치, 같은 위치면 긴 값
+     처음 항목의 masked — 설정 60 의 정해진 관계 칸에서 값이 정확히 '본인' 인 항목만 뺀다, raw-mask.ts). 정규식 · 엔진 검색 없이 KMP 로 맞추는 한 번의 훑기다 — 커서 뒤 가장 이른 일치, 같은 위치면 긴 값
      (바꾼 글을 다시 훑지 않는다 · 값 길이와 개수에 한도가 없고 시간은 글 길이 × 값 수에 선형 · 예외가 원문 값을 담지 않는다).
      masked 가 비면 같은 코드 포인트 수의 '*' 로 바꾼다.
    - 최종 흐름 워크플로우 글(연결 글 · 판정 키 · 판정 키가 있는 결과의 주요 위험 사유)은 api/contract.ts 의 한 길 safeText 를 지난다:

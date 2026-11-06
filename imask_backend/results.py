@@ -35,7 +35,9 @@
 #    필수항목_검증 으로 저장했을 수 있다. stage_key·_key_of 가 이 이름들을 새 정규 키로 돌려 서류별 검증 경로에 들어가지 않게 한다
 #    (판정_* 은 모두 STAGE_V2_VERDICT 하나 — 지금 없는 판정_하 도 같다).
 #  - summarize(v2): risk_level = 판정 JSON 의 risk_level(final_flow.read_verdict), final_stage = 그 등급의 다음 단계
-#    (검토 필요 → 검토_안내, 상·중·하 → 권장_조치, 못 읽음 → None), other_document_count = 분류 코드 Other 서류 수.
+#    (검토 필요 → 검토_안내, 상·중·하 → 권장_조치, 못 읽음 → None), other_document_count = 분류 코드 Other 서류 수,
+#    extracted_document_count = 분류 서류를 읽었는데 Extract 단계가 하나도 없으면(대상 외) 0 — 못 읽은 것이 아니라 없는 것이다.
+#    Extract 단계가 있는데 읽지 못했으면 옛 응답과 같이 None 이다.
 # ==========================================================================
 
 from __future__ import annotations
@@ -335,7 +337,8 @@ def summarize(response_or_stages: Any) -> dict[str, Any]:
       final_stage              권장_조치·검토_안내 중 나온 단계의 정규 이름
       other_document_count     기타_서류_안내 output 항목 중 본문(text)이 있는 수
     세 개수와 document_types 는 하나도 읽지 못했으면(단계 없음 포함) None.
-    설정 60 응답(is_v2): risk_level·final_stage·other_document_count 는 머리 주석대로 판정 JSON·분류 코드로 읽는다.
+    설정 60 응답(is_v2): risk_level·final_stage·other_document_count 는 머리 주석대로 판정 JSON·분류 코드로 읽고,
+    분류 서류를 읽었는데 추출 단계가 하나도 없으면 extracted_document_count 는 0 이다(대상 외).
     """
     stages = _as_stages(response_or_stages)
     names = [s.get("name") for s in stages if isinstance(s.get("name"), str)]
@@ -348,6 +351,7 @@ def summarize(response_or_stages: Any) -> dict[str, Any]:
     ]
 
     extracted = sum(1 for s in _usable_for(stages, STAGE_EXTRACT) if isinstance(s.get("data"), Mapping))
+    extracted_count = _count_or_none(extracted)
 
     if is_v2(stages):
         from .final_flow import read_verdict  # 순환 import(final_flow → findings → results) — 여기서 늦게
@@ -356,6 +360,8 @@ def summarize(response_or_stages: Any) -> dict[str, Any]:
         risk_level = decision.get("risk_level") if isinstance(decision, Mapping) else None
         final_stage = v2_next_stage(risk_level)
         others = sum(1 for t in document_types if t.lower() == "other")
+        if document_types and not stages_for(stages, STAGE_EXTRACT):
+            extracted_count = 0  # 대상 외 — 추출 단계 자체가 없다(머리 주석)
     else:
         risk_level = next((r for r in (_risk_level(s) for s in _usable_for(stages, STAGE_RISK)) if r), None)
         final_stage = next((k for k in (_key_of(s) for s in stages if _usable(s)) if k in FINAL_STAGES), None)
@@ -366,7 +372,7 @@ def summarize(response_or_stages: Any) -> dict[str, Any]:
         "stage_counts": dict(Counter(names)),
         "document_count": _count_or_none(len(document_types)),
         "document_types": document_types or None,
-        "extracted_document_count": _count_or_none(extracted),
+        "extracted_document_count": extracted_count,
         "risk_level": risk_level,
         "final_stage": final_stage,
         "other_document_count": _count_or_none(others),

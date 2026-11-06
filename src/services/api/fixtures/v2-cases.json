@@ -8349,7 +8349,7 @@
       "document_types": [
         "Other"
       ],
-      "extracted_document_count": null,
+      "extracted_document_count": 0,
       "risk_level": "검토 필요",
       "final_stage": "검토_안내",
       "other_document_count": 1

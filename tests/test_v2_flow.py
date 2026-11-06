@@ -286,9 +286,31 @@ def test_summary_keys_are_unchanged_and_other_count() -> None:
     keys = {"stage_names", "stage_counts", "document_count", "document_types", "extracted_document_count", "risk_level", "final_stage", "other_document_count"}
     summary = summarize(load("R"))
     assert set(summary) == keys
-    assert summary["document_types"] == ["Other"] and summary["other_document_count"] == 1 and summary["extracted_document_count"] is None
+    # 대상 외 — 분류 서류를 읽었는데 추출 단계가 없으면 0(못 읽은 것이 아니다)
+    assert summary["document_types"] == ["Other"] and summary["other_document_count"] == 1 and summary["extracted_document_count"] == 0
     summary = summarize(load("A"))
     assert summary["other_document_count"] is None and summary["document_count"] == 4 and summary["extracted_document_count"] == 4
+
+
+def test_extracted_count_is_zero_only_when_no_extract_step_exists() -> None:
+    # 추출 단계가 있는데 읽지 못했으면(실패 · 본문이 객체 아님) 옛 응답과 같이 None — 0 과 섞지 않는다
+    response = load("E")
+    for step in response["output"]:
+        if step.get("step_type") == "information-extract":
+            step["status"] = "failed"
+    assert summarize(response)["document_count"] == 1 and summarize(response)["extracted_document_count"] is None
+    response = load("E")
+    for step in response["output"]:
+        if step.get("step_type") == "information-extract":
+            step["content"][0]["text"] = "못 읽는 글"
+    assert summarize(response)["extracted_document_count"] is None
+    # 분류 서류를 못 읽었으면 추출 단계가 없어도 None(판정 단계만 남은 응답)
+    response = load("R")
+    response["output"] = [step for step in response["output"] if step.get("step_type") not in ("document-classify", "information-extract")]
+    summary = summarize(response)
+    assert summary["document_count"] is None and summary["extracted_document_count"] is None
+    # 옛 모양은 그대로 — 추출 단계가 없으면 None
+    assert summarize({"output": []})["extracted_document_count"] is None
 
 
 def test_verdict_low_branch_synthetic() -> None:

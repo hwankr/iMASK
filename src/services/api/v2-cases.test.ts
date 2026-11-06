@@ -115,7 +115,8 @@ function rowsOf(markup: string): [string, string, string][] {
   for (let m = re.exec(markup); m; m = re.exec(markup)) out.push([m[1], m[2], m[3]]);
   return out;
 }
-const unescapeHtml = (s: string) => s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#x27;/g, "'");
+const HTML_ENTITIES: Record<string, string> = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#x27;': "'" };
+const unescapeHtml = (s: string) => s.replace(/&(?:amp|lt|gt|quot|#x27);/g, (e) => HTML_ENTITIES[e]);
 
 const SECTIONS = [ReportSummary, ReportReasons, ReportDocTable, ReportFindings, ReportRemaining, ReportRecs, ReportMemo, ReportHistory];
 const renderReport = (v: ReportView) =>
@@ -125,22 +126,116 @@ const file = (a: Analysis, format: 'csv' | 'json') => buildExportFile(reportSafe
 /** raw-mask.ts 의 예외 칸 — 시험은 구현을 가져다 쓰지 않고 전체 꼴을 따로 맞춘다 */
 const SELF_CELL = /^(?:[^[\]]+\[\d+\]\.)?(?:중_관계|중_대리인_관계|중_법정대리인_관계|중_가족관계)(?:#\d+)?$/;
 
-/**
- * 안전한 사본에 없어야 할 원문 값 — 탐지 항목 value 중 masked 와 다르고 2글자 이상인 것. 관계 칸의 다른 값도 모두 검사한다.
- * 뺀 것은 둘: 정해진 관계 칸의 값 '본인'(raw-mask.ts 의 유일한 예외)과, 어떤 항목의 표시값에 그대로 들어 있는 짧은 값(표시값의 안 가린 앞부분과 같은 값).
- */
+/* 원문 검사 — 일치한 자리로 판단한다.
+   후보(rawValues): 탐지 항목 value 전부. 어떤 칸 표시값에 들어 있어도 후보에서 빼지 않는다. 뺀 것은 둘 — 한 글자 값(raw-mask.ts 의 바꾸기 대상이 아니다)과
+   정해진 관계 칸(risk_source workflow)의 값이 정확히 '본인' 인 항목(raw-mask.ts 의 유일한 예외 — 같은 값이 다른 칸에 있으면 그 항목 때문에 후보다).
+   글 단위: 마크업은 같은 글 흐름의 이어진 글 하나 · 속성 값 하나(markupUnits — 인라인 태그를 넘어 합치고 블록 요소 · 표 칸 · br 등 그 밖의 태그에서 끊어, 칸 경계에서 우연히 생기는 겹침은 막고
+   인라인 자식으로 갈린 값은 잡는다), CSV 는 칸 하나(csvUnits), JSON 은 값 · 키 하나, 안전한 사본은 문자열 값 하나(valueUnits).
+   판단(hits): 글 단위 안의 탐지 항목 표시값(masked 전체 글자) 안에 통째로 든 일치만 허용하고, 표시값 밖의 일치는 실패다. 표시값이 앞 · 뒤 어디를 보여 주든, 인라인 자식으로 갈려 있어도 이 자리뿐이다.
+   표시값을 지운 뒤 찾는 것과 같은 자리를 허용하되 실제로 지우지 않고 자리로 비교한다 — 지우면 표시값에 걸친 일치를 놓치고 지운 양쪽이 붙어 없던 일치가 생긴다.
+   3자 이하 숫자만인 값은 앞뒤가 숫자가 아닌 자리만 일치로 센다. 경계는 글자 노드 안에서 본다 — 옆 노드의 숫자가 실제로 붙어 보이는지 마크업만으로는 모른다. */
 function rawValues(a: Analysis): string[] {
-  const shown = a.findings.map((f) => f.masked);
   const out = new Set<string>();
   for (const f of a.findings) {
     const v = f.live?.value ?? '';
-    if (!v || v === f.masked || Array.from(v).length < 2) continue;
-    if (v === '본인' && SELF_CELL.test(f.live?.field ?? '')) continue;
-    if (!shown.some((m) => m.includes(v))) out.add(v);
+    if (Array.from(v).length < 2) continue;
+    if (v === '본인' && f.live?.riskSource === 'workflow' && SELF_CELL.test(f.live.field)) continue;
+    out.add(v);
   }
   return [...out];
 }
-const hits = (raws: string[], text: string) => raws.filter((x) => text.includes(x));
+const masksOf = (a: Analysis): string[] => a.findings.map((f) => f.masked).filter(Boolean);
+
+const isDigit = (c: string | undefined) => c !== undefined && c >= '0' && c <= '9';
+/** 글 단위 — 글 하나, 또는 글자 노드가 갈린 이어진 글(cuts = 노드가 갈리는 자리) */
+type Unit = string | { text: string; cuts: number[] };
+/** 값이 글 단위 하나에서 표시값 밖에 있는지 */
+function outsideMask(value: string, unit: Unit, masks: readonly string[]): boolean {
+  const text = typeof unit === 'string' ? unit : unit.text;
+  const cuts = typeof unit === 'string' ? [] : unit.cuts;
+  const short = /^\d{1,3}$/.test(value);
+  const digitBeside = (i: number, edge: number) => isDigit(text[i]) && !cuts.includes(edge);
+  for (let start = text.indexOf(value); start !== -1; start = text.indexOf(value, start + 1)) {
+    const end = start + value.length;
+    if (short && (digitBeside(start - 1, start) || digitBeside(end, end))) continue;
+    const covered = masks.some((m) => {
+      for (let at = text.indexOf(m); at !== -1 && at <= start; at = text.indexOf(m, at + 1)) if (end <= at + m.length) return true;
+      return false;
+    });
+    if (!covered) return true;
+  }
+  return false;
+}
+/** 값 꼴 — 실패 메시지에 값을 내지 않는다 */
+const shapeOf = (v: string) => `${Array.from(v).length}자${/^\d+$/.test(v) ? '·숫자' : ''}`;
+/** 어느 글 단위에서든 표시값 밖에 일치가 있는 값(꼴만) */
+const hits = (raws: readonly string[], units: readonly Unit[], masks: readonly string[]) => raws.filter((v) => units.some((u) => outsideMask(v, u, masks))).map(shapeOf);
+
+/** 같은 글 흐름을 잇는 인라인 태그 — 마크업에는 배치가 없어 태그로 정한다. 그 밖(블록 요소 · 표 칸 · br · 버튼 · 그림 · svg 등)은 글 흐름을 끊는다 */
+const INLINE_TAGS = new Set(['a', 'abbr', 'b', 'bdi', 'bdo', 'cite', 'code', 'data', 'del', 'dfn', 'em', 'i', 'ins', 'kbd', 'label', 'mark', 'q', 's', 'samp', 'small', 'span', 'strong', 'sub', 'sup', 'time', 'u', 'var', 'wbr']);
+/** renderToStaticMarkup 글 → 이어진 글 · 속성 값 하나씩(엔티티를 푼 글). React 는 글과 속성의 < > " 를 엔티티로 적으므로 태그를 이렇게 나눠도 된다 */
+function markupUnits(markup: string): Unit[] {
+  const units: Unit[] = [];
+  let nodes: string[] = [];
+  const closeRun = () => {
+    if (nodes.length === 0) return;
+    const cuts: number[] = [];
+    let offset = 0;
+    for (const node of nodes.slice(0, -1)) {
+      offset += node.length;
+      cuts.push(offset);
+    }
+    units.push({ text: nodes.join(''), cuts });
+    nodes = [];
+  };
+  const tag = /<\/?([^\s/>]+)[^>]*>/g;
+  let at = 0;
+  for (let m = tag.exec(markup); m; m = tag.exec(markup)) {
+    if (m.index > at) nodes.push(unescapeHtml(markup.slice(at, m.index)));
+    at = tag.lastIndex;
+    if (!INLINE_TAGS.has(m[1].toLowerCase())) closeRun();
+    for (const attr of m[0].matchAll(/\s[^\s=]+="([^"]*)"/g)) units.push(unescapeHtml(attr[1]));
+  }
+  if (at < markup.length) nodes.push(unescapeHtml(markup.slice(at)));
+  closeRun();
+  return units;
+}
+const unitText = (unit: Unit) => (typeof unit === 'string' ? unit : unit.text);
+/** CSV 글 → 칸 하나씩(BOM · CRLF · 따옴표 규칙을 푼 글) */
+function csvUnits(text: string): string[] {
+  const units: string[] = [];
+  const body = text.replace(/^\uFEFF/, '');
+  let cell = '';
+  let quoted = false;
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (quoted) {
+      if (c !== '"') cell += c;
+      else if (body[i + 1] === '"') {
+        cell += '"';
+        i += 1;
+      } else quoted = false;
+    } else if (c === '"') quoted = true;
+    else if (c === ',' || c === '\n') {
+      units.push(cell.replace(/\r$/, ''));
+      cell = '';
+    } else cell += c;
+  }
+  if (cell) units.push(cell);
+  return units;
+}
+/** 값 → 문자열 값 하나씩. whole 이면 숫자 값 · 키도 하나씩(내보낸 JSON — 좌표 같은 숫자가 있는 안전한 사본은 문자열만 본다) */
+function valueUnits(value: unknown, whole = false, out: string[] = []): string[] {
+  if (typeof value === 'string' || (whole && typeof value === 'number')) out.push(String(value));
+  else if (value && typeof value === 'object') {
+    for (const [key, part] of Object.entries(value)) {
+      if (whole && !Array.isArray(value)) out.push(key);
+      valueUnits(part, whole, out);
+    }
+  }
+  return out;
+}
+const fileUnits = (a: Analysis, format: 'csv' | 'json') => (format === 'csv' ? csvUnits(file(a, format).text) : valueUnits(JSON.parse(file(a, format).text), true));
 
 /** 케이스마다 기대 모양(tests/test_v2_fixture_sync.py SHAPES 와 같은 값) */
 const WANT: Record<V2Case, { risk: string; badge: string; kinds: ReviewItemType[]; bundle: string; linkRow: string | null; next: string; docs: string[] }> = {
@@ -620,6 +715,9 @@ describe('빈 서식 · 대상 외 · 같은 서식 두 건', () => {
     expect(a.findings).toEqual([]);
     expect(a.items.map((i) => [i.type, i.live?.id])).toEqual([['other', 'other:0']]);
     expect(viewer(a).notices.map((n) => n.title)).toContain('기타 서류 안내');
+    // 추출 단계가 없는 대상 외 — '읽지 못함' 이 아니라 0개
+    expect(summaryRows(v2Case('R'), { createdAt: '', updatedAt: '', jobId: '' }).find((r) => r.key === 'extracted')?.value).toBe('0개');
+    expect(rowsOf(summaryHtml(a)).find(([k]) => k === 'extracted')?.[2]).toBe('0개');
     expect(finalFlowRows(a.raw?.bundleCheck, a.links)).toEqual([{ key: 'bundle', label: '묶음 검증', value: '실패 · 실패 1' }]);
     expect(reportView(reportSafeAnalysis(a)).remaining.map((x) => x.type)).toEqual(['기타 서류']);
     expect(file(a, 'csv').text.split('\r\n').length).toBe(2);
@@ -643,16 +741,18 @@ describe('빈 서식 · 대상 외 · 같은 서식 두 건', () => {
 });
 
 describe('보고서 · 내보내기 안전 사본', () => {
-  it.each(ALL)('%s — 원문 값 없음(보고서 마크업 · CSV · JSON), 사본의 raw.result 는 null, 판정 토큰은 그대로', (key) => {
+  it.each(ALL)('%s — 표시값 밖에 원문 값 없음(안전한 사본의 글 값 · 보고서 마크업 · CSV · JSON), 사본의 raw.result 는 null, 판정 토큰은 그대로', (key) => {
     const a = live(key);
     const raws = rawValues(a);
+    const masks = masksOf(a);
     if (a.findings.length) expect(raws.length).toBeGreaterThan(0);
     const safe = reportSafeAnalysis(a);
     expect(safe.raw?.result).toBeNull();
     expect(safe.findings.every((f) => f.evidence === '' && f.live?.value === '')).toBe(true);
     expect(safe.raw?.decision).toEqual(a.raw?.decision);
-    expect(hits(raws, renderReport(reportView(safe)))).toEqual([]);
-    for (const format of ['csv', 'json'] as const) expect(hits(raws, file(a, format).text), format).toEqual([]);
+    expect(hits(raws, valueUnits(safe), masks)).toEqual([]);
+    expect(hits(raws, markupUnits(renderReport(reportView(safe))), masks)).toEqual([]);
+    for (const format of ['csv', 'json'] as const) expect(hits(raws, fileUnits(a, format), masks), format).toEqual([]);
   });
 
   it('판정 토큰 500개 경계 — 사본도 500개까지 읽어 원문을 가린다(500번째 안 값까지), 501번째는 읽지 않는다', () => {
@@ -692,11 +792,180 @@ describe('보고서 · 내보내기 안전 사본', () => {
     const a = liveOf(r);
     expect(decisionRows(a.raw?.decision)?.find((x) => x.key === 'reason')?.value).toBe(`근거 ${raw}`);
     const safe = reportSafeAnalysis(a);
-    expect(hits([raw], JSON.stringify(safe.raw?.decision))).toEqual([]);
-    expect(hits([raw], JSON.stringify(safe.riskReasons))).toEqual([]);
-    expect(hits([raw], JSON.stringify(safe.recs))).toEqual([]);
-    expect(hits([raw], renderReport(reportView(safe)))).toEqual([]);
-    for (const format of ['csv', 'json'] as const) expect(hits([raw], file(a, format).text), format).toEqual([]);
+    const masks = masksOf(a);
+    expect(hits([raw], valueUnits(safe.raw?.decision), masks)).toEqual([]);
+    expect(hits([raw], valueUnits(safe.riskReasons), masks)).toEqual([]);
+    expect(hits([raw], valueUnits(safe.recs), masks)).toEqual([]);
+    expect(hits([raw], markupUnits(renderReport(reportView(safe))), masks)).toEqual([]);
+    for (const format of ['csv', 'json'] as const) expect(hits([raw], fileUnits(a, format), masks), format).toEqual([]);
+  });
+});
+
+describe('원문 검사 규칙 — 표시값 안의 일치만 허용한다', () => {
+  /** 시험 안에서 만드는 값(음절 둘 · 숫자) — 고정 자료 · 고정 글에 없다 */
+  const word = (n: number) => Array.from({ length: 2 }, (_, i) => String.fromCodePoint(0xb2e4 + n * 53 + i)).join('');
+  const W = word(1);
+  const N = String(60 + 37);
+  const stars = (n: number) => '*'.repeat(n);
+
+  it('표시값 안은 통과 — 앞부분 · 뒷부분 · 가운데 · 긴 글 속의 표시값', () => {
+    for (const mask of [`${W}${stars(4)}`, `${stars(4)}${W}`, `${stars(2)}-${W}-${stars(2)}`]) {
+      expect(hits([W], [mask], [mask])).toEqual([]);
+      expect(hits([W], [`앞 글 ${mask} 뒤 글`], [mask])).toEqual([]);
+    }
+  });
+
+  it('표시값 밖은 실패 — 같은 글 단위 · 다른 글 단위, 표시값이 없으면 어디든', () => {
+    const mask = `${stars(4)}${W}`;
+    expect(hits([W], [`${mask} ${W}`], [mask])).toEqual(['2자']);
+    expect(hits([W], [mask, `앞 글 ${W}`], [mask])).toEqual(['2자']);
+    expect(hits([W], [W], [])).toEqual(['2자']);
+  });
+
+  it('표시값에 걸친 일치 · 표시값 일부만 있는 글 · 한 글자 표시값은 허용하지 않는다(지운 뒤 찾으면 놓치는 자리)', () => {
+    const [first, second] = Array.from(W);
+    expect(hits([W], [`${stars(2)}${W}`], [`${stars(2)}${first}`])).toEqual(['2자']);
+    expect(hits([W], [`${W}${stars(1)}`], [`${W}${stars(4)}`])).toEqual(['2자']);
+    expect(hits([W], [W], [first, second])).toEqual(['2자']);
+  });
+
+  it('지운 양쪽이 붙어 생기는 일치는 만들지 않는다', () => {
+    const [first, second] = Array.from(W);
+    expect(hits([W], [`${first}${stars(3)}${second}`], [stars(3)])).toEqual([]);
+  });
+
+  it('3자 이하 숫자는 앞뒤가 숫자가 아닌 자리만 센다, 4자 이상은 어디든 센다', () => {
+    for (const text of [`1${N}`, `${N}1`, `1${N}1`]) expect(hits([N], [text], [])).toEqual([]);
+    for (const text of [N, `"${N}"`, `가${N}나`, `a${N}b`, `1.${N}`, `${N}.5`, `-${N}%`]) expect(hits([N], [text], [])).toEqual(['2자·숫자']);
+    const three = `${N}3`;
+    expect(hits([three], [`1${three}`], [])).toEqual([]);
+    expect(hits([three], [`-${three}-`], [])).toEqual(['3자·숫자']);
+    const four = `${three}4`;
+    expect(hits([four], [`1${four}2`], [])).toEqual(['4자·숫자']);
+  });
+
+  it('후보 — 표시값에 든 값 · 표시값과 같은 값도 남는다, 뺀 것은 한 글자 값 · 정해진 관계 칸의 본인뿐', () => {
+    const SELF = '본인';
+    const analysis = (...cells: [string, string, string, ('workflow' | null)?][]) =>
+      ({ findings: cells.map(([field, value, masked, source = 'workflow']) => ({ masked, live: { field, value, riskSource: source } })) }) as unknown as Analysis;
+    expect(rawValues(analysis(['중_비율', N, stars(2)], ['중_전화', `010${N}`, `${stars(3)}${N}`]))).toEqual([N, `010${N}`]);
+    expect(rawValues(analysis(['중_번호', `${N}****`, `${N}****`]))).toEqual([`${N}****`]);
+    expect(rawValues(analysis(['중_a', '1', '*'], ['중_b', '가', '*'], ['중_c', String.fromCodePoint(0x1f600), '*'], ['중_d', '', '']))).toEqual([]);
+    for (const field of ['중_관계', '중_대리인_관계', '법적대리인[0].중_법정대리인_관계', '가족카드신청인정보[3].중_가족관계#2']) expect(rawValues(analysis([field, SELF, '본*'])), field).toEqual([]);
+    expect(rawValues(analysis(['중_관계', SELF, '본*', null]))).toEqual([SELF]);
+    expect(rawValues(analysis(['중_관계x', SELF, '본*']))).toEqual([SELF]);
+    expect(rawValues(analysis(['중_관계', `${SELF}인`, '본**']))).toEqual([`${SELF}인`]);
+    expect(rawValues(analysis(['중_관계', SELF, '본*'], ['중_성명', SELF, '본*']))).toEqual([SELF]);
+  });
+
+  it('글 단위 — 마크업은 이어진 글 · 속성 값 하나씩, 엔티티는 풀고, 칸 경계에서 생기는 겹침은 일치가 아니다', () => {
+    const [first, second] = Array.from(W);
+    const cells = `<tr><td class="a">앞${first}</td><td>${second}뒤</td></tr>`;
+    expect(cells.replace(/<[^>]*>/g, '')).toContain(W);
+    expect(markupUnits(cells).map(unitText)).toEqual(['a', `앞${first}`, `${second}뒤`]);
+    expect(hits([W], markupUnits(cells), [])).toEqual([]);
+    expect(hits([W], markupUnits(`<td>칸 ${W}</td>`), [])).toEqual(['2자']);
+    expect(hits([W], markupUnits(`<i title="칸 ${W}"></i>`), [])).toEqual(['2자']);
+    expect(markupUnits('<p data-x="&lt;a&gt; &quot;b&quot; &#x27;c&#x27;">&amp;lt; 1 &gt; 2</p>\n').map(unitText)).toEqual(['<a> "b" \'c\'', '&lt; 1 > 2', '\n']);
+    const special = `${W}&<`;
+    expect(hits([special], markupUnits(renderToStaticMarkup(createElement('p', { title: special }))), [])).toEqual(['4자']);
+    expect(hits([special], markupUnits(renderToStaticMarkup(createElement('p', null, special))), [])).toEqual(['4자']);
+  });
+
+  describe('이어진 인라인 글(검증 V-T3-2 minor 1)', () => {
+    /** 코드로 만든 여섯 글자 값 — 앞뒤로 나눠 넣는다 */
+    const LONG = Array.from({ length: 6 }, (_, i) => String.fromCodePoint(0xc544 + i * 29)).join('');
+    const front = LONG.slice(0, 3);
+    const back = LONG.slice(3);
+    const fail = ['6자'];
+
+    it.each([
+      ['일반 글 + 자식 span', `<p>${front}<span>${back}</span></p>`],
+      ['자식 span 둘', `<p><span>${front}</span><span>${back}</span></p>`],
+      ['b + i', `<div><b>${front}</b><i>${back}</i></div>`],
+      ['겹친 인라인', `<p><span><b>${front}</b></span><a href="#x"><em>${back}</em></a></p>`],
+      ['세 조각', `<p>${LONG.slice(0, 2)}<strong>${LONG.slice(2, 4)}</strong>${LONG.slice(4)}</p>`],
+      ['표 칸 안의 인라인', `<td>${front}<span>${back}</span></td>`],
+      ['블록 안에서 이어진 글', `<div><p>앞 글</p><p>${front}<span>${back}</span> 뒤 글</p></div>`],
+    ])('인라인 자식을 넘어 합친다 — %s', (_name, html) => {
+      expect(hits([LONG], markupUnits(html), [])).toEqual(fail);
+    });
+
+    it.each([
+      ['표 칸', `<table><tbody><tr><td>${front}</td><td>${back}</td></tr></tbody></table>`],
+      ['머리 칸', `<tr><th>${front}</th><th>${back}</th></tr>`],
+      ['칸 안의 인라인', `<tr><td><span>${front}</span></td><td><span>${back}</span></td></tr>`],
+      ['블록 둘', `<div>${front}</div><div>${back}</div>`],
+      ['블록 + 글', `<div><p>${front}</p>${back}</div>`],
+      ['빈 블록 사이', `<div>${front}<p></p>${back}</div>`],
+      ['목록 항목', `<ul><li>${front}</li><li>${back}</li></ul>`],
+      ['br', `<p>${front}<br/>${back}</p>`],
+      ['그림', `<p>${front}<img src="x"/>${back}</p>`],
+      ['버튼', `<p>${front}<button>${back}</button></p>`],
+      ['svg', `<p>${front}<svg><text>${back}</text></svg></p>`],
+    ])('블록 · 표 칸 등의 경계는 넘지 않는다 — %s', (_name, html) => {
+      expect(hits([LONG], markupUnits(html), [])).toEqual([]);
+    });
+
+    it('표시값 범위는 합친 글에 적용한다 — 인라인 자식으로 갈린 표시값 안은 통과, 그 밖은 실패', () => {
+      const mask = `${stars(4)}${N}`;
+      expect(hits([N], markupUnits(`<p>${stars(4)}<span>${N}</span></p>`), [mask])).toEqual([]);
+      expect(hits([LONG], markupUnits(`<p>${stars(2)}${front}<b>${back}</b></p>`), [`${stars(2)}${LONG}`])).toEqual([]);
+      expect(hits([N], markupUnits(`<p>${stars(4)}<span>${N}</span> <b>${N}</b></p>`), [mask])).toEqual(['2자·숫자']);
+      expect(hits([LONG], markupUnits(`<p>${stars(2)}${front}<b>${back}</b></p>`), [`${stars(2)}${front}`])).toEqual(fail);
+    });
+
+    it('숫자 경계는 글자 노드 안에서 본다 — 옆 노드의 숫자는 경계를 없애지 않고, 갈린 숫자는 합쳐서 찾는다', () => {
+      expect(hits([N], markupUnits(`<p><span>${N}</span><span>3건</span></p>`), [])).toEqual(['2자·숫자']);
+      expect(hits([N], markupUnits(`<p><span>1${N}</span></p>`), [])).toEqual([]);
+      expect(hits([N], markupUnits(`<p>${N[0]}<span>${N[1]}</span></p>`), [])).toEqual(['2자·숫자']);
+      expect(hits([N], markupUnits(`<p>1${N[0]}<span>${N[1]}</span></p>`), [])).toEqual([]);
+    });
+  });
+
+  it('글 단위 — CSV 는 칸 하나씩, JSON 은 값 · 키 하나씩, 안전한 사본은 문자열 값만', () => {
+    const text = `\uFEFF항목ID,판단근거\r\n"D1-01","${W},""${N}""\n끝"\r\nD1-02,${W}\r\n`;
+    expect(csvUnits(text)).toEqual(['항목ID', '판단근거', 'D1-01', `${W},"${N}"\n끝`, 'D1-02', W]);
+    expect(csvUnits('a,b\r\nc,d')).toEqual(['a', 'b', 'c', 'd']);
+    expect(hits([W], csvUnits(`앞${W.slice(0, 1)},${W.slice(1)}뒤\r\n`), [])).toEqual([]);
+    const value = { 칸: [{ 쪽: Number(N), 글: W }], 없음: null, 참: true };
+    expect(valueUnits(value, true)).toEqual(['칸', '쪽', N, '글', W, '없음', '참']);
+    expect(valueUnits(value)).toEqual([W]);
+  });
+
+  it('실제 출력 — 다른 칸 표시값 뒤쪽에 든 값은 그 자리에서 통과, 표시값 밖에 넣으면 보고서 · CSV · JSON · 안전한 사본 모두 실패', () => {
+    const r = v2Case('A');
+    const [one, two] = rawFindings(r);
+    one.value = N;
+    one.masked = stars(2);
+    two.masked = `${stars(6)}${N}`;
+    const a = liveOf(r);
+    const masks = masksOf(a);
+    const safe = reportSafeAnalysis(a);
+    const report = renderReport(reportView(safe));
+    const csv = file(a, 'csv').text;
+    const json = JSON.parse(file(a, 'json').text) as { 주요위험사유: string[] };
+    const fail = ['2자·숫자'];
+    // 재료가 실제로 들어갔다 — 후보에 남아 있고 그 표시값이 출력의 글 단위에 있다
+    expect(rawValues(a)).toContain(N);
+    expect(markupUnits(report).map(unitText)).toContain(two.masked);
+    expect(csvUnits(csv)).toContain(two.masked);
+    expect(valueUnits(json)).toContain(two.masked);
+    expect(valueUnits(safe)).toContain(two.masked);
+    // 그 자리에서는 통과한다(표시값을 주지 않으면 같은 글이 실패한다)
+    expect(hits([N], markupUnits(report), masks)).toEqual([]);
+    expect(hits([N], csvUnits(csv), masks)).toEqual([]);
+    expect(hits([N], valueUnits(json, true), masks)).toEqual([]);
+    expect(hits([N], valueUnits(safe), masks)).toEqual([]);
+    expect(hits([N], markupUnits(report), [])).toEqual(fail);
+    expect(hits([N], csvUnits(csv), [])).toEqual(fail);
+    // 표시값 밖에 넣는다
+    expect(hits([N], markupUnits(`${report}<p>칸 ${N}</p>`), masks)).toEqual(fail);
+    expect(hits([N], markupUnits(`${report}<i title="칸 ${N}"></i>`), masks)).toEqual(fail);
+    expect(hits([N], markupUnits(`${report}<p>칸 ${N[0]}<span>${N[1]}</span></p>`), masks)).toEqual(fail);
+    expect(hits([N], csvUnits(`${csv}${','.repeat(10)}"칸 ${N}"\r\n`), masks)).toEqual(fail);
+    expect(hits([N], valueUnits({ ...json, 주요위험사유: [...json.주요위험사유, `칸 ${N}`] }, true), masks)).toEqual(fail);
+    expect(hits([N], valueUnits({ ...safe, 더한글: `칸 ${N}` }), masks)).toEqual(fail);
   });
 });
 

@@ -44,7 +44,6 @@ export function LiveResult({ result, createdAt, startedAt = '', updatedAt, jobId
         <h2 id="live-stages-title" className={styles.cardTitle}>
           단계별 결과 <span className={styles.cardCount}>{stages.length}개</span>
         </h2>
-        <p className={styles.cardLead}>워크플로우가 돌려준 순서대로입니다. 단계를 펼치면 결과 JSON(data · additional_values)을 볼 수 있습니다.</p>
         <StageList stages={stages} />
       </section>
     </>

@@ -511,7 +511,7 @@ export interface RawDecisionV2 {
   sensitiveCategories?: undefined;
   /** 검토 사유 목록 */
   reviewReasons: string[] | null;
-  /** 권장 조치 · 검토 안내 글(화면은 overall.next_text 로 보인다 — 판정 표에 넣지 않는다) */
+  /** 권장 조치 · 검토 안내 글(화면은 overall.next_text 로 보인다 — 판정 칸에 넣지 않는다) */
   recommendedAction: string | null;
   /** 판단 근거 */
   reason: string | null;

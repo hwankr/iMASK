@@ -2,12 +2,13 @@
 
 /* ==========================================================================
    실제 분석 상세 — 결과 패널 '분석 요약' 탭(데모에는 없다)
-   - 위험도 판정(overall.text)과 다음 단계 문구(권장 조치 · 검토 안내 — next_text)를 글자 그대로 보인다
-     (줄바꿈 유지, 인용 표시 【…】만 지움 — HTML 로 그리지 않는다). 위험도 판정 키(raw.decision — 최종 흐름 워크플로우)가 있으면
-     판정 본문 대신 키 표(옛 모양 5줄 · 설정 60 은 7줄 — liveModel.ts decisionRows). 머리의 등급 표시는 그대로 overall.level 기준 —
-     등급 글이 옆 배지 라벨과 같으면(검토 필요) 글은 숨긴다(한 번만).
-   - 결과 요약 줄(분류한 서류 · 추출한 서류 · 위험도 · 마지막 단계 · 기타 서류 · (묶음 검증 · 문서 간 연결 — 값이 있을 때만) ·
-     걸린 시간 · Upstage 작업 번호).
+   - 위험도 판정(overall.text)과 다음 단계 문구(권장 조치 · 검토 안내 — next_text)를 글로 보인다
+     (줄바꿈 유지, 인용 · 제목 · 굵게 표시만 지움 — guideText, HTML 로 그리지 않는다). 위험도 판정 키(raw.decision — 최종 흐름 워크플로우)가 있으면
+     판정 본문 대신 판단 근거 · 값이 있는 줄 · 등급별 항목(설정 60 — liveModel.ts decisionView). 등급별 항목은 서류별로 모아
+     접은 칸(<details>)으로 보이고 가장 높은 등급만 펼쳐 둔다. 머리의 등급 표시는 그대로 overall.level 기준 —
+     배지가 같은 등급을 보이면(상 · 높음, 검토 필요) 글은 숨긴다(한 번만).
+   - 결과 요약 줄(분류한 서류 · 추출한 서류 · 마지막 단계 · 기타 서류 · (묶음 검증 · 문서 간 연결 — 값이 있을 때만) ·
+     걸린 시간 · Upstage 작업 번호). 위험도는 칸 머리에 있어 넣지 않는다.
    - 원본 단계별 JSON 은 접은 칸(<details>). 처음 펼칠 때 불러오고(useLiveStages — 상세 화면이 들고 있어 다시 부르지 않음),
      불러오는 중 · 실패(다시 시도) · 단계 없음을 보인다. 단계 목록은 기존 결과 JSON 보기와 같은 StageList.
    ========================================================================== */
@@ -19,7 +20,7 @@ import type { Analysis } from '@/services/types';
 import { guideText } from '@/components/detail/liveViewerModel';
 import { StageList } from './LiveResult';
 import type { LiveStagesState } from './liveHooks';
-import { decisionRows, finalFlowRows, judgeLevelText, nextStageTitle, stageRows, summaryRows, type SummaryRow } from './liveModel';
+import { decisionView, finalFlowRows, judgeLevelText, nextStageTitle, stageRows, summaryRows, type DecisionView, type SummaryRow } from './liveModel';
 import liveStyles from './LiveDetailScreen.module.css';
 import styles from './LiveSummaryTab.module.css';
 
@@ -44,15 +45,51 @@ function Rows({ rows }: { rows: readonly SummaryRow[] }) {
   );
 }
 
+/** 위험도 판정 칸 — 판단 근거 · 값이 있는 줄 · 등급별 항목(가장 높은 등급만 펼쳐 둔다) */
+function Decision({ view }: { view: DecisionView }) {
+  return (
+    <>
+      {view.reason ? <p className={styles.text}>{view.reason}</p> : null}
+      {view.rows.length ? <Rows rows={view.rows} /> : null}
+      {view.groups.length ? (
+        <div className={styles.groups}>
+          {view.groups.map((g, i) => (
+            <details key={g.level} className={styles.group} open={i === 0} data-group={g.level}>
+              <summary className={styles.groupSummary} aria-label={`${analysisRiskView(g.level).label} 등급 항목`}>
+                <Icon name="dg-i-chev-down" size={16} strokeWidth={2.2} className={styles.groupChev} />
+                <RiskBadge level={g.level} size="xs" />
+              </summary>
+              <div className={styles.groupBody}>
+                {g.docs.map((doc) => (
+                  <div key={doc.name} className={styles.groupDoc}>
+                    {doc.name ? <p className={styles.groupDocName}>{doc.name}</p> : null}
+                    <ul className={styles.chips}>
+                      {doc.items.map((item, n) => (
+                        <li key={n} className={styles.chip}>
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </details>
+          ))}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 export function LiveSummaryTab({ analysis: a, stages, onLoadStages }: LiveSummaryTabProps) {
   const raw = a.raw;
   const overall = raw?.overall ?? null;
   const judge = guideText(overall?.text);
   const next = guideText(overall?.nextText);
-  const decision = decisionRows(raw?.decision);
-  // 등급 글이 배지 라벨과 같으면(검토 필요) 숨긴다
+  const decision = decisionView(raw?.decision);
+  // 배지가 같은 등급을 보이면(상 · 높음, 검토 필요) 글은 숨긴다
   const levelText = judgeLevelText(overall?.level, analysisRiskView(a.risk).label);
-  const base = summaryRows(raw?.result ?? null, { createdAt: raw?.createdAt ?? '', startedAt: raw?.startedAt ?? '', updatedAt: raw?.updatedAt ?? '', jobId: raw?.jobId ?? '' });
+  const base = summaryRows(raw?.result ?? null, { createdAt: raw?.createdAt ?? '', startedAt: raw?.startedAt ?? '', updatedAt: raw?.updatedAt ?? '', jobId: raw?.jobId ?? '' }).filter((r) => r.key !== 'risk');
   // 묶음 검증 · 문서 간 연결 줄은 '기타 서류' 다음(걸린 시간 · 작업 번호 앞)에
   const at = base.findIndex((r) => r.key === 'other') + 1;
   const rows = [...base.slice(0, at), ...finalFlowRows(raw?.bundleCheck, a.links), ...base.slice(at)];
@@ -66,7 +103,7 @@ export function LiveSummaryTab({ analysis: a, stages, onLoadStages }: LiveSummar
           <RiskBadge level={a.risk} size="xs" />
           {levelText ? <span className={styles.level}>{levelText}</span> : null}
         </h3>
-        {decision ? <Rows rows={decision} /> : judge ? <p className={styles.text}>{judge}</p> : <p className={styles.none}>위험도 판정 문구가 없습니다.</p>}
+        {decision ? <Decision view={decision} /> : judge ? <p className={styles.text}>{judge}</p> : <p className={styles.none}>위험도 판정 문구가 없습니다.</p>}
       </section>
 
       <section className={styles.block} aria-labelledby="live-next-title">
@@ -112,12 +149,7 @@ export function LiveSummaryTab({ analysis: a, stages, onLoadStages }: LiveSummar
                 </Button>
               </div>
             ) : null}
-            {stages.status === 'ready' ? (
-              <>
-                <p className={styles.lead}>워크플로우가 돌려준 순서대로입니다. 단계를 펼치면 결과 JSON(data · additional_values)을 볼 수 있습니다.</p>
-                <StageList stages={stageRows({ stages: stages.stages ?? [] })} />
-              </>
-            ) : null}
+            {stages.status === 'ready' ? <StageList stages={stageRows({ stages: stages.stages ?? [] })} /> : null}
           </div>
         ) : null}
       </details>

@@ -117,10 +117,13 @@ describe('라벨', () => {
     expect(riskText('검토 필요')).toBe('검토 필요');
     expect(riskText('')).toBe('판정 없음');
     expect(riskText(null)).toBe('판정 없음');
-    // 분석 요약 머리의 등급 글 — 옆 배지 라벨과 같으면 숨김
+    // 분석 요약 머리의 등급 글 — 옆 배지가 같은 등급을 보이면 숨김
     expect(judgeLevelText('검토 필요', '검토 필요')).toBe('');
     expect(judgeLevelText(' 검토 필요 ', '검토 필요')).toBe('');
-    expect(judgeLevelText('상', '높음')).toBe('상');
+    expect(judgeLevelText('상', '높음')).toBe('');
+    expect(judgeLevelText('중', '보통')).toBe('');
+    expect(judgeLevelText('하', '낮음')).toBe('');
+    expect(judgeLevelText('상', '미평가')).toBe('상');
     expect(judgeLevelText(null, '미평가')).toBe('판정 없음');
     expect(judgeLevelText('검토 필요', '미평가')).toBe('검토 필요');
     expect(upstageStatusText('in_progress')).toBe('진행 중(in_progress)');
@@ -146,7 +149,7 @@ describe('결과', () => {
     expect(byKey.docs).toBe('6개 — 대출신청서 · 동의서 · 소득 증빙 · 위임장 · 채무내역 · 기타');
     expect(byKey.extracted).toBe('5개');
     expect(byKey.risk).toBe('상');
-    expect(byKey.final).toBe('권장_조치');
+    expect(byKey.final).toBe('권장 조치');
     expect(byKey.other).toBe('1개');
     expect(byKey.took).toBe('34초');
     expect(byKey.job).toBe('job_abc');

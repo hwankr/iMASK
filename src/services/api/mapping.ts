@@ -17,7 +17,7 @@
      옛 결과). reviewable 이면 해결 기록(review.items)을 덧씌운다(overlayItemReviews). 그 밖은 빈 목록.
    - 문서 간 연결은 detailReady 일 때만 서버가 계산한 result.links 를 옮긴다(contract.ts toLiveLinks — 읽기 전용, 없으면 []).
      검토사항의 link_id 는 그 연결의 화면 번호(linkId)가 된다. 위험도 판정 키(result.decision — 옛 키 5개 · 설정 60 키 8개) · 묶음 검증(result.bundle_check)은
-     raw.decision · raw.bundleCheck 에 두고(상세 판정 표 — 원래 글, 최종 규칙만), 판정 키가 있으면 주요 위험 사유 = 판단 근거 + 검토 사유 줄
+     raw.decision · raw.bundleCheck 에 두고(상세 판정 칸 — 원래 글, 최종 규칙만), 판정 키가 있으면 주요 위험 사유 = 판단 근거 + 검토 사유 줄
      (contract.ts riskReasonLines — 자르지 않은 응답 값에서 원문 값을 가린 뒤 최종 규칙을 적용한 글). 원문 값 바꾸기(raw-mask.ts)는
      분석 하나를 읽을 때 한 번 만들어 연결 글과 주요 위험 사유에 같이 쓴다.
    - 백엔드가 준 원래 값은 raw 에 둔다(결과 JSON · 올린 파일 · detailReady · reviewable · overall · 오류 · 작업 번호 · 조회 상태 ·

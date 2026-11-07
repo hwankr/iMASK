@@ -12,7 +12,7 @@ import { READ_ONLY_ACTIONS } from '@/components/detail/detailActions';
 import { detailFacts, resultsModel } from '@/components/detail/detailModel';
 import { createDetailState } from '@/components/detail/detailState';
 import { LinkCards } from '@/components/detail/LinkCards';
-import { decisionRows } from '@/components/live/liveModel';
+import { decisionView } from '@/components/live/liveModel';
 import { MAX_TEXT } from '@/services/api/contract';
 import { toAnalysis } from '@/services/api/mapping';
 import { analysisOut, finalFlowResult } from '@/services/api/testing';
@@ -80,9 +80,10 @@ const exported = (a: Analysis, format: 'csv' | 'json') => buildExportFile(report
 const everyOutput = (a: Analysis) => [cardMarkup(a), reportMarkup(a), exported(a, 'json'), exported(a, 'csv')].join('\n');
 
 /** 연결 · 판정에서 나온 최종 글 — masked: 원문 값을 가려야 하는 글(상세 연결 · 안전한 사본 · 주요 위험 사유 · JSON),
- *  detail: 상세 판정 표(원래 글을 보여도 되는 곳 — 최종 규칙만) */
+ *  detail: 상세 판정 칸(원래 글을 보여도 되는 곳 — 최종 규칙만) */
 function finalStrings(a: Analysis): { masked: string[]; detail: string[] } {
   const safe = reportSafeAnalysis(a);
+  const view = decisionView(a.raw?.decision);
   const linkTexts = (ls: Analysis['links']) => ls.flatMap((l) => [l.title, l.missing, l.check, ...l.basis, ...l.docs.map((d) => d.fields)]);
   const json = JSON.parse(exported(a, 'json')) as { 주요위험사유: string[]; 문서간연결: { 내용: string; 근거: string[] }[] };
   return {
@@ -94,7 +95,7 @@ function finalStrings(a: Analysis): { masked: string[]; detail: string[] } {
       ...json.주요위험사유,
       ...json.문서간연결.flatMap((l) => [l.내용, ...l.근거]),
     ],
-    detail: decisionRows(a.raw?.decision)?.map((x) => x.value) ?? [],
+    detail: view ? [view.reason, ...view.rows.map((x) => x.value), ...view.groups.flatMap((g) => g.docs.flatMap((d) => [d.name, ...d.items]))].filter(Boolean) : [],
   };
 }
 
@@ -115,10 +116,10 @@ describe('원문 값이 2,000 코드 포인트 경계를 가로지르는 글', (
         const straddle = 'q'.repeat(MAX_TEXT - before) + v + ' 끝';
         const a = live(plant(finalFlowResult(), () => straddle));
         expect(leaks(everyOutput(a), frags)).toBe(0);
-        // 상세 판정 표(원래 글을 보여도 되는 곳)도 최종 규칙을 지나 한도를 넘는 글은 '-'
-        const rows = decisionRows(a.raw?.decision);
-        expect(rows?.find((x) => x.key === 'reason')?.value).toBe('-');
-        expect(leaks(JSON.stringify(rows), frags)).toBe(0);
+        // 상세 판정 칸(원래 글을 보여도 되는 곳)도 최종 규칙을 지나 한도를 넘는 글은 버린다
+        const view = decisionView(a.raw?.decision);
+        expect(view?.reason ?? '').toBe('');
+        expect(leaks(JSON.stringify(view), frags)).toBe(0);
         cases++;
       }
     }
@@ -150,7 +151,7 @@ describe('masked 치환 결과가 아주 길거나 짝 없는 서로게이트를
       const { masked, detail } = finalStrings(a);
       const strings = [...masked, ...detail];
       expect(masked.length).toBeGreaterThan(20);
-      expect(detail.length).toBe(5);
+      expect(detail.length).toBe(3); // 판단 근거 · 정보 종류 · 검토 사유
       expect(strings.filter((s) => cps(s) > MAX_TEXT).length).toBe(0);
       expect(strings.filter(lone).length).toBe(0);
       expect(masked.filter((s) => s.includes(v)).length).toBe(0);

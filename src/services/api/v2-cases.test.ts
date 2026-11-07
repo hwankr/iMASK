@@ -1,5 +1,5 @@
 /* 백엔드가 만든 설정 60 결과(fixtures/v2-cases.json — tests/test_v2_fixture_sync.py 가 백엔드 출력과 바이트까지 같은지 지킨다. 값은 모두 가상 값) →
-   toAnalysis → 판정 표 · 위험 배지 · 탐지 항목(등급 · 표 칸) · 검토사항(새 종류) · 연결 · 요약 줄 · 서류 이름 · 보고서 · 내보내기.
+   toAnalysis → 판정 칸 · 위험 배지 · 탐지 항목(등급 · 표 칸) · 검토사항(새 종류) · 연결 · 요약 줄 · 서류 이름 · 보고서 · 내보내기.
    판정 7갈래: A 상 · E 중 · L·M 형식 · N·U 불일치 · P·S 누락 · R 대상외 · T 중복. 옛 키 5개 모양은 그대로인지도 본다. */
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -25,7 +25,7 @@ import { LinkCards } from '@/components/detail/LinkCards';
 import { maskPlan } from '@/components/detail/maskPdf';
 import { ReviewItems } from '@/components/detail/ReviewItems';
 import { LiveSummaryTab } from '@/components/live/LiveSummaryTab';
-import { decisionRows, finalFlowRows, summaryRows } from '@/components/live/liveModel';
+import { decisionView, finalFlowRows, summaryRows } from '@/components/live/liveModel';
 import { completeModel, reviewModalModel } from '@/components/modals/reviewModalModel';
 import { reportView, type ReportView } from '@/components/report/reportModel';
 import { ReportHead } from '@/components/report/ReportHead';
@@ -105,7 +105,6 @@ const rawFindings = (r: Obj) => r.findings as RawFinding[];
 const rawItems = (r: Obj) => r.items as RawItem[];
 const rawLinks = (r: Obj) => r.links as RawLink[];
 const tableCells = (a: Analysis) => a.findings.filter((f) => (f.live?.id ?? '').includes('['));
-const joined = (list: readonly string[]) => (list.length ? list.join(', ') : '-');
 
 const summaryHtml = (a: Analysis) => renderToStaticMarkup(createElement(LiveSummaryTab, { analysis: a, stages: { status: 'idle' }, onLoadStages: () => {} }));
 /** dl 줄 [data-row, dt, dd] 차례로 */
@@ -291,20 +290,22 @@ describe('판정 8키 읽기(readDecision)', () => {
     expect(read(100000).highRiskItems?.length).toBe(500);
   });
 
-  it('옛 키 5개 모양은 그대로 — shape 키 없음, 목록 한도 50, 표 5줄', () => {
+  it('옛 키 5개 모양은 그대로 — shape 키 없음, 목록 한도 50, 정보 종류 · 검토 사유 줄', () => {
     const items = Array.from({ length: 60 }, (_, i) => `값${i}`);
     const d = readDecision({ decision: { risk_level: '상', document_types: ['income_proof'], sensitive_categories: items, review_reasons: items, reason: '근거' } });
     expect(d && Object.keys(d)).toEqual(['riskLevel', 'documentTypes', 'sensitiveCategories', 'reviewReasons', 'reason']);
     expect(d?.sensitiveCategories?.length).toBe(MAX_DECISION_ITEMS);
     expect(d?.reviewReasons?.length).toBe(MAX_DECISION_ITEMS);
-    expect(decisionRows(d)?.map((r) => r.key)).toEqual(['risk_level', 'document_types', 'sensitive_categories', 'review_reasons', 'reason']);
-    // 백엔드가 만든 옛 결과도 같은 5줄
-    expect(decisionRows(liveOf(finalFlowRun('C')).raw?.decision)?.map((r) => r.label)).toEqual(['위험도', '서류 종류', '정보 종류', '검토 사유', '판단 근거']);
+    expect(decisionView(d)?.rows.map((r) => r.key)).toEqual(['sensitive_categories', 'review_reasons']);
+    // 백엔드가 만든 옛 결과도 같은 모양 — 등급별 항목이 없고 정보 종류 줄이 있다
+    const old = decisionView(liveOf(finalFlowRun('C')).raw?.decision);
+    expect(old?.groups).toEqual([]);
+    expect(old?.rows.map((r) => r.label)).toContain('정보 종류');
     expect(liveOf(finalFlowRun('C')).raw?.decision?.shape).toBeUndefined();
   });
 });
 
-describe('판정 표 7갈래(decisionRows · 분석 요약 탭)', () => {
+describe('위험도 판정 칸 7갈래(decisionView · 분석 요약 탭)', () => {
   it.each([
     ['판정_상', 'A'],
     ['판정_중', 'E'],
@@ -316,21 +317,33 @@ describe('판정 표 7갈래(decisionRows · 분석 요약 탭)', () => {
     ['판정_형식(표 칸)', 'M'],
     ['판정_누락(빈 서식)', 'S'],
     ['판정_불일치(서류 간)', 'U'],
-  ] as const)('%s(%s) — 7줄, 토큰은 받은 글자 그대로 · 서류 종류는 이름, 빈 목록은 -', (_branch, key) => {
+  ] as const)('%s(%s) — 판단 근거는 글로, 값이 있는 줄만, 항목은 등급 · 서류별로(코드 · 밑줄 없음), 가장 높은 등급만 펼침', (_branch, key) => {
     const raw = rawDecision(key);
     const a = live(key);
-    const want: [string, string, string][] = [
-      ['risk_level', '위험도', raw.risk_level],
-      ['document_types', '서류 종류', joined(raw.document_types.map(docTypeName))],
-      ['high_risk_items', '상 등급 항목', joined(raw.high_risk_items)],
-      ['medium_risk_items', '중 등급 항목', joined(raw.medium_risk_items)],
-      ['low_risk_items', '하 등급 항목', joined(raw.low_risk_items)],
-      ['review_reasons', '검토 사유', joined(raw.review_reasons)],
-      ['reason', '판단 근거', raw.reason],
-    ];
-    expect(decisionRows(a.raw?.decision)?.map((r) => [r.key, r.label, r.value])).toEqual(want);
+    const view = decisionView(a.raw?.decision);
+    expect(view?.reason).toBe(raw.reason);
+    expect(view?.rows).toEqual(raw.review_reasons.length ? [{ key: 'review_reasons', label: '검토 사유', value: raw.review_reasons.join(', ') }] : []);
+    const tokens = [
+      ['high', raw.high_risk_items],
+      ['medium', raw.medium_risk_items],
+      ['low', raw.low_risk_items],
+    ] as const;
+    const present = tokens.filter(([, list]) => list.length);
+    expect(view?.groups.map((g) => [g.level, g.docs.flatMap((d) => d.items).length])).toEqual(present.map(([level, list]) => [level, list.length]));
+    // 토큰 하나가 빠짐없이 '서류 이름 · 칸 이름' 하나가 된다
+    const shown = (token: string) => {
+      const dot = token.indexOf('.');
+      return `${docTypeName(token.slice(0, dot))} | ${token.slice(dot + 1).replace(/_/g, ' ')}`;
+    };
+    for (const g of view?.groups ?? []) {
+      const list = tokens.find(([level]) => level === g.level)?.[1] ?? [];
+      expect(g.docs.flatMap((d) => d.items.map((item) => `${d.name} | ${item}`)).sort()).toEqual(list.map(shown).sort());
+    }
     const html = summaryHtml(a);
-    expect(rowsOf(html).slice(0, 7).map(([k, l, v]) => [k, l, unescapeHtml(v)])).toEqual(want);
+    expect(rowsOf(html).map(([k]) => k).filter((k) => ['risk', 'risk_level', 'document_types', 'reason'].includes(k))).toEqual([]);
+    expect(unescapeHtml(html)).toContain(`>${raw.reason}</p>`);
+    const groups = [...html.matchAll(/<details[^>]*data-group="(\w+)"[^>]*>/g)].map((m) => [m[1], / open=""/.test(m[0])]);
+    expect(groups).toEqual(present.map(([level], i) => [level, i === 0]));
   });
 
   it.each(ALL)('%s — recommended_action 은 표에 없고 다음 단계 구역에 한 번만, 판정 본문은 표가 대신한다', (key) => {
@@ -342,13 +355,12 @@ describe('판정 표 7갈래(decisionRows · 분석 요약 탭)', () => {
     expect(html).toMatch(new RegExp(`id="live-next-title"[^>]*>${WANT[key].next}</h3><p[^>]*>${raw.recommended_action}</p>`));
   });
 
-  it('등급 목록이 비면 - (E 상 등급 없음, R 서류 종류 없음 · 항목 없음, S 항목 없음)', () => {
-    const value = (key: V2Case, row: string) => decisionRows(live(key).raw?.decision)?.find((r) => r.key === row)?.value;
-    expect(value('E', 'high_risk_items')).toBe('-');
-    expect(value('E', 'review_reasons')).toBe('-');
-    expect(value('R', 'document_types')).toBe('-');
-    expect(value('R', 'medium_risk_items')).toBe('-');
-    expect(value('S', 'low_risk_items')).toBe('-');
+  it('값이 없으면 줄 · 등급을 만들지 않는다(E 상 등급 · 검토 사유 없음, R · S 항목 없음)', () => {
+    const view = (key: V2Case) => decisionView(live(key).raw?.decision);
+    expect(view('E')?.groups.map((g) => g.level)).toEqual(['medium', 'low']);
+    expect(view('E')?.rows).toEqual([]);
+    expect(view('R')?.groups).toEqual([]);
+    expect(view('S')?.groups).toEqual([]);
   });
 });
 
@@ -433,13 +445,14 @@ describe('탐지 항목 — 등급 · 표 칸', () => {
     expect(html).toContain(f.label);
   });
 
-  it('펼친 행 — 판단 근거가 없으면 그 줄을 뺀다(원문 위치 줄은 그대로), 옛 미평가 항목은 안내 글이 있어 줄이 있다', () => {
+  it('펼친 행 — 판단 근거가 없으면 그 줄을 뺀다(서류 · 쪽은 메타 줄에 있다), 옛 미평가 항목은 안내 글이 있어 줄이 있다', () => {
     const row = (a: Analysis, f: Finding) => findingModel(a, f, { kind: 'finding', id: f.id });
     const render = (a: Analysis, f: Finding) => renderToStaticMarkup(createElement(FindingRow, { f: row(a, f), locked: false, onToggle: () => {}, onReveal: () => {}, actions: READ_ONLY_ACTIONS }));
     const a = live('A');
     expect(row(a, a.findings[0]).hasReason).toBe(false);
     expect(render(a, a.findings[0])).not.toContain('판단 근거');
-    expect(render(a, a.findings[0])).toContain('원문 위치');
+    expect(render(a, a.findings[0])).not.toContain('원문 위치');
+    expect(render(a, a.findings[0])).toContain(row(a, a.findings[0]).where);
     const old = liveOf(contractResult());
     expect(row(old, old.findings[0]).hasReason).toBe(true);
     expect(render(old, old.findings[0])).toContain('판단 근거');
@@ -773,12 +786,12 @@ describe('보고서 · 내보내기 안전 사본', () => {
     expect(safe.mediumRiskItems?.length).toBe(500);
     expect(safe.mediumRiskItems?.[499]).toBe(`서식.${masked}`);
     expect(safe.mediumRiskItems?.[498]).toBe('서식.칸498');
-    expect(decisionRows(safe)?.find((x) => x.key === 'medium_risk_items')?.value).not.toContain(raw);
+    expect(JSON.stringify(decisionView(safe))).not.toContain(raw);
     // 사유 줄에 토큰은 들어가지 않는다 — 내보내기 파일에도 판정 토큰 목록은 없다
     for (const format of ['csv', 'json'] as const) expect(file(a, format).text).not.toContain('서식.칸498');
   });
 
-  it('판단 근거 · 권장 조치 · 검토 사유에 원문 값이 섞여 와도 보고서 · 내보내기에서 가린다(상세 판정 표는 원래 글)', () => {
+  it('판단 근거 · 권장 조치 · 검토 사유에 원문 값이 섞여 와도 보고서 · 내보내기에서 가린다(상세 판정 칸은 원래 글)', () => {
     const r = v2Case('P');
     const base = live('P');
     const raw = rawValues(base)[0];
@@ -790,7 +803,7 @@ describe('보고서 · 내보내기 안전 사본', () => {
     overall.text = d.reason;
     overall.next_text = d.recommended_action;
     const a = liveOf(r);
-    expect(decisionRows(a.raw?.decision)?.find((x) => x.key === 'reason')?.value).toBe(`근거 ${raw}`);
+    expect(decisionView(a.raw?.decision)?.reason).toBe(`근거 ${raw}`);
     const safe = reportSafeAnalysis(a);
     const masks = masksOf(a);
     expect(hits([raw], valueUnits(safe.raw?.decision), masks)).toEqual([]);
@@ -1023,7 +1036,7 @@ describe('원문 값 바꾸기 — 관계 칸의 예외는 값 본인 하나(실
       const raw = marker(2);
       const masked = maskedOf(raw);
       const a = liveOf(withCopied(key, field, raw, renamed));
-      // 재료가 실제로 들어갔다 — 상세 판정 표는 원래 글(대회용 원문 표시 허용), 사본에서만 가린다
+      // 재료가 실제로 들어갔다 — 상세 판정 칸은 원래 글(대회용 원문 표시 허용), 사본에서만 가린다
       expect(a.raw?.decision?.reason).toBe(raw);
       expect(a.raw?.overall?.nextText).toBe(raw);
       expect(leaks(a, raw)).toEqual([]);

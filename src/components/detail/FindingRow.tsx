@@ -22,10 +22,10 @@ export interface FindingRowProps {
 }
 
 /**
- * 탐지 항목 행(Main 472–510 · 디자인 기준 04) — 위험 · 정보 종류 · 확인 상태, 세부 항목, 마스킹 값, 메타 줄.
- * 누르면 같은 자리에서 펼쳐 근거 · 적용 규칙 · 원문 위치 · 근거 문구 · 바뀐 분류 · 오탐/수정 사유 · 메모와 행동 버튼을 보인다.
- * 위치가 없는 항목은 '위치 확인 필요'(강조 대신 근거 문구와 쪽 번호).
- * 실제 분석은 적용 규칙 · 판단 근거가 없으면 그 줄을 빼고(설정 60 항목은 등급만 있고 사유가 없다), 분류 확인 필요 · 인식 신뢰도 낮음 안내를 보인다.
+ * 탐지 항목 행(Main 472–510 · 디자인 기준 04) — 위험 · 정보 종류 · 확인 상태, 세부 항목, 값(실제 분석은 원문 · 데모는 마스킹 값), 메타 줄.
+ * 누르면 같은 자리에서 펼쳐 근거 · 적용 규칙 · 근거 문구 · 바뀐 분류 · 오탐/수정 사유 · 메모와 행동 버튼을 보인다(보일 줄이 없으면 행동 버튼만).
+ * 서류 · 쪽과 '위치 확인 필요'는 메타 줄에 있어 펼친 내용에 다시 적지 않는다.
+ * 실제 분석은 적용 규칙 · 판단 근거가 없으면 그 줄을 빼고(설정 60 항목은 등급만 있고 사유가 없다), 근거 문구 줄도 행의 값과 같아 빼며, 분류 확인 필요 · 인식 신뢰도 낮음 안내를 보인다.
  * readOnly(검토 기록을 불러오지 못한 실제 분석)면 검토 동작 버튼만 막는다(안내 문구는 없다).
  * 마스킹 미리보기 중(onMaskPick)에는 행 왼쪽에 가림 버튼이 붙는다 — 가림이면 검은 칸(원문의 검은 상자와 같은 색)에 가린 눈.
  * 화면 상태만 바꾸므로 검토 완료 · 읽기 전용이어도 쓸 수 있다.
@@ -56,7 +56,7 @@ export function FindingRow({ f, locked, readOnly = false, onToggle, onReveal, ac
             <FindingStatusLabel status={f.statusKey} className={styles.status} />
           </span>
           <span className={styles.label}>{f.label}</span>
-          <span className={cx(styles.masked, f.fp && styles.maskedFp)}>{f.masked}</span>
+          <span className={cx(styles.value, f.fp && styles.valueFp)}>{f.value}</span>
           <span className={styles.metaLine}>
             <span className={styles.id}>{f.id}</span>
             <span>· {f.subject}</span>
@@ -76,61 +76,61 @@ export function FindingRow({ f, locked, readOnly = false, onToggle, onReveal, ac
       </button>
       {f.open ? (
         <div className={styles.detail}>
-          <dl className={styles.dl}>
-            {f.hasReason ? (
-              <>
-                <dt className={styles.dt}>판단 근거</dt>
-                <dd className={styles.dd}>{f.reason}</dd>
-              </>
-            ) : null}
-            {f.hasRule ? (
-              <>
-                <dt className={styles.dt}>적용 규칙</dt>
-                <dd className={styles.dd}>
-                  <span className={styles.rule}>{f.rule}</span> <span className={styles.ruleName}>{f.ruleName}</span>
-                </dd>
-              </>
-            ) : null}
-            <dt className={styles.dt}>원문 위치</dt>
-            <dd className={cx(styles.dd, f.noLoc && styles.ddWarn)}>{f.locText}</dd>
-            {f.notes.length ? (
-              <>
-                <dt className={styles.dt}>확인할 점</dt>
-                <dd className={cx(styles.dd, styles.notes)}>
-                  {f.notes.map((n) => (
-                    <span key={n} className={styles.note}>
-                      <Icon name="dg-i-alert" size={13} strokeWidth={2.2} />
-                      {n}
-                    </span>
-                  ))}
-                </dd>
-              </>
-            ) : null}
-            {f.hasEvidence ? (
-              <>
-                <dt className={styles.dt}>근거 문구</dt>
-                <dd className={styles.dd}>“{f.evidence}”</dd>
-              </>
-            ) : null}
-            {f.changed ? (
-              <>
-                <dt className={styles.dt}>최초 AI 결과</dt>
-                <dd className={cx(styles.dd, styles.dd2)}>{f.aiText}</dd>
-              </>
-            ) : null}
-            {f.note ? (
-              <>
-                <dt className={styles.dt}>{f.noteLabel}</dt>
-                <dd className={styles.dd}>{f.note}</dd>
-              </>
-            ) : null}
-            {f.memo ? (
-              <>
-                <dt className={styles.dt}>메모</dt>
-                <dd className={styles.dd}>{f.memo}</dd>
-              </>
-            ) : null}
-          </dl>
+          {f.hasFacts ? (
+            <dl className={styles.dl}>
+              {f.hasReason ? (
+                <>
+                  <dt className={styles.dt}>판단 근거</dt>
+                  <dd className={styles.dd}>{f.reason}</dd>
+                </>
+              ) : null}
+              {f.hasRule ? (
+                <>
+                  <dt className={styles.dt}>적용 규칙</dt>
+                  <dd className={styles.dd}>
+                    <span className={styles.rule}>{f.rule}</span> <span className={styles.ruleName}>{f.ruleName}</span>
+                  </dd>
+                </>
+              ) : null}
+              {f.notes.length ? (
+                <>
+                  <dt className={styles.dt}>확인할 점</dt>
+                  <dd className={cx(styles.dd, styles.notes)}>
+                    {f.notes.map((n) => (
+                      <span key={n} className={styles.note}>
+                        <Icon name="dg-i-alert" size={13} strokeWidth={2.2} />
+                        {n}
+                      </span>
+                    ))}
+                  </dd>
+                </>
+              ) : null}
+              {f.hasEvidence ? (
+                <>
+                  <dt className={styles.dt}>근거 문구</dt>
+                  <dd className={styles.dd}>“{f.evidence}”</dd>
+                </>
+              ) : null}
+              {f.changed ? (
+                <>
+                  <dt className={styles.dt}>최초 AI 결과</dt>
+                  <dd className={cx(styles.dd, styles.dd2)}>{f.aiText}</dd>
+                </>
+              ) : null}
+              {f.note ? (
+                <>
+                  <dt className={styles.dt}>{f.noteLabel}</dt>
+                  <dd className={styles.dd}>{f.note}</dd>
+                </>
+              ) : null}
+              {f.memo ? (
+                <>
+                  <dt className={styles.dt}>메모</dt>
+                  <dd className={styles.dd}>{f.memo}</dd>
+                </>
+              ) : null}
+            </dl>
+          ) : null}
           <div className={styles.actions}>
             {f.canConfirm ? (
               <Button size="item" variant="primary" icon="dg-i-check" disabled={off} onClick={() => actions.confirmFinding(f.id)} data-slot="confirm">

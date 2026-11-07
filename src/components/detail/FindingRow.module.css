@@ -60,13 +60,14 @@
   letter-spacing: var(--ls-tight-1);
   color: var(--ink);
 }
-.masked {
+.value {
   font-family: var(--mono);
   font-size: var(--fs-14);
   font-weight: var(--fw-medium);
   color: var(--ink);
+  overflow-wrap: anywhere;
 }
-.maskedFp {
+.valueFp {
   color: var(--ink-3);
   text-decoration: line-through;
 }
@@ -196,9 +197,6 @@
 }
 .dd2 {
   color: var(--ink-2);
-}
-.ddWarn {
-  color: var(--warn);
 }
 .rule {
   padding: 1px var(--space-6);

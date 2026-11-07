@@ -111,12 +111,6 @@
   font-weight: var(--fw-semibold);
   color: var(--ink-3);
 }
-.cardLead {
-  margin: 0;
-  font-size: var(--fs-13-5);
-  line-height: var(--lh-155);
-  color: var(--ink-3);
-}
 .empty {
   margin: 0;
   color: var(--ink-3);

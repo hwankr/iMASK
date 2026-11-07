@@ -773,7 +773,8 @@ export interface FindingModel {
   id: string;
   cat: string;
   label: string;
-  masked: string;
+  /** 행에 보이는 값 — 실제 분석은 원문 값(비었으면 마스킹 값), 데모는 마스킹 값(항목에 원문 값이 없다) */
+  value: string;
   subject: string;
   exposure: string;
   /** '개인 여신거래 신청서 · 1쪽' */
@@ -794,9 +795,11 @@ export interface FindingModel {
   hasReason: boolean;
   /** 실제 분석 항목 안내(분류 확인 필요 · 인식 신뢰도 낮음) */
   notes: string[];
-  locText: string;
+  /** 근거 문구 줄을 보인다 — 실제 분석은 근거 문구가 원문 값과 같아 행의 값과 겹치므로 뺀다 */
   hasEvidence: boolean;
   evidence: string;
+  /** 펼친 내용에 보일 줄이 하나라도 있다 — 없으면 행동 버튼만 보인다 */
+  hasFacts: boolean;
   /** 분류가 바뀌었거나 오탐 — 최초 AI 결과를 보인다 */
   changed: boolean;
   aiText: string;
@@ -830,11 +833,13 @@ export function findingModel(a: Analysis, f: Finding, focus: DetailFocus | null,
     noteLabel = '수정 사유';
     note = f.reclassNote || '';
   }
+  const notes = findingNotes(f.live);
+  const hasEvidence = !f.live && !!f.evidence;
   return {
     id: f.id,
     cat: f.cat,
     label: f.label,
-    masked: f.masked,
+    value: f.live?.value || f.masked,
     subject: f.subject,
     exposure: f.exposure,
     where: dName + ' · ' + f.page + '쪽',
@@ -850,10 +855,10 @@ export function findingModel(a: Analysis, f: Finding, focus: DetailFocus | null,
     ruleName: ruleName(f.rule),
     hasRule: !!f.rule,
     hasReason: !!f.reason,
-    notes: findingNotes(f.live),
-    locText: f.anchors.length ? dName + ' ' + f.page + '쪽 · 원문 위치 확인됨' : dName + ' ' + f.page + '쪽 · 좌표 없음 (위치 확인 필요)',
-    hasEvidence: !!f.evidence,
+    notes,
+    hasEvidence,
     evidence: f.evidence || '',
+    hasFacts: !!f.reason || !!f.rule || notes.length > 0 || hasEvidence || changed || !!note || !!f.memo,
     changed,
     aiText: fp ? aiText + ' (오탐 표시 전)' : aiText,
     noteLabel,

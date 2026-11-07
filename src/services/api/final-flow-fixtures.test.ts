@@ -1,5 +1,5 @@
 /* 백엔드가 만든 최종 흐름 결과(fixtures/final-flow-{C,D,E}.json — tests/test_final_flow_fixture_sync.py 가 백엔드 출력과 바이트까지
-   같은지 지킨다) → toAnalysis → 상세(탭 · 연결 카드 · 검토사항 '연결 보기') · 분석 요약(판정 키 표 · 묶음 검증 · 연결 줄) · 보고서 · 내보내기.
+   같은지 지킨다) → toAnalysis → 상세(탭 · 연결 카드 · 검토사항 '연결 보기') · 분석 요약(판정 칸 · 묶음 검증 · 연결 줄) · 보고서 · 내보내기.
    C 불일치(mismatch · linked) · D 빈 신청인(weaklink · missing) · E 팀원 서식(linked 2 · other).
    원문 값(masked 와 다른 value)은 테스트 출력에 옮기지 않는다(있음/없음 · 개수만). */
 import { createElement } from 'react';
@@ -11,7 +11,7 @@ import { READ_ONLY_ACTIONS } from '@/components/detail/detailActions';
 import { detailFacts, resultsModel } from '@/components/detail/detailModel';
 import { createDetailState, planOpenLink, type DetailUiState } from '@/components/detail/detailState';
 import { LinkCards } from '@/components/detail/LinkCards';
-import { decisionRows, finalFlowRows } from '@/components/live/liveModel';
+import { decisionView, finalFlowRows } from '@/components/live/liveModel';
 import { reportView, type ReportView } from '@/components/report/reportModel';
 import { ReportHead } from '@/components/report/ReportHead';
 import { ReportHistory } from '@/components/report/ReportHistory';
@@ -127,14 +127,18 @@ describe.each(['C', 'D', 'E'] as const)('백엔드가 만든 최종 흐름 결�
     }
   });
 
-  it('분석 요약 — 판정 키 표 5줄(응답 값 그대로) · 묶음 검증 줄 · 문서 간 연결 줄', () => {
+  it('분석 요약 — 판단 근거 · 값이 있는 줄(응답 값 그대로) · 묶음 검증 줄 · 문서 간 연결 줄', () => {
     const d = result.decision as Obj;
-    const rows = decisionRows(a.raw?.decision);
-    expect(rows?.map((r) => r.label)).toEqual(['위험도', '서류 종류', '정보 종류', '검토 사유', '판단 근거']);
-    expect(rows?.[0].value).toBe(want.risk);
-    expect(rows?.[2].value).toBe((d.sensitive_categories as string[]).join(', '));
-    expect(rows?.[3].value).toBe((d.review_reasons as string[]).join(', ') || '-');
-    expect(rows?.[4].value).toBe(d.reason);
+    const list = (key: string, label: string) => {
+      const values = d[key] as string[];
+      return values.length ? [{ key, label, value: values.join(', ') }] : [];
+    };
+    expect(a.raw?.decision?.riskLevel).toBe(want.risk);
+    expect(decisionView(a.raw?.decision)).toEqual({
+      reason: d.reason,
+      rows: [...list('sensitive_categories', '정보 종류'), ...list('review_reasons', '검토 사유')],
+      groups: [],
+    });
     expect(finalFlowRows(a.raw?.bundleCheck, a.links)).toEqual([
       { key: 'bundle', label: '묶음 검증', value: want.bundle },
       { key: 'links', label: '문서 간 연결', value: want.linkRow },

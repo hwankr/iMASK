@@ -66,17 +66,26 @@ export function liveDocMeta(source: Pick<DocSource, 'pageStart' | 'pageEnd'>): s
 
 /** 인용 표시(【†3】 · 【3†source】 등) */
 const CITATION = /【[^】]*】/g;
+/** 제목 표시(줄 앞 # 1~6개 + 공백) — 제목 글은 남긴다 */
+const HEADING_MARK = /^ {0,3}#{1,6}[ \t]+/gm;
+/**
+ * 굵게 표시 — 낱말 앞에서 열리고 안에 별표가 없는 짝만 지운다(글은 남긴다).
+ * 마스킹 값의 별표(010-****-1234 · 508-**-****03-2 · 김**)는 짝이 되지 않아 그대로 남는다.
+ */
+const BOLD_MARK = /(?<=^|[\s([{"'“‘「『:|,·])\*\*(?![\s*])([^*\n]*[^\s*])\*\*(?!\*)/gm;
 
 /**
- * 워크플로우 Markdown 을 글자 그대로 보이기 위한 정리 — HTML 로 바꾸지 않는다.
- * 줄바꿈(CRLF · CR → LF)은 지키고 인용 표시만 지운다. 줄 끝 공백을 떼고, 빈 줄이 셋 이상 이어지면 둘로, 앞뒤 빈 줄은 뺀다.
- * 문자열이 아니면 ''.
+ * 워크플로우 Markdown 을 글로 보이기 위한 정리 — HTML 로 바꾸지 않는다.
+ * 줄바꿈(CRLF · CR → LF)은 지키고 인용 · 제목 · 굵게 표시를 지운다. 목록 기호(- · 1.)는 글로 남긴다.
+ * 줄 끝 공백을 떼고, 빈 줄이 셋 이상 이어지면 둘로, 앞뒤 빈 줄은 뺀다. 문자열이 아니면 ''.
  */
 export function guideText(md: unknown): string {
   if (typeof md !== 'string') return '';
   return md
     .replace(/\r\n|\r/g, '\n')
     .replace(CITATION, '')
+    .replace(HEADING_MARK, '')
+    .replace(BOLD_MARK, '$1')
     .split('\n')
     .map((l) => l.replace(/[ \t]+$/, ''))
     .join('\n')

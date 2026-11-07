@@ -144,9 +144,9 @@ describe('상세 — 머리 배지 · 분석 요약 · 항목 필터', () => {
     expect(h.html).not.toContain(RISK.unrated.label);
   });
 
-  it("분석 요약: 배지 라벨과 다른 등급 글은 지금처럼('높음 · 상', '미평가 · 판정 없음', 모르는 값)", () => {
-    expect(judgeHead(done(itemsResult())).parts).toEqual(['위험도 판정', RISK.high.label, '상']);
-    expect(judgeHead(done(withLevel(finalFlowResult(), '중'))).parts).toEqual(['위험도 판정', RISK.medium.label, '중']);
+  it("분석 요약: 배지가 같은 등급을 보이면 등급 글은 숨기고, 배지로 알 수 없는 글만 보인다('미평가 · 판정 없음', 모르는 값)", () => {
+    expect(judgeHead(done(itemsResult())).parts).toEqual(['위험도 판정', RISK.high.label]);
+    expect(judgeHead(done(withLevel(finalFlowResult(), '중'))).parts).toEqual(['위험도 판정', RISK.medium.label]);
     const none = judgeHead(done(withLevel(finalFlowResult(), null)));
     expect(none.badges).toEqual([['unrated', RISK.unrated.label]]);
     expect(none.parts).toEqual(['위험도 판정', RISK.unrated.label, '판정 없음']);

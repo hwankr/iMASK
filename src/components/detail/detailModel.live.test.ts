@@ -1,4 +1,6 @@
 /* 실제 분석 상세 화면 모델 — 고정 자료(fixtures/done-result.json) + 검토 기록(review) → toAnalysis → 모델 순서로 확인한다. */
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { LOW_CONFIDENCE_NOTE, MAPPING_NOTES, RISK, findingNotes } from '@/display/rules';
 import { createService } from '@/services';
@@ -6,6 +8,7 @@ import { toAnalysis } from '@/services/api/mapping';
 import { analysisOut, contractResult } from '@/services/api/testing';
 import type { Analysis } from '@/services/types';
 import { READ_ONLY_ACTIONS } from './detailActions';
+import { FindingRow } from './FindingRow';
 import {
   MASK_NOTICE_TEXT,
   REVIEW_UNAVAILABLE_TITLE,
@@ -199,7 +202,7 @@ describe('실제 분석 상세 — 고정 자료 → toAnalysis → 화면 모�
     expect(rs.findings.filter((f) => f.noLoc)).toHaveLength(2);
   });
 
-  it("기타 서류 — '기타 서류 안내' 공지(여러 줄 글자 그대로, 인용 표시만 지움), 상자 없음", () => {
+  it("기타 서류 — '기타 서류 안내' 공지(여러 줄, 인용 · 제목 · 굵게 표시는 지움), 상자 없음", () => {
     const v = viewer(a, { docId: 'doc-5', page: 1, focus: null });
     expect(v.live?.other).toBe(true);
     expect(v.live?.filePage).toBe(6);
@@ -208,10 +211,10 @@ describe('실제 분석 상세 — 고정 자료 → toAnalysis → 화면 모�
     expect(n.pre).toBe(true);
     expect(n.text).not.toContain('【');
     expect(n.text.split('\n')).toEqual([
-      '## 기타 서류 안내',
-      '- **예상 서류 종류**: 고객 안내문',
-      '- **검토 사유**: 지점 주소·영업시간·방문 안내로 구성되어 있어 대출 서류 5종에 해당하지 않습니다.',
-      '- **담당자 조치**: 기타/안내문서로 분류하고 필요하면 별도로 보관합니다.',
+      '기타 서류 안내',
+      '- 예상 서류 종류: 고객 안내문',
+      '- 검토 사유: 지점 주소·영업시간·방문 안내로 구성되어 있어 대출 서류 5종에 해당하지 않습니다.',
+      '- 담당자 조치: 기타/안내문서로 분류하고 필요하면 별도로 보관합니다.',
     ]);
     // 추출 서류에는 없다
     expect(viewer(a, { docId: 'doc-0', page: 1 }).notices.some((x) => x.title === '기타 서류 안내')).toBe(false);
@@ -267,12 +270,13 @@ describe('실제 분석 상세 — 고정 자료 → toAnalysis → 화면 모�
     expect(rs.chips.find((c) => c.value === 'high')?.count).toBe(2);
   });
 
-  it("펼친 행 — 적용 규칙이 없으면 줄을 빼고(hasRule false), 근거 문구 = 원문 값, 분류 확인 필요 · 인식 신뢰도 낮음 안내", () => {
+  it("펼친 행 — 적용 규칙이 없으면 줄을 빼고(hasRule false), 근거 문구 줄도 행의 값과 같아 빼고(hasEvidence false), 분류 확인 필요 · 인식 신뢰도 낮음 안내", () => {
     const f = (id: string) => findingModel(a, a.findings.find((x) => x.id === id)!, null);
     const d6 = f('D1-06'); // needs_review · low
     expect(d6.hasRule).toBe(false);
     expect(d6.rule).toBe('');
-    expect(d6.evidence).toBe('직장명: (주)한빛테크; 부서: 개발팀; 직위: 대리; 입사일: 2019년 3월 4일');
+    expect(d6.value).toBe('직장명: (주)한빛테크; 부서: 개발팀; 직위: 대리; 입사일: 2019년 3월 4일');
+    expect(d6.hasEvidence).toBe(false);
     expect(d6.notes).toEqual([MAPPING_NOTES.needs_review, LOW_CONFIDENCE_NOTE]);
     expect(f('D1-09').notes).toEqual([MAPPING_NOTES.unknown, LOW_CONFIDENCE_NOTE]); // unknown · low
     expect(f('D1-08').notes).toEqual([LOW_CONFIDENCE_NOTE]); // ok · low
@@ -280,6 +284,66 @@ describe('실제 분석 상세 — 고정 자료 → toAnalysis → 화면 모�
     expect(f('D5-03').notes).toEqual([MAPPING_NOTES.unknown]); // unknown · null
     expect(f('D1-02').reason).toContain('주민등록번호 13자리');
     expect(f('D1-01').where).toBe('대출신청서 · 1쪽');
+  });
+
+  it('탐지 항목 행의 값 — 마스킹 값이 아니라 원문 값을 그대로 보인다', () => {
+    const f = a.findings.find((x) => x.id === 'D1-02')!;
+    const raw = f.live?.value ?? '';
+    expect(raw).not.toBe('');
+    expect(raw).not.toBe(f.masked);
+    const row = findingModel(a, f, null);
+    expect(row.value).toBe(raw);
+    const html = renderToStaticMarkup(createElement(FindingRow, { f: row, locked: false, onToggle: () => {}, onReveal: () => {}, actions: READ_ONLY_ACTIONS }));
+    expect(html).toContain(raw);
+    expect(html).not.toContain(f.masked);
+  });
+
+  it('탐지 항목 행의 값 — 원문 값이 비었으면 마스킹 값을 보인다', () => {
+    const blank = liveAnalysis((r) => {
+      for (const x of r.findings as Record<string, unknown>[]) x.value = '';
+    });
+    const f = blank.findings[0];
+    expect(f.live?.value).toBe('');
+    expect(f.masked).not.toBe('');
+    expect(findingModel(blank, f, null).value).toBe(f.masked);
+  });
+
+  it('펼친 행 — 근거 문구 · 원문 위치 줄이 없어 원문 값은 행 머리에 한 번만, 서류 · 쪽은 메타 줄에만 보인다', () => {
+    const f = a.findings.find((x) => x.id === 'D1-01')!;
+    const raw = f.live?.value ?? '';
+    expect(raw).not.toBe('');
+    const row = findingModel(a, f, { kind: 'finding', id: f.id });
+    const html = renderToStaticMarkup(createElement(FindingRow, { f: row, locked: false, onToggle: () => {}, onReveal: () => {}, actions: READ_ONLY_ACTIONS }));
+    expect(html).not.toContain('근거 문구');
+    expect(html).not.toContain('원문 위치');
+    expect(html.split(raw).length - 1).toBe(1);
+    expect(html.split(row.where).length - 1).toBe(1);
+  });
+
+  it("펼친 행 — 위치 없는 항목도 줄을 더하지 않고 메타 줄의 '위치 확인 필요'로 보인다", () => {
+    const f = a.findings.find((x) => x.id === 'D3-02')!;
+    const row = findingModel(a, f, { kind: 'finding', id: f.id });
+    expect(row.noLoc).toBe(true);
+    const html = renderToStaticMarkup(createElement(FindingRow, { f: row, locked: false, onToggle: () => {}, onReveal: () => {}, actions: READ_ONLY_ACTIONS }));
+    expect(html).toContain('위치 확인 필요');
+    expect(html).not.toContain('좌표 없음');
+  });
+
+  it('펼친 행 — 보일 줄이 없으면 빈 목록(dl) 없이 행동 버튼만, 메모가 생기면 줄이 보인다', () => {
+    const base = a.findings[0];
+    const f = { ...base, reason: '', rule: '' as const, live: base.live ? { ...base.live, mappingStatus: 'ok' as const, confidence: 'high' as const } : undefined };
+    const render = (x: typeof f) => {
+      const row = findingModel(a, x, { kind: 'finding', id: x.id });
+      return { row, html: renderToStaticMarkup(createElement(FindingRow, { f: row, locked: false, onToggle: () => {}, onReveal: () => {}, actions: READ_ONLY_ACTIONS })) };
+    };
+    const plain = render(f);
+    expect(plain.row.hasFacts).toBe(false);
+    expect(plain.html).not.toContain('<dl');
+    expect(plain.html).toContain('원문 확인');
+    const withMemo = render({ ...f, memo: '메모 내용' });
+    expect(withMemo.row.hasFacts).toBe(true);
+    expect(withMemo.html).toContain('<dl');
+    expect(withMemo.html).toContain('메모 내용');
   });
 
   it('READ_ONLY_ACTIONS(검토 기록을 불러오지 못했을 때) — 모두 아무것도 하지 않는다', () => {
@@ -419,6 +483,17 @@ describe('데모 분석은 그대로 — 읽기 전용 · 원본 파일 갈래�
     const f = findingModel(a, a.findings[0], null);
     expect(f.hasRule).toBe(true);
     expect(f.notes).toEqual([]);
+    expect(f.value).toBe(a.findings[0].masked);
+  });
+
+  it('데모 — 위치 없는 항목은 펼친 행에 근거 문구 줄이 그대로 있다', async () => {
+    const a = await demoAnalysis('A1');
+    const withEvidence = a.findings.filter((x) => x.evidence);
+    expect(withEvidence.length).toBeGreaterThan(0);
+    const row = findingModel(a, withEvidence[0], { kind: 'finding', id: withEvidence[0].id });
+    expect(row.hasEvidence).toBe(true);
+    const html = renderToStaticMarkup(createElement(FindingRow, { f: row, locked: false, onToggle: () => {}, onReveal: () => {}, actions: READ_ONLY_ACTIONS }));
+    expect(html).toContain('근거 문구');
   });
 
   it("데모 A5(검토 완료) — 검토 완료 띠에 '보고서 보기'가 그대로 있다", async () => {
@@ -457,11 +532,29 @@ describe('실제 분석 원문 도우미(liveViewerModel)', () => {
     expect(liveDocMeta({ pageStart: 3, pageEnd: 5 })).toBe('3페이지 · 파일 3–5쪽');
   });
 
-  it('guideText — 줄바꿈 유지(CRLF · CR), 인용 표시 지움, 줄 끝 공백 · 빈 줄 정리, 문자열 아니면 ""', () => {
-    expect(guideText('## 제목\r\n- 가【†1】  \r\n\r\n\r\n\r- 나【3†source】')).toBe('## 제목\n- 가\n\n- 나');
+  it('guideText — 줄바꿈 유지(CRLF · CR), 인용 · 제목 표시 지움(글과 목록 기호는 남김), 줄 끝 공백 · 빈 줄 정리, 문자열 아니면 ""', () => {
+    expect(guideText('## 제목\r\n- 가【†1】  \r\n\r\n\r\n\r- 나【3†source】')).toBe('제목\n- 가\n\n- 나');
+    expect(guideText('###### 작은 제목\n1. 첫째')).toBe('작은 제목\n1. 첫째');
+    expect(guideText('#1 번호\n가 # 나\n#')).toBe('#1 번호\n가 # 나\n#');
     expect(guideText('<b>그대로</b>')).toBe('<b>그대로</b>');
     expect(guideText(null)).toBe('');
     expect(guideText(3)).toBe('');
+  });
+
+  it('guideText — 굵게 표시 짝을 지운다(글은 남김), 인용 표시를 지운 뒤 · 제목 안에서도', () => {
+    expect(guideText('**상**으로 판단됩니다.')).toBe('상으로 판단됩니다.');
+    expect(guideText('- **신용능력정보** | 대상 서류: **휴면예금 지급 신청서, 위임장** | 처리 방법: **접근 제한** | 이유')).toBe('- 신용능력정보 | 대상 서류: 휴면예금 지급 신청서, 위임장 | 처리 방법: 접근 제한 | 이유');
+    expect(guideText('(**상**) 등급 · **중** 등급')).toBe('(상) 등급 · 중 등급');
+    expect(guideText('**근거【†1】** 글')).toBe('근거 글');
+    expect(guideText('## **제목**\n**첫 줄**\n**둘째 줄**')).toBe('제목\n첫 줄\n둘째 줄');
+  });
+
+  it('guideText — 마스킹 값의 별표와 짝이 맞지 않는 별표는 그대로', () => {
+    for (const v of ['010-****-1234', '508-**-****03-2', '김**', '홍*동', '900101-*******', '***', '****', '*강조*', '3 ** 2', '**열기만', '**가\n나**', '김** 과 이**', '김**씨와 이**씨', '508-**-1234 와 김**', '508-**-****03-2 와 김**']) {
+      expect(guideText(v)).toBe(v);
+    }
+    // 굵게 표시와 마스킹 값이 한 줄에 있어도 짝만 지운다
+    expect(guideText('**계좌번호** 508-**-****03-2 · **성명** 김**')).toBe('계좌번호 508-**-****03-2 · 성명 김**');
   });
 
   it('isKnownFileMessage — 고정 문구만', () => {

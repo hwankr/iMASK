@@ -268,7 +268,7 @@ describe('결과 패널 모델', () => {
     expect(re).toMatchObject({ noteLabel: '수정 사유', changed: true });
     const noLoc = rs.findings.find((f) => f.id === 'F-23')!;
     expect(noLoc.noLoc).toBe(true);
-    expect(noLoc.locText).toBe('급여계좌 거래내역서 2쪽 · 좌표 없음 (위치 확인 필요)');
+    expect(noLoc.where).toBe('급여계좌 거래내역서 · 2쪽');
   });
 
   it('검토 필요 — 유지 안내(A4) · 미해결 먼저', async () => {

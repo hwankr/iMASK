@@ -3,12 +3,12 @@
    - 파일 검사(개수 1 · PDF·PNG·JPEG · 20MB 이하), 분석명, 진행 단계, 폴링 여부,
      경과·걸린 시간 문구(시작 시각 = startedAt, 없으면 createdAt — timingStart)
    - 결과 요약 줄(result.summary), 단계별 결과 목록(result.stages), 서류 종류·위험도·단계 라벨
-   - 최종 흐름 워크플로우 · 설정 60: 위험도 판정 키 표(raw.decision — 옛 5줄 · v2 7줄), 결과 요약에 더하는 묶음 검증 · 문서 간 연결 줄(값이 있을 때만)
+   - 최종 흐름 워크플로우 · 설정 60: 위험도 판정 칸(raw.decision — 판단 근거 · 값이 있는 줄 · 등급별 항목), 결과 요약에 더하는 묶음 검증 · 문서 간 연결 줄(값이 있을 때만)
    결과 모양은 T2 '결과 저장 형식'(imask-upstage-v1)의 summary·stages 다. 모양이 달라도 예외 없이 빈 값으로.
    ========================================================================== */
 
 import { CONFIG } from '@/config/app';
-import { BUNDLE_VERDICTS, DOC_TYPE_NAMES, docTypeName, type AnalysisStatus } from '@/display/rules';
+import { BUNDLE_VERDICTS, DOC_TYPE_NAMES, RISK, docTypeName, type AnalysisStatus } from '@/display/rules';
 import { fmtSize, pad2 } from '@/lib/format';
 import type { RequestStep } from '@/services/analysis-service';
 import type { DocLink, RawBundleCheck, RawDecision } from '@/services/types';
@@ -154,13 +154,20 @@ export function riskText(level: unknown): string {
   return s || '판정 없음';
 }
 
+/** 위험도 판정 값 → 같은 등급의 배지 라벨 */
+const LEVEL_LABELS: ReadonlyMap<string, string> = new Map([
+  ['상', RISK.high.label],
+  ['중', RISK.medium.label],
+  ['하', RISK.low.label],
+]);
+
 /**
- * 분석 요약 '위험도 판정' 머리의 등급 글 — riskText 와 같되, 옆 배지 라벨과 같으면 ''(숨김 — '검토 필요' 를 한 번만).
- * 상 → '상'(배지 '높음'), 없음 → '판정 없음'(배지 '미평가')은 지금처럼 보인다.
+ * 분석 요약 '위험도 판정' 머리의 등급 글 — riskText 와 같되, 옆 배지가 같은 등급을 보이면 ''(숨김 — 상 · 배지 '높음', '검토 필요' 를 한 번만).
+ * 없음 → '판정 없음'(배지 '미평가') · 모르는 값처럼 배지로 알 수 없는 글만 보인다.
  */
 export function judgeLevelText(level: unknown, badgeLabel: string): string {
   const text = riskText(level);
-  return text === badgeLabel ? '' : text;
+  return text === badgeLabel || LEVEL_LABELS.get(text) === badgeLabel ? '' : text;
 }
 
 /** 다음 단계 제목 — 권장_조치 → '권장 조치', 검토_안내 → '검토 안내', 그 밖 → '다음 단계' */
@@ -249,7 +256,7 @@ export function summaryRows(
     { key: 'docs', label: '분류한 서류', value: docs },
     { key: 'extracted', label: '정보를 추출한 서류', value: s ? countText(s.extractedCount) : '읽지 못함' },
     { key: 'risk', label: '위험도', value: riskText(s?.riskLevel) },
-    { key: 'final', label: '마지막 단계', value: s?.finalStage || '없음' },
+    { key: 'final', label: '마지막 단계', value: s?.finalStage ? s.finalStage.replace(/_/g, ' ') : '없음' },
     { key: 'other', label: '기타 서류', value: s ? (s.otherCount === null ? '없음' : `${s.otherCount}개`) : '읽지 못함' },
     { key: 'took', label: '걸린 시간', value: durationText(timingStart(info), info.updatedAt) || '-' },
     { key: 'job', label: 'Upstage 작업 번호', value: info.jobId || '-' },
@@ -258,35 +265,61 @@ export function summaryRows(
 
 /* ---------- 최종 흐름 워크플로우 — 위험도 판정 키 · 묶음 검증 · 문서 간 연결 ---------- */
 
-/** 목록 → ', ' 로 이은 글(못 읽음 · 빈 목록은 '-') */
-const joined = (list: readonly string[] | null): string => (list && list.length ? list.join(', ') : '-');
+/** 위험도 판정 — 등급 하나 안의 서류 하나 */
+export interface DecisionGroupDoc {
+  /** 서류 이름(코드 → 이름). 토큰에 서식이 없으면 '' */
+  name: string;
+  /** 칸 이름(밑줄 → 띄어쓰기) */
+  items: string[];
+}
+
+/** 위험도 판정 — 등급 하나의 항목들(설정 60) */
+export interface DecisionGroup {
+  level: 'high' | 'medium' | 'low';
+  docs: DecisionGroupDoc[];
+}
+
+/** 분석 요약 '위험도 판정' 칸 */
+export interface DecisionView {
+  /** 판단 근거(못 읽으면 '') */
+  reason: string;
+  /** 값이 있는 줄만 — 정보 종류(옛 모양) · 검토 사유 */
+  rows: SummaryRow[];
+  /** 항목이 있는 등급만, 높은 등급부터(설정 60) */
+  groups: DecisionGroup[];
+}
+
+/** 항목 토큰('서식코드.칸')을 서류별로 모은다 — 처음 나온 순서. 서식이나 칸을 가를 수 없는 토큰은 서류 이름 없이 그대로 */
+function decisionGroup(level: DecisionGroup['level'], tokens: readonly string[] | null): DecisionGroup | null {
+  if (!tokens?.length) return null;
+  const docs = new Map<string, string[]>();
+  for (const token of tokens) {
+    const dot = token.indexOf('.');
+    const split = dot > 0 && dot < token.length - 1;
+    const name = split ? docTypeName(token.slice(0, dot)).replace(/_/g, ' ') : '';
+    const items = docs.get(name) ?? [];
+    items.push((split ? token.slice(dot + 1) : token).replace(/_/g, ' '));
+    docs.set(name, items);
+  }
+  return { level, docs: [...docs].map(([name, items]) => ({ name, items })) };
+}
 
 /**
- * 위험도 판정 키 표(분석 요약 '위험도 판정' 칸) — 판정 키가 없으면 null(지금처럼 판정 본문을 보인다). 못 읽은 값 · 빈 목록은 '-'.
- * 옛 모양: 위험도 · 서류 종류(코드 → 이름) · 정보 종류 · 검토 사유 · 판단 근거.
- * 설정 60(shape 'v2'): 위험도 · 서류 종류 · 상 · 중 · 하 등급 항목(토큰 받은 글자 그대로) · 검토 사유 · 판단 근거.
+ * 위험도 판정 칸 — 판정 키가 없거나 보일 값이 하나도 없으면 null(판정 본문을 보인다).
+ * 위험도는 칸 머리의 배지가, 서류 종류는 결과 요약의 '분류한 서류'가 보이므로 넣지 않는다. 값이 없는 줄도 만들지 않는다.
  * recommended_action 은 넣지 않는다 — 바로 아래 다음 단계 구역이 overall.next_text 로 같은 글을 보인다.
  */
-export function decisionRows(d: RawDecision | null | undefined): SummaryRow[] | null {
+export function decisionView(d: RawDecision | null | undefined): DecisionView | null {
   if (!d) return null;
-  if (d.shape === 'v2') {
-    return [
-      { key: 'risk_level', label: '위험도', value: d.riskLevel ?? '-' },
-      { key: 'document_types', label: '서류 종류', value: joined(d.documentTypes ? d.documentTypes.map(docTypeName) : null) },
-      { key: 'high_risk_items', label: '상 등급 항목', value: joined(d.highRiskItems) },
-      { key: 'medium_risk_items', label: '중 등급 항목', value: joined(d.mediumRiskItems) },
-      { key: 'low_risk_items', label: '하 등급 항목', value: joined(d.lowRiskItems) },
-      { key: 'review_reasons', label: '검토 사유', value: joined(d.reviewReasons) },
-      { key: 'reason', label: '판단 근거', value: d.reason ?? '-' },
-    ];
-  }
-  return [
-    { key: 'risk_level', label: '위험도', value: d.riskLevel ?? '-' },
-    { key: 'document_types', label: '서류 종류', value: joined(d.documentTypes ? d.documentTypes.map(docTypeName) : null) },
-    { key: 'sensitive_categories', label: '정보 종류', value: joined(d.sensitiveCategories) },
-    { key: 'review_reasons', label: '검토 사유', value: joined(d.reviewReasons) },
-    { key: 'reason', label: '판단 근거', value: d.reason ?? '-' },
-  ];
+  const rows: SummaryRow[] = [];
+  if (d.sensitiveCategories?.length) rows.push({ key: 'sensitive_categories', label: '정보 종류', value: d.sensitiveCategories.join(', ') });
+  if (d.reviewReasons?.length) rows.push({ key: 'review_reasons', label: '검토 사유', value: d.reviewReasons.join(', ') });
+  const groups =
+    d.shape === 'v2'
+      ? [decisionGroup('high', d.highRiskItems), decisionGroup('medium', d.mediumRiskItems), decisionGroup('low', d.lowRiskItems)].filter((g): g is DecisionGroup => g !== null)
+      : [];
+  const reason = d.reason ?? '';
+  return reason || rows.length || groups.length ? { reason, rows, groups } : null;
 }
 
 /**

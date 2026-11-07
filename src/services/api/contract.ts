@@ -270,7 +270,7 @@ function idList(v: unknown, max: number): string[] | null {
 /**
  * result.decision → RawDecision. 객체가 아니면 null(옛 결과 · 못 읽음). 모양은 응답으로 가른다:
  * high_risk_items 키가 자기 속성이면 설정 60 의 키 8개(shape 'v2' — 목록 한도 MAX_V2_DECISION_ITEMS), 아니면 옛 키 5개(위험도_판정 본문 — 한도 MAX_DECISION_ITEMS).
- * 글은 모두 safeText 를 지난다. mask 가 없으면 원래 글(상세 판정 표 — 최종 규칙만), 있으면 원문 값을 가린 글
+ * 글은 모두 safeText 를 지난다. mask 가 없으면 원래 글(상세 판정 칸 — 최종 규칙만), 있으면 원문 값을 가린 글
  * (보고서 · 내보내기의 주요 위험 사유 — 자르지 않은 응답 값에서 바로 만든다).
  */
 export function readDecision(result: unknown, mask?: Masker | null): RawDecision | null {

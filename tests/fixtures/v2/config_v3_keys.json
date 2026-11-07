@@ -1,0 +1,8 @@
+[
+ {"form": "체크카드_가입신청서", "table": null, "key": "중_서명란_본인성명", "fmt": null},
+ {"form": "체크카드_가입신청서", "table": null, "key": "중_마이너스통장_본인성명", "fmt": null},
+ {"form": "IRP_신규신청서", "table": null, "key": "중_설명확인_가입자명", "fmt": null},
+ {"form": "IRP_신규신청서", "table": null, "key": "중_서명란_가입자명", "fmt": null},
+ {"form": "외국인_세대구성원_확인서", "table": null, "key": "중_하단_본인_서명", "fmt": null},
+ {"form": "외국인_세대구성원_확인서", "table": null, "key": "중_하단_담보제공자_서명", "fmt": null}
+]

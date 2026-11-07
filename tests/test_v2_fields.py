@@ -1,6 +1,7 @@
 # ==========================================================================
 #  imask_backend.fields — 설정 60(v2_full) 칸 대응표
 #  - tests/fixtures/v2/config60_keys.json: 설정 60 의 추출 키 목록(값 없음)과 기준표의 형식 — 모든 접두어 키가 표에 있고 형식과 kind 가 맞는지
+#  - tests/fixtures/v2/config_v3_keys.json: 설정 60 에 없는 v3 칸 목록 — 표의 기준은 두 목록의 합이다(응답 쪽은 tests/test_v3_signature_keys.py)
 #  - 표 안팎에서 뜻이 다른 키, 표에 없는 접두어 키, 범주·주체·kind 규칙, 옛 field_info 는 그대로인지
 #  - 팀원용 문서 docs/field-mapping.md '5. 설정 60 대응표' 가 fields.py 와 같은지
 # ==========================================================================
@@ -31,7 +32,8 @@ from imask_backend.results import V2_FORM_CODES
 ROOT = Path(__file__).resolve().parents[1]
 DOC = ROOT / "docs" / "field-mapping.md"
 KEYS = json.loads((ROOT / "tests" / "fixtures" / "v2" / "config60_keys.json").read_bytes().decode("utf-8"))
-GRADED = [row for row in KEYS if v2_grade(row["key"]) is not None]
+V3_KEYS = json.loads((ROOT / "tests" / "fixtures" / "v2" / "config_v3_keys.json").read_bytes().decode("utf-8"))
+GRADED = [row for row in [*KEYS, *V3_KEYS] if v2_grade(row["key"]) is not None]
 # 기준표의 형식 → 가림 규칙 종류
 FMT_KIND = {
     "date": "birth_date",

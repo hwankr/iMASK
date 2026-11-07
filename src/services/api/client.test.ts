@@ -346,3 +346,34 @@ describe('retryAnalysis — POST /analyses/{id}/retry', () => {
     await expect(createApiClient({ fetch: gone.fetch }).retryAnalysis(ID, { actor: 'a' })).rejects.toMatchObject({ status: 404, code: 'not_found' });
   });
 });
+
+describe('워크플로우 설정 — POST /settings/workflow…', () => {
+  const out = { agent_id: 'agt_x', config_id: '60', agent_name: 'v2_full', config_name: '최종' };
+
+  it('비밀번호는 본문에 담고, 주소·헤더에는 넣지 않는다', async () => {
+    const { fetch, seen } = fakeFetch(() => json(200, out));
+    const client = createApiClient({ fetch });
+    await expect(client.openWorkflowSettings('pw-test')).resolves.toEqual(out);
+    await expect(client.saveWorkflowSettings({ password: 'pw-test', agent_id: 'agt_x', config_id: '60' })).resolves.toEqual(out);
+    expect(seen.map((r) => [r.method, r.url])).toEqual([
+      ['POST', '/api/py/settings/workflow/open'],
+      ['POST', '/api/py/settings/workflow'],
+    ]);
+    expect(seen[0].body).toEqual({ password: 'pw-test' });
+    expect(seen[1].body).toEqual({ password: 'pw-test', agent_id: 'agt_x', config_id: '60' });
+    for (const r of seen) expect(JSON.stringify(r.headers)).not.toContain('pw-test');
+  });
+
+  it('틀린 비밀번호 · 없는 워크플로우는 서버 문장 그대로', async () => {
+    const wrong = fakeFetch(() => json(401, { detail: '비밀번호가 맞지 않습니다.' }));
+    await expect(createApiClient({ fetch: wrong.fetch }).openWorkflowSettings('x')).rejects.toMatchObject({
+      status: 401,
+      code: 'bad_request',
+      message: '비밀번호가 맞지 않습니다.',
+    });
+    const missing = fakeFetch(() => json(400, { detail: 'Upstage 에 없는 에이전트 또는 설정 번호입니다.' }));
+    await expect(
+      createApiClient({ fetch: missing.fetch }).saveWorkflowSettings({ password: 'x', agent_id: 'agt_x', config_id: '1' }),
+    ).rejects.toMatchObject({ status: 400, message: 'Upstage 에 없는 에이전트 또는 설정 번호입니다.' });
+  });
+});

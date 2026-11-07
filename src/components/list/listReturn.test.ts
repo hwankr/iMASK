@@ -77,4 +77,10 @@ describe("헤더 주 메뉴 활성 — activeNav", () => {
     }
     expect(activeNav(null, 'needed')).toBe('analyses');
   });
+
+  it('설정 화면에서는 켜지 않는다', () => {
+    expect(activeNav('/settings', null)).toBeNull();
+    expect(activeNav('/settings', 'needed')).toBeNull();
+    expect(activeNav('/demo/settings', null)).toBe('analyses');
+  });
 });

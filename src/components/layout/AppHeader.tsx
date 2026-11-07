@@ -6,7 +6,7 @@ import { Suspense } from 'react';
 import { activeNav, listHomeHref, listNavHref, reviewNeededHref, useRememberedListQuery, type NavKey } from '@/components/list/listReturn';
 import { cx } from '@/components/ui/cx';
 import { Icon } from '@/components/ui/Icon';
-import type { RouteBase } from '@/lib/routes';
+import { SETTINGS_HREF, type RouteBase } from '@/lib/routes';
 import { useBuildMode, useRouteBase, useServiceMode } from '@/services/react';
 import { DemoBadge } from './DemoBadge';
 import { modeSwitchLink } from './modeSwitch';
@@ -35,7 +35,7 @@ const DEMO_BADGE_SHORT = '데모';
  * 메뉴 이동 주소는 그 기준 경로(루트 · `/demo`)에서 마지막으로 본 목록(listReturn)으로 만든다 — 프로토타입 nav:
  * '문서 분석'은 '검토 필요' 필터만 풀고, '검토 필요'는 검색·위험·상태를 풀고 검토 필요만 건다(정렬은 둘 다 유지).
  */
-function NavItems({ active, count, base }: { active: NavKey; count: number | null; base: RouteBase }) {
+function NavItems({ active, count, base }: { active: NavKey | null; count: number | null; base: RouteBase }) {
   const query = useRememberedListQuery(base);
   return (
     <>
@@ -63,14 +63,15 @@ function NavFromUrl({ count, base }: { count: number | null; base: RouteBase }) 
   return <NavItems active={activeNav(pathname, params.get('review'))} count={count} base={base} />;
 }
 
-/** 정적 렌더(쿼리를 모를 때)의 자리 — 경로만으로 계산해 '문서 분석'을 켠다 */
+/** 정적 렌더(쿼리를 모를 때)의 자리 — 경로만으로 계산한다(설정 화면 말고는 '문서 분석'을 켠다) */
 function NavFallback({ count, base }: { count: number | null; base: RouteBase }) {
-  return <NavItems active="analyses" count={count} base={base} />;
+  return <NavItems active={activeNav(usePathname(), null)} count={count} base={base} />;
 }
 
 /**
  * 헤더 — Main 98–112. 로고 버튼(첫 화면), 브랜드 글자(폭 480 이상), 주 메뉴(문서 분석 · 검토 필요 + 건수),
- * 오른쪽 모드 전환 링크(modeSwitch.ts — 실제 분석 화면은 '데모 체험하기', 실제 모드 빌드의 `/demo` 는 '실제 분석으로')와
+ * 오른쪽 '설정' 링크(실제 분석 화면 · 폭 768 이상만 — 휴대폰은 헤더 자리가 없어 주소로 연다),
+ * 모드 전환 링크(modeSwitch.ts — 실제 분석 화면은 '데모 체험하기', 실제 모드 빌드의 `/demo` 는 '실제 분석으로')와
  * 모드 표시(배지 '실제 분석' · '데모 데이터'), 사용자 칩(폭 960 이상: 첫 글자 동그라미 · 이름 · 팀).
  * 모드 · 기준 경로는 주소 기준(useServiceMode · useRouteBase) — `/demo` 아래는 빌드 모드와 상관없이 데모 표시이고
  * 링크도 `/demo` 기준이다. 데모 빌드(useBuildMode 'demo')에는 전환 링크가 없다. 선택 밑줄은 scaleX 로 움직인다(.32s).
@@ -94,6 +95,11 @@ export function AppHeader({ brandName, user, reviewNeededCount }: AppHeaderProps
         </Suspense>
       </nav>
       <div className={cx(styles.right, switchLink && styles.rightSwitch)}>
+        {mode === 'api' ? (
+          <Link href={SETTINGS_HREF} prefetch={false} className={cx(styles.modeLink, styles.settingsLink)}>
+            설정
+          </Link>
+        ) : null}
         {switchLink ? (
           /* 미리 받지 않는다(prefetch={false}) — 한쪽 화면을 열 때 다른 쪽 화면을 받지 않게(요청 목록 그대로) */
           <Link href={switchLink.href} prefetch={false} aria-label={switchLink.label} title={switchLink.title} className={styles.modeLink}>

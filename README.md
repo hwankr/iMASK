@@ -259,7 +259,7 @@ supabase/                   DB 변경 기록 — migrations/에 적용한 SQL을
 
 | 구분 | 이름 |
 |---|---|
-| 서버 전용 6개 — `NEXT_PUBLIC_` 을 붙이지 않음 | `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `UPSTAGE_API_KEY`, `UPSTAGE_AGENT_ID`, `UPSTAGE_CONFIG_ID`, `UPSTAGE_PROJECT_ID`(에이전트가 Upstage 프로젝트에 속할 때 — 지금 그렇다) |
+| 서버 전용 7개 — `NEXT_PUBLIC_` 을 붙이지 않음 | `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `UPSTAGE_API_KEY`, `UPSTAGE_AGENT_ID`, `UPSTAGE_CONFIG_ID`, `SETTINGS_PASSWORD`, `UPSTAGE_PROJECT_ID`(에이전트가 Upstage 프로젝트에 속할 때 — 지금 그렇다) |
 | 브라우저 공개 3개 — 빌드 때 들어가므로 바꾸면 다시 배포 | `NEXT_PUBLIC_IMASK_SERVICE`(실제 분석이면 `api`), `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` |
 
 ---
@@ -295,7 +295,8 @@ supabase/                   DB 변경 기록 — migrations/에 적용한 SQL을
 | 이름 | 쓰는 곳 |
 |---|---|
 | `SUPABASE_URL`, `SUPABASE_SECRET_KEY` | DB·Storage. 새 형식 서버 비밀 키(`sb_secret_…`)가 supabase-py 2.33 에서 그대로 동작합니다 |
-| `UPSTAGE_API_KEY`, `UPSTAGE_AGENT_ID`, `UPSTAGE_CONFIG_ID` | Upstage 작업. `UPSTAGE_CONFIG_ID` 가 비면 작업을 만들지 않습니다(빼면 Studio 최신 설정이 돌아 결과가 바뀜) |
+| `UPSTAGE_API_KEY`, `UPSTAGE_AGENT_ID`, `UPSTAGE_CONFIG_ID` | Upstage 작업. `UPSTAGE_CONFIG_ID` 가 비면 작업을 만들지 않습니다(빼면 Studio 최신 설정이 돌아 결과가 바뀜). **웹 설정 화면(`/settings`)에서 저장한 값이 있으면 에이전트 ID·설정 번호는 그 값이 먼저입니다** — 저장한 뒤에는 이 환경 변수 두 개를 바꿔도 적용되지 않습니다 |
+| `SETTINGS_PASSWORD` | 웹 설정 화면의 비밀번호. 비면 그 화면을 열 수 없습니다 |
 | `UPSTAGE_PROJECT_ID`(에이전트가 프로젝트에 속하면 필수) | Upstage Studio 코드 패널의 Project ID(`proj_…`). 모든 Upstage 요청(파일 올리기·작업 만들기·조회·지우기)에 `x-project-id` 헤더로 보냅니다. 빠지면 올린 파일이 프로젝트 밖에 저장돼 작업 만들기가 `HTTP 403 — No access to file` 로 실패합니다. 영문·숫자·`_`·`-` 만 받습니다(그 밖은 설정 오류) |
 | `UPSTAGE_BASE_URL`(선택) | 기본 `https://api.upstage.ai/v2` |
 | `IMASK_API_DEV_URL`(선택, Next 개발 서버만) | `next dev` 가 `/api/py/*` 를 넘길 주소. 기본 `http://127.0.0.1:8000` |
@@ -514,6 +515,7 @@ DB 구조를 바꿀 때는 **항상 `supabase/migrations/` 에 SQL 파일을 남
 | `20261103150745_add_analysis_reviews.sql` | `analysis_reviews`(검토 기록 — 분석 1건당 1행, `analyses` FK `on delete cascade`): 검토 상태(`needed`·`done`)·검토 메모·검토자·완료 시각·완료 메모·항목별 검토 값(`findings` jsonb 객체)·이력(`history` jsonb 배열)·`version`(1 이상, 조건부 갱신용)·`created_at`·`updated_at`(이 테이블에만 `set_updated_at` 트리거). RLS 켜고 정책 없음, `service_role` GRANT 직접 적음. 2026-11-04 Supabase 커넥터로 적용 |
 | `20261104002351_add_analyses_started_at.sql` | `analyses.started_at`(timestamptz, null 허용 — 마지막으로 시작한 시각) 열 하나만 더함. 기존 행은 고치지 않음(모두 null, `updated_at` 그대로). 권한 변화 없음(`service_role` 테이블 권한이 새 열에도 적용). 2026-11-04 Supabase 커넥터로 적용 |
 | `20261104094327_add_analysis_reviews_items.sql` | `analysis_reviews.items`(jsonb, not null, 기본 `{}`, 객체인지 검사 — 검토사항 해결 기록) 열 하나만 더함. 기존 행은 고치지 않음(기본값 `{}`). 권한 변화 없음. 2026-11-04 Supabase 커넥터로 적용 |
+| `20261107034956_add_workflow_settings.sql` | `workflow_settings`(웹 설정 화면이 저장하는 에이전트 ID·설정 번호 — 한 행, RLS 켬), `analyses.config_id`(그 분석을 시작할 때 쓴 설정 번호, null 허용) |
 
 - **이미 적용한 파일은 고치지 않습니다.** 바꿀 것이 있으면 새 파일을 추가합니다.
 - **세 테이블 모두 RLS를 켜고 정책은 두지 않았습니다.** 브라우저는 DB에 직접 접근하지 않고, FastAPI가 비밀 키로만 읽고 씁니다. 파일은 FastAPI가 만든 서명된 업로드 주소(2시간 유효)로 브라우저가 버킷에 바로 올립니다. Vercel 함수가 받는 요청은 4.5MB까지라 파일을 서버로 보내지 않기 때문입니다.

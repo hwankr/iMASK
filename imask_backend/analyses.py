@@ -41,6 +41,8 @@
 #  AnalysisOut 에는 review·started_at 키가 늘 있다(검토 블록 또는 null / 시작 시각 문자열 또는 null). 블록은 imask_backend.reviews 가 만들어 넘기고(조회·검토
 #  동작 — build_view 결과도 함께 넘겨 한 번만 계산), 만들기·시작 응답은 null 이다(검토 행을 읽지 않음).
 #  원본 파일 주소(file_link): 문서 행의 storage_path 로 10분짜리 서명 다운로드 URL. 서명 URL 은 로그에 남기지 않는다.
+#  워크플로우(run_workflow): 시작할 때마다 웹 설정 화면이 저장한 값(workflow_settings)을 읽고, 없으면 환경 변수를 쓴다. 쓴 값은 분석 행
+#  (agent_id·config_id)에 남겨, 실행 도중에 설정을 바꿔도 결과의 job.config_id·가림이 그 실행의 값을 따른다(_run_config_id·_run_secrets).
 # ==========================================================================
 
 from __future__ import annotations
@@ -53,7 +55,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, Protocol
 
-from .config import ConfigError
+from .config import ConfigError, UpstageSettings
 from .files import (
     MAX_FILE_BYTES,
     analysis_name,
@@ -62,7 +64,7 @@ from .files import (
     safe_storage_name,
 )
 from .findings import build_view, view_stages
-from .redaction import redact, redact_value
+from .redaction import AGENT_ID_PLACEHOLDER, redact, redact_value
 from .results import parse_stages, summarize
 from .settings import STORAGE_BUCKET, Settings
 from .store import Store, StoreError, utc_now_iso
@@ -516,7 +518,7 @@ def _run_start(
     try:
         saved = store.update_analysis(
             analysis_id,
-            {"upstage_job_id": job["id"], "agent_id": agent_id},
+            {"upstage_job_id": job["id"], "agent_id": agent_id, "config_id": config_id},
             expect_status=RUNNING,
             expect_no_job=True,
             expect_updated_at=claim_stamp,
@@ -557,6 +559,29 @@ def _documents_with(documents: Sequence[Mapping[str, Any]], progress: _StartProg
     return docs
 
 
+def run_workflow(store: Store, conf: UpstageSettings) -> tuple[str, str]:
+    """이번 실행에 쓸 (에이전트 id, 설정 번호) — 웹에서 저장한 값이 있으면 그 값, 없으면 환경 변수. 읽기 실패는 StoreError."""
+    saved = store.get_workflow_settings() or {}
+    agent_id, config_id = saved.get("agent_id"), saved.get("config_id")
+    if isinstance(agent_id, str) and agent_id and isinstance(config_id, str) and config_id:
+        return agent_id, config_id
+    return conf.agent_id, conf.config_id
+
+
+def _run_secrets(settings: Settings, agent_id: Any) -> dict[str, str]:
+    """서버 비밀값 + 이 실행의 에이전트 id(웹에서 저장한 값은 환경 변수의 가림 사전에 없다)."""
+    secrets = dict(settings.secrets())
+    if isinstance(agent_id, str) and agent_id:
+        secrets.setdefault(agent_id, AGENT_ID_PLACEHOLDER)
+    return secrets
+
+
+def _run_config_id(row: Mapping[str, Any], settings: Settings) -> str:
+    """이 실행을 시작할 때 쓴 설정 번호. 행에 없으면(config_id 열을 더하기 전에 시작한 실행) 환경 변수 값."""
+    config_id = row.get("config_id")
+    return config_id if isinstance(config_id, str) and config_id else settings.upstage().config_id
+
+
 def start_analysis(
     store: Store, upstage: UpstageFactory, settings: Settings, analysis_id: str
 ) -> dict[str, Any]:
@@ -571,9 +596,9 @@ def start_analysis(
     row = _load(store, analysis_id)
     if row.get("status") != QUEUED:
         raise ApiError(409, MSG_ALREADY_STARTED)
-    # 설정이 빠졌으면 선점 전에 멈춘다(ConfigError → 500, 행은 queued 그대로)
-    conf = settings.upstage()
-    secrets = settings.secrets()
+    # 설정이 빠졌거나 저장한 설정을 읽지 못하면 선점 전에 멈춘다(ConfigError → 500·StoreError → 502, 행은 queued 그대로)
+    agent_id, config_id = run_workflow(store, settings.upstage())
+    secrets = _run_secrets(settings, agent_id)
 
     # 선점도 읽은 행에만(updated_at = 읽은 값 — V-T1-3 v3-m1 ①): 오래 멈췄던 시작이 그 사이 새로 돈 queued 순환을
     # 가로채지 않게(그 순환의 문서 값은 이 시작이 읽은 것과 다를 수 있다)
@@ -599,8 +624,8 @@ def start_analysis(
             client,
             analysis_id=analysis_id,
             documents=documents,
-            agent_id=conf.agent_id,
-            config_id=conf.config_id,
+            agent_id=agent_id,
+            config_id=config_id,
             secrets=secrets,
             progress=progress,
             claim_stamp=claim_stamp,
@@ -806,7 +831,7 @@ def poll_analysis(
     if row.get("status") != RUNNING:
         return PollResult(row)
     now = now or datetime.now(UTC)
-    secrets = settings.secrets()
+    secrets = _run_secrets(settings, row.get("agent_id"))
     job_id = row.get("upstage_job_id")
     if not isinstance(job_id, str) or not job_id:
         return _fail_stale_start(store, upstage, row, analysis_id, now, secrets)
@@ -835,7 +860,7 @@ def poll_analysis(
                 return _finish(store, client, row, analysis_id, job_id, dict(gone), secrets, shown_status)
             reason = MSG_RESULT_FETCH_FAILED.format(reason=exc.message)
             return PollResult(row, shown_status, _scrub(reason, secrets))
-        result = build_result(full, settings.upstage().config_id, secrets)
+        result = build_result(full, _run_config_id(row, settings), secrets)
         stage_names = result["summary"].get("stage_names") or []
         # 첫 실행에서 output[].model 목록을 남긴다(값 없이 이름만)
         logger.info(

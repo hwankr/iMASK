@@ -27,6 +27,9 @@
 #                                          JSON·필드 검사 400. Upstage 를 부르지 않는다(의존성도 받지 않음).
 #    POST /api/py/analyses/{id}/retry      실패한 분석을 같은 원본으로 진짜 다시 분석(imask_backend.manage) → 200 AnalysisOut.
 #                                          본문 {"actor"} 를 검토 동작과 같은 경계로 읽는다(413 → 400 → 404 → 409 → 500).
+#    POST /api/py/settings/workflow/open   웹 설정 화면 열기: 본문 {"password"} → 200 지금 적용 중인 워크플로우(imask_backend.workflow_settings)
+#    POST /api/py/settings/workflow        워크플로우 저장: 본문 {"password", "agent_id", "config_id"} → 200. 비밀번호 401·503,
+#                                          꼴·Upstage 에 없음 400, Upstage 확인 실패 502. 둘 다 Cache-Control: no-store.
 #  AnalysisOut 에는 started_at(마지막으로 시작한 시각, 문자열 또는 null) 키가 늘 있다.
 #  분석 건·목록·원본 파일·다시 분석 응답은 _json_out 한 곳을 지난다 — 짝 없는 서로게이트가 있을 때만 ASCII escape JSON(이름·값 원문
 #  그대로), 없으면 정상 경로 그대로(바이트 불변). 상태 코드·헤더는 같다.
@@ -83,6 +86,7 @@ from imask_backend.settings import Settings, get_settings  # noqa: E402
 from imask_backend.store import Store, StoreError, cached_store  # noqa: E402
 from imask_backend.textsafe import escaped_json_bytes, has_unpaired_surrogates  # noqa: E402
 from imask_backend.upstage import CLEANUP_TIMEOUT, UpstageClient  # noqa: E402
+from imask_backend.workflow_settings import check_password, read_workflow, save_workflow  # noqa: E402
 
 MSG_BAD_REQUEST = "요청 형식이 올바르지 않습니다."
 MSG_CONFIG_MISSING = "서버 설정이 빠졌습니다: {names}"
@@ -250,6 +254,15 @@ class CreateAnalysisIn(BaseModel):
     mime_type: StrictStr
 
 
+class WorkflowOpenIn(BaseModel):
+    password: StrictStr = Field(max_length=200)
+
+
+class WorkflowSaveIn(WorkflowOpenIn):
+    agent_id: StrictStr = Field(max_length=200)
+    config_id: StrictStr = Field(max_length=200)
+
+
 # --- 응답 도우미 -------------------------------------------------------------------
 
 
@@ -382,3 +395,18 @@ async def retry(analysis_id: str, request: Request, store: StoreDep, upstage: Up
     actor = parse_retry_body(await _read_body(request))
     # 저장소·Upstage 호출은 블로킹이라 스레드 풀에서(검토 동작 경로처럼)
     return _json_out(await run_in_threadpool(retry_out, store, upstage, settings, analysis_id, actor))
+
+
+_NO_STORE = {"Cache-Control": "no-store"}
+
+
+@app.post("/api/py/settings/workflow/open", response_model=dict[str, Any])
+def open_workflow_settings(body: WorkflowOpenIn, store: StoreDep, upstage: UpstageDep, settings: SettingsDep) -> Any:
+    check_password(settings, body.password)
+    return _json_out(read_workflow(store, upstage, settings), headers=_NO_STORE)
+
+
+@app.post("/api/py/settings/workflow", response_model=dict[str, Any])
+def save_workflow_settings(body: WorkflowSaveIn, store: StoreDep, upstage: UpstageDep, settings: SettingsDep) -> Any:
+    check_password(settings, body.password)
+    return _json_out(save_workflow(store, upstage, settings, body.agent_id, body.config_id), headers=_NO_STORE)

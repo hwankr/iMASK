@@ -290,6 +290,21 @@ class UpstageClient:
         response = self._send("GET", url, action)
         return self._json(response, action)
 
+    def get_workflow(self, agent_id: str, config_id: str) -> dict[str, Any]:
+        """GET /agents/{id} · /agents/{id}/configs/{설정 번호} → {"agent_name", "config_name"}(이름을 못 읽으면 None).
+
+        웹 설정 화면이 저장 전에 그 워크플로우가 있는지 본다(공개 문서에 없는 Studio 경로, 2026-11-07 확인).
+        없으면 UpstageError(status_code 404). config_id 는 실행할 때 보내는 설정 번호(external_id)다.
+        """
+        action = "워크플로우 확인"
+        self._secrets.setdefault(agent_id, AGENT_ID_PLACEHOLDER)
+        agent_path = f"/agents/{self._path_id(agent_id, 'agent_id')}"
+        agent = self._json(self._send("GET", agent_path, action), action)
+        config_path = f"{agent_path}/configs/{self._path_id(config_id, 'config_id')}"
+        config = self._json(self._send("GET", config_path, action), action)
+        names = {"agent_name": agent.get("name"), "config_name": config.get("name")}
+        return {key: value if isinstance(value, str) and value.strip() else None for key, value in names.items()}
+
     def delete_file(self, file_id: str) -> bool:
         """DELETE /files/{file_id}. 지워졌거나 이미 없으면(404) True."""
         action = "파일 지우기"

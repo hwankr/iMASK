@@ -6,6 +6,8 @@
 #    로컬은 `uvicorn --env-file .env`, Vercel 은 프로젝트 환경변수로 들어온다(코드는 .env 를 읽지 않는다).
 #  - 진짜 비밀값(BRIEF §2): SUPABASE_SECRET_KEY · UPSTAGE_API_KEY. (접근 코드 DEMO_ACCESS_CODE 는 2026-11-03 없앰)
 #    repr 에 나오지 않고, secrets() 로 가림 사전(값 → 자리표시자)을 만든다. 에이전트 id 도 가린다.
+#  - SETTINGS_PASSWORD: 웹 설정 화면(/settings)의 비밀번호. 없으면 그 화면을 열 수 없다. secrets() 에는 넣지 않는다 —
+#    짧은 값이라 넣으면 분석 결과 속 같은 숫자까지 가려진다. 응답·로그에 내보내는 곳은 없다.
 # ==========================================================================
 
 from __future__ import annotations
@@ -27,7 +29,8 @@ from .redaction import AGENT_ID_PLACEHOLDER, API_KEY_PLACEHOLDER
 
 REQUIRED_SUPABASE_ENV = ("SUPABASE_URL", "SUPABASE_SECRET_KEY")
 # 선택 — 프로젝트 id 는 에이전트가 Upstage 프로젝트에 속하면 필요하다(config.PROJECT_ID_ENV). 여기 없으면 서버가 읽지 못한다
-OPTIONAL_ENV = ("UPSTAGE_BASE_URL", PROJECT_ID_ENV)
+SETTINGS_PASSWORD_ENV = "SETTINGS_PASSWORD"
+OPTIONAL_ENV = ("UPSTAGE_BASE_URL", PROJECT_ID_ENV, SETTINGS_PASSWORD_ENV)
 KNOWN_ENV = REQUIRED_SUPABASE_ENV + REQUIRED_UPSTAGE_ENV + OPTIONAL_ENV
 
 SUPABASE_KEY_PLACEHOLDER = "<SUPABASE_SECRET_KEY>"
@@ -79,6 +82,10 @@ class Settings:
     def upstage(self) -> UpstageSettings:
         """T1 의 load_upstage_settings 그대로(빠진 이름이 있으면 ConfigError)."""
         return load_upstage_settings(self.values)
+
+    def settings_password(self) -> str:
+        """웹 설정 화면의 비밀번호. 없으면 빈 문자열."""
+        return self._get(SETTINGS_PASSWORD_ENV)
 
     def secrets(self) -> dict[str, str]:
         """가림 사전(값 → 자리표시자). 빈 값은 넣지 않는다."""

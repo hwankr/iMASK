@@ -13,6 +13,7 @@
    - listAnalyses = GET /analyses(서버 목록 — 최근 100건, 가벼운 항목). 응답 모양은 매핑(mapping.ts readAnalysisList)이 검사한다.
    - deleteAnalysis = DELETE /analyses/{id} → 204. 204 는 본문을 읽지 않는다(빈 본문을 JSON 으로 읽다 '응답을 읽지 못함'이 되지 않게).
    - retryAnalysis = POST /analyses/{id}/retry(본문 { actor }) → 200 다시 시작한(또는 시작하다 실패한) 분석.
+   - openWorkflowSettings · saveWorkflowSettings = 웹 설정 화면(POST /settings/workflow…). 비밀번호는 본문에 담는다(헤더·주소에 넣지 않는다).
    ========================================================================== */
 
 import type { ExportFormat, Exposure, FpReason, InfoCategory, InfoSubject } from '@/display/rules';
@@ -313,6 +314,21 @@ export interface CreateAnalysisIn {
   mime_type: string;
 }
 
+/** 지금 적용 중인 워크플로우 — 이름은 Upstage 에서 못 읽으면 null */
+export interface WorkflowSettingsOut {
+  agent_id: string;
+  config_id: string;
+  agent_name: string | null;
+  config_name: string | null;
+}
+
+/** 워크플로우 저장 요청 */
+export interface WorkflowSettingsIn {
+  password: string;
+  agent_id: string;
+  config_id: string;
+}
+
 /* ---------- 클라이언트 ---------- */
 
 export interface ApiClientOptions {
@@ -341,6 +357,10 @@ export interface ApiClient {
   deleteAnalysis(id: string): Promise<void>;
   /** POST /api/py/analyses/{id}/retry(본문 { actor }) → 200 다시 시작한 분석(시작하다 실패하면 failed 행) */
   retryAnalysis(id: string, body: RetryIn): Promise<AnalysisOut>;
+  /** POST /api/py/settings/workflow/open → 200 지금 적용 중인 워크플로우(비밀번호가 틀리면 401) */
+  openWorkflowSettings(password: string): Promise<WorkflowSettingsOut>;
+  /** POST /api/py/settings/workflow → 200 저장한 워크플로우(Upstage 에 없으면 400) */
+  saveWorkflowSettings(input: WorkflowSettingsIn): Promise<WorkflowSettingsOut>;
 }
 
 export const DEFAULT_BASE_URL = '/api/py';
@@ -432,5 +452,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     listAnalyses: () => request<AnalysisListOut>('GET', '/analyses'),
     deleteAnalysis: (id) => request<void>('DELETE', idPath(id)),
     retryAnalysis: (id, body) => request<AnalysisOut>('POST', idPath(id) + '/retry', body),
+    openWorkflowSettings: (password) => request<WorkflowSettingsOut>('POST', '/settings/workflow/open', { password }),
+    saveWorkflowSettings: (input) => request<WorkflowSettingsOut>('POST', '/settings/workflow', input),
   };
 }

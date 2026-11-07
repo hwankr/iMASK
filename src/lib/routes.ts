@@ -42,6 +42,9 @@ export function withBase(base: RouteBase, path: string): string {
 
 /* ---------- 이동 주소 ---------- */
 
+/** 워크플로우 설정 — 실제 분석 모드에만 있다(`/demo` 아래에는 없다) */
+export const SETTINGS_HREF = '/settings';
+
 /** 목록 — query 는 정규형 검색 문자열(물음표 없음, listModel filtersToQuery). 비면 목록 첫 화면 */
 export function listHref(base: RouteBase, query = ''): string {
   return withBase(base, query ? '/?' + query : '/');

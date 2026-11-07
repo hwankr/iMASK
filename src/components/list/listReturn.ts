@@ -1,7 +1,7 @@
 'use client';
 
 import { useSyncExternalStore } from 'react';
-import { DEMO_BASE, listHref, routeBaseFor, type RouteBase } from '@/lib/routes';
+import { DEMO_BASE, listHref, routeBaseFor, SETTINGS_HREF, type RouteBase } from '@/lib/routes';
 import { DEFAULT_FILTERS, filtersToQuery, parseFilters, type ListFilters } from './listModel';
 
 /* ==========================================================================
@@ -119,8 +119,9 @@ export function listHomeHref(base: RouteBase, query: string): string {
 /** 헤더 주 메뉴 */
 export type NavKey = 'analyses' | 'review';
 
-/** 주 메뉴 활성 — 목록 경로(`/` 또는 `/demo`)이고 `review=needed` 면 '검토 필요', 그 밖에는 '문서 분석' */
-export function activeNav(pathname: string | null, review: string | null): NavKey {
+/** 주 메뉴 활성 — 목록 경로(`/` 또는 `/demo`)이고 `review=needed` 면 '검토 필요', 설정 화면이면 없음, 그 밖에는 '문서 분석' */
+export function activeNav(pathname: string | null, review: string | null): NavKey | null {
+  if (pathname === SETTINGS_HREF) return null;
   const onList = pathname !== null && pathname === listHref(routeBaseFor(pathname));
   return onList && review === 'needed' ? 'review' : 'analyses';
 }

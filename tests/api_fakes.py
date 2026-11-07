@@ -91,11 +91,25 @@ class FakeStore:
         self.deleted_counts: list[int] = []  # delete_analysis 가 돌려준 지운 행 수
         self.delete_conditions: list[str | None] = []  # delete_analysis 의 expect_updated_at
         self.document_updates: list[tuple[str, dict[str, Any], dict[str, Any]]] = []  # (문서 id, 값, 조건)
+        self.workflow: dict[str, Any] | None = None  # 웹에서 저장한 워크플로우 설정(없으면 환경 변수를 쓴다)
 
     def _call(self, name: str) -> None:
         self.calls.append(name)
         if name in self.fail:
             raise StoreError(self.fail_message or f"{name}: 가짜 실패")
+
+    # --- 워크플로우 설정(calls 에 적지 않는다 — 시작 경로의 호출 순서 시험을 바꾸지 않게) ---------
+
+    def get_workflow_settings(self) -> dict[str, Any] | None:
+        if "get_workflow_settings" in self.fail:
+            raise StoreError(self.fail_message or "get_workflow_settings: 가짜 실패")
+        return copy.deepcopy(self.workflow)
+
+    def save_workflow_settings(self, agent_id: str, config_id: str) -> dict[str, Any]:
+        if "save_workflow_settings" in self.fail:
+            raise StoreError(self.fail_message or "save_workflow_settings: 가짜 실패")
+        self.workflow = {"id": 1, "agent_id": agent_id, "config_id": config_id, "updated_at": now_iso()}
+        return copy.deepcopy(self.workflow)
 
     # --- 테스트 준비용 ----------------------------------------------------------
 
@@ -497,6 +511,8 @@ class FakeUpstageServer:
         )
         # (메서드, 경로 종류) → (상태 코드, 본문) 또는 예외
         self.errors: dict[tuple[str, str], Any] = {}
+        # Studio 읽기(GET /agents/{id}·/agents/{id}/configs/{번호}) — 에이전트 id → (이름, {설정 번호: 설정 이름})
+        self.agents: dict[str, tuple[str, dict[str, str]]] = {}
         self._counter = 0
 
     def _next(self, prefix: str) -> str:
@@ -545,6 +561,16 @@ class FakeUpstageServer:
         if request.method == "GET" and kind == "file":
             file_id = request.url.path.rsplit("/", 1)[-1]
             return httpx.Response(404 if file_id in self.deleted else 200, json={"id": file_id})
+        if request.method == "GET" and kind in ("agent", "config"):
+            parts = [p for p in request.url.path.split("/") if p]
+            agent = self.agents.get(parts[2])
+            if agent is None:
+                return httpx.Response(404, json={"error": {"message": "No such agent"}})
+            if kind == "agent":
+                return httpx.Response(200, json={"id": parts[2], "object": "agent", "name": agent[0]})
+            if parts[4] not in agent[1]:
+                return httpx.Response(404, json={"error": {"message": "No such config"}})
+            return httpx.Response(200, json={"external_id": parts[4], "object": "config", "name": agent[1][parts[4]]})
         return httpx.Response(404, json={"error": {"message": "unknown path"}})
 
 
@@ -560,6 +586,10 @@ def _kind(request: httpx.Request) -> str:
         return "responses"
     if len(tail) == 2 and tail[0] == "responses":
         return "response"
+    if len(tail) == 2 and tail[0] == "agents":
+        return "agent"
+    if len(tail) == 4 and tail[0] == "agents" and tail[2] == "configs":
+        return "config"
     return "other"
 
 

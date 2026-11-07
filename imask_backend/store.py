@@ -38,6 +38,9 @@
 #    update_document 의 expect_file_id·expect_no_file(문서 upstage_file_id 비교 후 교환 — select=id 로 바뀐 행이 있었는지 돌려줌),
 #    delete_analysis 의 expect_updated_at(읽은 실행만 지우기, §5.3 3단계)도 같은 뜻이다(V-T1-2 R1·R2).
 #    claim_analysis 의 expect_updated_at(시작이 읽은 행일 때만 선점 — V-T1-3 v3-m1 ①)도 같다.
+#  - 워크플로우 설정(workflow_settings, 한 행 — 마이그레이션 20261107034956): get_workflow_settings 는 행(없으면 None),
+#    save_workflow_settings 는 upsert(id = 1). 오류는 _quiet_error(값 없이). analyses.config_id(그 분석을 시작할 때 쓴 설정 번호)도
+#    ANALYSIS_COLUMNS 로 읽는다 — 이 열이 없는 DB 에 이 코드를 올리면 조회가 실패하므로 마이그레이션을 먼저 적용한다.
 # ==========================================================================
 
 from __future__ import annotations
@@ -54,7 +57,7 @@ from .settings import STORAGE_BUCKET, Settings
 logger = logging.getLogger("imask.store")
 
 # 응답에 쓰는 열만 고른다(agent_id·storage_path 는 DB 에만 — 업무 로직이 쓰므로 읽기는 한다)
-ANALYSIS_COLUMNS = "id,name,status,agent_id,upstage_job_id,result,error,created_at,updated_at,started_at"
+ANALYSIS_COLUMNS = "id,name,status,agent_id,config_id,upstage_job_id,result,error,created_at,updated_at,started_at"
 DOCUMENT_COLUMNS = "id,analysis_id,filename,storage_path,size_bytes,mime_type,upstage_file_id,created_at"
 # 공유 목록(BRIEF §5.2) — 질의 한 번. result 는 JSON 경로 두 값만(분석 하나의 result 는 150~320KB), 비밀·내부 열은 넣지 않는다
 LIST_SELECT = (
@@ -66,6 +69,9 @@ REVIEW_TABLE = "analysis_reviews"
 REVIEW_COLUMNS = (
     "analysis_id,status,memo,memo_at,reviewer,reviewed_at,completion_note,findings,items,history,version,created_at,updated_at"
 )
+WORKFLOW_TABLE = "workflow_settings"
+WORKFLOW_COLUMNS = "agent_id,config_id,updated_at"
+WORKFLOW_ROW_ID = 1  # 행은 하나뿐이다(테이블의 check 제약)
 # 검토 행 오류 로그에 남겨도 되는 오류 코드(PostgREST PGRST205·Postgres SQLSTATE 23514 등 — 영숫자만, 16자까지)
 _ERROR_CODE = re.compile(r"[A-Za-z0-9]{1,16}")
 # 값 없는 오류에 남겨도 되는 HTTP 상태(세 자리 숫자만)
@@ -87,6 +93,14 @@ class StoreError(Exception):
 
 class Store(Protocol):
     """업무 로직이 쓰는 저장소 인터페이스(행은 dict, 시각은 ISO 8601 문자열)."""
+
+    def get_workflow_settings(self) -> dict[str, Any] | None:
+        """웹에서 저장한 워크플로우 설정(agent_id·config_id·updated_at). 저장한 적이 없으면 None."""
+        ...
+
+    def save_workflow_settings(self, agent_id: str, config_id: str) -> dict[str, Any]:
+        """워크플로우 설정을 저장한다(한 행 upsert) → 저장한 행."""
+        ...
 
     def insert_analysis(self, name: str) -> dict[str, Any]: ...
 
@@ -264,6 +278,24 @@ class SupabaseStore:
         return self._client.storage.from_(self._bucket)
 
     # --- 테이블 ---------------------------------------------------------------
+
+    def get_workflow_settings(self) -> dict[str, Any] | None:
+        try:
+            response = self._table(WORKFLOW_TABLE).select(WORKFLOW_COLUMNS).eq("id", WORKFLOW_ROW_ID).limit(1).execute()
+        except Exception as exc:
+            raise self._quiet_error("워크플로우 설정 읽기", exc) from None
+        return _first(response.data)
+
+    def save_workflow_settings(self, agent_id: str, config_id: str) -> dict[str, Any]:
+        values = {"id": WORKFLOW_ROW_ID, "agent_id": agent_id, "config_id": config_id}
+        try:
+            response = self._table(WORKFLOW_TABLE).upsert(values, on_conflict="id").execute()
+        except Exception as exc:
+            raise self._quiet_error("워크플로우 설정 저장", exc) from None
+        row = _first(response.data)
+        if row is None:
+            raise StoreError("워크플로우 설정 저장: 응답에 행이 없습니다")
+        return row
 
     def insert_analysis(self, name: str) -> dict[str, Any]:
         try:

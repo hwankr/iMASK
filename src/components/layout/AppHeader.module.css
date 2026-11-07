@@ -210,6 +210,9 @@
    (/demo 에서는 배지도 '데모' — DemoBadge shortLabel), 보이는 모양은 두고 누르는 영역만 44×44(--touch-min) 이상으로
    넓힌다(가상 요소 방식) */
 @media (max-width: 767.98px) {
+  .settingsLink {
+    display: none;
+  }
   .modeLink {
     padding: 0 var(--space-10);
   }

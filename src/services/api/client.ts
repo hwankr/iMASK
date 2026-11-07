@@ -13,7 +13,8 @@
    - listAnalyses = GET /analyses(서버 목록 — 최근 100건, 가벼운 항목). 응답 모양은 매핑(mapping.ts readAnalysisList)이 검사한다.
    - deleteAnalysis = DELETE /analyses/{id} → 204. 204 는 본문을 읽지 않는다(빈 본문을 JSON 으로 읽다 '응답을 읽지 못함'이 되지 않게).
    - retryAnalysis = POST /analyses/{id}/retry(본문 { actor }) → 200 다시 시작한(또는 시작하다 실패한) 분석.
-   - openWorkflowSettings · saveWorkflowSettings = 웹 설정 화면(POST /settings/workflow…). 비밀번호는 본문에 담는다(헤더·주소에 넣지 않는다).
+   - openWorkflowSettings · saveWorkflowSettings · addWorkflowPreset · deleteWorkflowPreset = 웹 설정 화면(POST /settings/workflow…).
+     비밀번호는 본문에 담는다(헤더·주소에 넣지 않는다). presets 는 바깥 값이라 방어적으로 읽는다(배열이 아니면 빈 목록, 모양이 틀린 항목은 뺀다).
    ========================================================================== */
 
 import type { ExportFormat, Exposure, FpReason, InfoCategory, InfoSubject } from '@/display/rules';
@@ -329,6 +330,33 @@ export interface WorkflowSettingsIn {
   config_id: string;
 }
 
+/** 등록해 둔 워크플로우 하나 */
+export interface WorkflowPresetOut {
+  id: string;
+  name: string;
+  agent_id: string;
+  config_id: string;
+}
+
+/** 등록해 둔 목록(등록한 순) */
+export interface WorkflowPresetsOut {
+  presets: WorkflowPresetOut[];
+}
+
+/** 설정 화면을 열 때 — 지금 적용 값 + 목록 */
+export type WorkflowSettingsOpenOut = WorkflowSettingsOut & WorkflowPresetsOut;
+
+/** 목록 등록 요청 */
+export interface WorkflowPresetIn extends WorkflowSettingsIn {
+  name: string;
+}
+
+/** 목록 삭제 요청 */
+export interface WorkflowPresetDeleteIn {
+  password: string;
+  id: string;
+}
+
 /* ---------- 클라이언트 ---------- */
 
 export interface ApiClientOptions {
@@ -357,14 +385,29 @@ export interface ApiClient {
   deleteAnalysis(id: string): Promise<void>;
   /** POST /api/py/analyses/{id}/retry(본문 { actor }) → 200 다시 시작한 분석(시작하다 실패하면 failed 행) */
   retryAnalysis(id: string, body: RetryIn): Promise<AnalysisOut>;
-  /** POST /api/py/settings/workflow/open → 200 지금 적용 중인 워크플로우(비밀번호가 틀리면 401) */
-  openWorkflowSettings(password: string): Promise<WorkflowSettingsOut>;
+  /** POST /api/py/settings/workflow/open → 200 지금 적용 중인 워크플로우 + 목록(비밀번호가 틀리면 401) */
+  openWorkflowSettings(password: string): Promise<WorkflowSettingsOpenOut>;
   /** POST /api/py/settings/workflow → 200 저장한 워크플로우(Upstage 에 없으면 400) */
   saveWorkflowSettings(input: WorkflowSettingsIn): Promise<WorkflowSettingsOut>;
+  /** POST /api/py/settings/workflow/presets → 200 새 목록(같은 이름 409, Upstage 에 없으면 400) */
+  addWorkflowPreset(input: WorkflowPresetIn): Promise<WorkflowPresetsOut>;
+  /** POST /api/py/settings/workflow/presets/delete → 200 새 목록(없는 id 도 200) */
+  deleteWorkflowPreset(input: WorkflowPresetDeleteIn): Promise<WorkflowPresetsOut>;
 }
 
 export const DEFAULT_BASE_URL = '/api/py';
 export const DEFAULT_TIMEOUT_MS = 60_000;
+
+function isWorkflowPreset(value: unknown): value is WorkflowPresetOut {
+  if (!value || typeof value !== 'object') return false;
+  const { id, name, agent_id, config_id } = value as Record<string, unknown>;
+  return [id, name, agent_id, config_id].every((field) => typeof field === 'string');
+}
+
+/** 응답의 presets — 배열이 아니면 빈 목록, 모양이 틀린 항목은 뺀다 */
+function readPresets(value: unknown): WorkflowPresetOut[] {
+  return Array.isArray(value) ? value.filter(isWorkflowPreset) : [];
+}
 
 /** 응답 본문의 detail(한국어 문장) — 없거나 문자열이 아니면 '' */
 async function readDetail(response: Response): Promise<string> {
@@ -443,6 +486,11 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
 
   const idPath = (id: string) => '/analyses/' + encodeURIComponent(id);
 
+  const presetsRequest = async (path: string, body: unknown): Promise<WorkflowPresetsOut> => {
+    const out = await request<{ presets?: unknown }>('POST', path, body);
+    return { presets: readPresets(out?.presets) };
+  };
+
   return {
     createAnalysis: (input) => request<CreateAnalysisOut>('POST', '/analyses', input),
     startAnalysis: (id) => request<AnalysisOut>('POST', idPath(id) + '/start'),
@@ -452,7 +500,12 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     listAnalyses: () => request<AnalysisListOut>('GET', '/analyses'),
     deleteAnalysis: (id) => request<void>('DELETE', idPath(id)),
     retryAnalysis: (id, body) => request<AnalysisOut>('POST', idPath(id) + '/retry', body),
-    openWorkflowSettings: (password) => request<WorkflowSettingsOut>('POST', '/settings/workflow/open', { password }),
+    openWorkflowSettings: async (password) => {
+      const out = await request<WorkflowSettingsOut & { presets?: unknown }>('POST', '/settings/workflow/open', { password });
+      return { ...out, presets: readPresets(out.presets) };
+    },
     saveWorkflowSettings: (input) => request<WorkflowSettingsOut>('POST', '/settings/workflow', input),
+    addWorkflowPreset: (input) => presetsRequest('/settings/workflow/presets', input),
+    deleteWorkflowPreset: (input) => presetsRequest('/settings/workflow/presets/delete', input),
   };
 }

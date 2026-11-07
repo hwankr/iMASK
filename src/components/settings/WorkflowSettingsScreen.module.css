@@ -41,11 +41,127 @@
   align-items: baseline;
   gap: var(--space-10);
   font-size: var(--fs-15);
+  border-radius: var(--radius-6); /* 포커스 테두리 */
 }
 
 .currentLabel {
   font-size: var(--fs-14);
   color: var(--ink-2);
+}
+
+.currentValue {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: var(--fs-16);
+  line-height: var(--lh-130);
+  font-weight: var(--fw-bold);
+  border-radius: var(--radius-6); /* 포커스 테두리 */
+}
+
+/* 목록 — 이름 · 설정 번호 · 에이전트 ID 왼쪽, 행동 오른쪽. 긴 값은 줄을 바꾼다 */
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-10) var(--space-16);
+  padding: var(--space-14) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.rowMain {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.rowHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-8);
+  min-width: 0;
+}
+
+.rowName {
+  min-width: 0;
+  font-size: var(--fs-15);
+  line-height: var(--lh-140);
+  font-weight: var(--fw-semibold);
+  overflow-wrap: anywhere;
+}
+
+.rowConfig {
+  font-size: var(--fs-13);
+  color: var(--ink-2);
+}
+
+.rowAgent {
+  font-family: var(--mono);
+  font-size: var(--fs-12);
+  line-height: var(--lh-140);
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+
+.rowActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: none;
+  gap: var(--space-8);
+}
+
+.rowCurrent {
+  padding: 0 var(--space-12);
+  font-size: var(--fs-13-5);
+  font-weight: var(--fw-bold);
+  color: var(--accent-ink);
+  border-radius: var(--radius-6); /* 포커스 테두리 */
+}
+
+/* 요청 중 막힌 버튼(aria-disabled — 포커스를 잃지 않게 disabled 를 쓰지 않는다). 돌고 있는 버튼은 그대로 */
+.row button[aria-disabled='true']:not([aria-busy='true']) {
+  color: var(--disabled-ghost);
+}
+
+.form .actions button[aria-disabled='true']:not([aria-busy='true']) {
+  background: var(--disabled-bg);
+  color: var(--disabled-fg);
+}
+
+/* 행 안의 오류는 줄을 꽉 채운다 */
+.row > .alert {
+  flex: 1 0 100%;
+}
+
+/* 휴대폰 — 값 아래에 행동을 쌓는다 */
+@media (max-width: 767.98px) {
+  .rowMain {
+    flex-basis: 100%;
+  }
+
+  .rowActions {
+    flex: 1 0 100%;
+  }
 }
 
 .alert {

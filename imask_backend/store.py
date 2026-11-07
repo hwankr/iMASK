@@ -41,6 +41,10 @@
 #  - 워크플로우 설정(workflow_settings, 한 행 — 마이그레이션 20261107034956): get_workflow_settings 는 행(없으면 None),
 #    save_workflow_settings 는 upsert(id = 1). 오류는 _quiet_error(값 없이). analyses.config_id(그 분석을 시작할 때 쓴 설정 번호)도
 #    ANALYSIS_COLUMNS 로 읽는다 — 이 열이 없는 DB 에 이 코드를 올리면 조회가 실패하므로 마이그레이션을 먼저 적용한다.
+#  - 워크플로우 목록(workflow_presets — 마이그레이션 20261107072655): list_workflow_presets 는 등록한 순(created_at, id)으로 limit 개까지,
+#    insert_workflow_preset 은 upsert(on_conflict=name, ignore_duplicates) = `insert … on conflict (name) do nothing` — 같은 이름이
+#    이미 있으면 빈 응답 → None(예외로 흐름을 가르지 않는다), delete_workflow_preset 은 id 로 지운다(없는 id 도 성공).
+#    오류는 _quiet_error(값 없이). 분석을 시작하는 쪽은 이 테이블을 읽지 않는다(적용은 값을 workflow_settings 로 복사하는 것이다).
 # ==========================================================================
 
 from __future__ import annotations
@@ -72,6 +76,8 @@ REVIEW_COLUMNS = (
 WORKFLOW_TABLE = "workflow_settings"
 WORKFLOW_COLUMNS = "agent_id,config_id,updated_at"
 WORKFLOW_ROW_ID = 1  # 행은 하나뿐이다(테이블의 check 제약)
+PRESET_TABLE = "workflow_presets"
+PRESET_COLUMNS = "id,name,agent_id,config_id,created_at"
 # 검토 행 오류 로그에 남겨도 되는 오류 코드(PostgREST PGRST205·Postgres SQLSTATE 23514 등 — 영숫자만, 16자까지)
 _ERROR_CODE = re.compile(r"[A-Za-z0-9]{1,16}")
 # 값 없는 오류에 남겨도 되는 HTTP 상태(세 자리 숫자만)
@@ -100,6 +106,18 @@ class Store(Protocol):
 
     def save_workflow_settings(self, agent_id: str, config_id: str) -> dict[str, Any]:
         """워크플로우 설정을 저장한다(한 행 upsert) → 저장한 행."""
+        ...
+
+    def list_workflow_presets(self, limit: int) -> list[dict[str, Any]]:
+        """등록해 둔 워크플로우 목록(PRESET_COLUMNS, created_at·id 순, limit 개까지)."""
+        ...
+
+    def insert_workflow_preset(self, name: str, agent_id: str, config_id: str) -> dict[str, Any] | None:
+        """insert … on conflict (name) do nothing → 만든 행. 같은 이름이 이미 있으면 None."""
+        ...
+
+    def delete_workflow_preset(self, preset_id: str) -> None:
+        """id 로 지운다. 없는 id 도 성공."""
         ...
 
     def insert_analysis(self, name: str) -> dict[str, Any]: ...
@@ -296,6 +314,32 @@ class SupabaseStore:
         if row is None:
             raise StoreError("워크플로우 설정 저장: 응답에 행이 없습니다")
         return row
+
+    def list_workflow_presets(self, limit: int) -> list[dict[str, Any]]:
+        try:
+            response = self._table(PRESET_TABLE).select(PRESET_COLUMNS).order("created_at").order("id").limit(limit).execute()
+        except Exception as exc:
+            raise self._quiet_error("워크플로우 목록 읽기", exc) from None
+        data = response.data
+        if not isinstance(data, list):
+            raise StoreError("워크플로우 목록 읽기: 응답 모양이 다릅니다")
+        return data
+
+    def insert_workflow_preset(self, name: str, agent_id: str, config_id: str) -> dict[str, Any] | None:
+        # Prefer: return=representation,resolution=ignore-duplicates + ?on_conflict=name
+        # = insert … on conflict (name) do nothing returning * — 충돌이면 빈 목록
+        values = {"name": name, "agent_id": agent_id, "config_id": config_id}
+        try:
+            response = self._table(PRESET_TABLE).upsert(values, on_conflict="name", ignore_duplicates=True).execute()
+        except Exception as exc:
+            raise self._quiet_error("워크플로우 목록에 넣기", exc) from None
+        return _first(response.data)
+
+    def delete_workflow_preset(self, preset_id: str) -> None:
+        try:
+            self._table(PRESET_TABLE).delete().eq("id", preset_id).execute()
+        except Exception as exc:
+            raise self._quiet_error("워크플로우 목록에서 지우기", exc) from None
 
     def insert_analysis(self, name: str) -> dict[str, Any]:
         try:

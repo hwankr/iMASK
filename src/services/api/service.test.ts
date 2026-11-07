@@ -165,8 +165,10 @@ describe('requestAnalysis', () => {
       listAnalyses: async () => ({ analyses: [] }),
       deleteAnalysis: async () => {},
       retryAnalysis: async () => analysisOut(),
-      openWorkflowSettings: async () => ({ agent_id: '', config_id: '', agent_name: null, config_name: null }),
+      openWorkflowSettings: async () => ({ agent_id: '', config_id: '', agent_name: null, config_name: null, presets: [] }),
       saveWorkflowSettings: async () => ({ agent_id: '', config_id: '', agent_name: null, config_name: null }),
+      addWorkflowPreset: async () => ({ presets: [] }),
+      deleteWorkflowPreset: async () => ({ presets: [] }),
     };
     const service = createApiService({ client: base, upload: async () => {} });
     const err = await service.requestAnalysis({ name: 'x', files: [pdf()] }).catch((e: unknown) => e);

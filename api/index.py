@@ -27,9 +27,20 @@
 #                                          JSON·필드 검사 400. Upstage 를 부르지 않는다(의존성도 받지 않음).
 #    POST /api/py/analyses/{id}/retry      실패한 분석을 같은 원본으로 진짜 다시 분석(imask_backend.manage) → 200 AnalysisOut.
 #                                          본문 {"actor"} 를 검토 동작과 같은 경계로 읽는다(413 → 400 → 404 → 409 → 500).
-#    POST /api/py/settings/workflow/open   웹 설정 화면 열기: 본문 {"password"} → 200 지금 적용 중인 워크플로우(imask_backend.workflow_settings)
-#    POST /api/py/settings/workflow        워크플로우 저장: 본문 {"password", "agent_id", "config_id"} → 200. 비밀번호 401·503,
-#                                          꼴·Upstage 에 없음 400, Upstage 확인 실패 502. 둘 다 Cache-Control: no-store.
+#    POST /api/py/settings/workflow/open   웹 설정 화면 열기: 본문 {"password"} → 200 지금 적용 중인 워크플로우 + presets(등록해 둔 목록,
+#                                          imask_backend.workflow_settings). 목록을 못 읽으면 502, 이름(Upstage)을 못 읽어도 열린다.
+#    POST /api/py/settings/workflow        워크플로우 저장(적용): 본문 {"password", "agent_id", "config_id"} → 200. 비밀번호 401·503,
+#                                          꼴·Upstage 에 없음 400, Upstage 확인 실패 502.
+#    POST /api/py/settings/workflow/presets
+#                                          목록에 등록: 본문 {"password", "name", "agent_id", "config_id"} → 200 {"presets"}. 이름·꼴·
+#                                          Upstage 에 없음·50개 한도 400, 같은 이름 409, Upstage 확인 실패 502.
+#    POST /api/py/settings/workflow/presets/delete
+#                                          목록에서 지우기: 본문 {"password", "id"} → 200 {"presets"}. id 꼴 400, 없는 id 도 200.
+#                                          Upstage 를 부르지 않는다(의존성도 받지 않음).
+#                                          등록·삭제는 지금 적용 값(workflow_settings)을 바꾸지 않는다.
+#                                          설정 경로 네 개 모두 비밀번호 확인이 맨 먼저다 — 저장소 준비보다도 먼저라 StoreDep 를 받지 않고
+#                                          확인 뒤에 _store_for 로 얻는다(비밀번호 없음 503·틀림 401, 맞으면 설정 누락 500 이름만).
+#    /api/py/settings/ 아래 응답은 상태와 상관없이(오류·처리 못 한 500 포함) Cache-Control: no-store(미들웨어 catch_unexpected 한 곳).
 #  AnalysisOut 에는 started_at(마지막으로 시작한 시각, 문자열 또는 null) 키가 늘 있다.
 #  분석 건·목록·원본 파일·다시 분석 응답은 _json_out 한 곳을 지난다 — 짝 없는 서로게이트가 있을 때만 ASCII escape JSON(이름·값 원문
 #  그대로), 없으면 정상 경로 그대로(바이트 불변). 상태 코드·헤더는 같다.
@@ -86,12 +97,13 @@ from imask_backend.settings import Settings, get_settings  # noqa: E402
 from imask_backend.store import Store, StoreError, cached_store  # noqa: E402
 from imask_backend.textsafe import escaped_json_bytes, has_unpaired_surrogates  # noqa: E402
 from imask_backend.upstage import CLEANUP_TIMEOUT, UpstageClient  # noqa: E402
-from imask_backend.workflow_settings import check_password, read_workflow, save_workflow  # noqa: E402
+from imask_backend.workflow_settings import add_preset, check_password, delete_preset, open_workflow, save_workflow  # noqa: E402
 
 MSG_BAD_REQUEST = "요청 형식이 올바르지 않습니다."
 MSG_CONFIG_MISSING = "서버 설정이 빠졌습니다: {names}"
 MSG_STORE_FAILED = "데이터 저장소에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요."
 MSG_SERVER_ERROR = "서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
+_SETTINGS_PREFIX = "/api/py/settings/"  # 이 아래 응답은 모두 Cache-Control: no-store(catch_unexpected)
 # Starlette 기본 영어 문구 → 한국어
 DEFAULT_DETAILS = {
     404: "요청한 주소를 찾을 수 없습니다.",
@@ -181,6 +193,13 @@ def _settings_for(request: Request) -> Settings:
     return provider()
 
 
+def _store_for(request: Request, settings: Settings) -> Store:
+    """설정 경로가 비밀번호를 확인한 뒤에 저장소를 얻는다(바꿔 끼운 것 포함). StoreDep 는 함수 진입 전에 만들어져
+    Supabase 설정이 빠지면 비밀번호보다 먼저 500 이 나기 때문이다. 설정이 빠졌으면 ConfigError → 500(이름만)."""
+    override = request.app.dependency_overrides.get(get_store)
+    return override() if override is not None else get_store(settings)
+
+
 def _detail(status_code: int, detail: str) -> JSONResponse:
     return JSONResponse(status_code=status_code, content={"detail": detail})
 
@@ -230,16 +249,21 @@ async def catch_unexpected(request: Request, call_next: Any) -> Any:
 
     Exception 처리기를 쓰면 Starlette 가 응답 뒤 예외를 다시 던져 서버가 가리지 않은 traceback 을
     찍으므로, 여기서 잡아 가린 traceback 만 남긴다(예외 문구에 요청 정보가 섞일 수 있어서).
+
+    모든 응답이 지나는 곳이라 설정 경로의 no-store 도 여기서 붙인다(비밀번호를 다루는 경로 — 오류 응답도 캐시에 남기지 않는다).
     """
     try:
-        return await call_next(request)
+        response = await call_next(request)
     except Exception as exc:
         try:
             secrets = _settings_for(request).secrets()
         except Exception:
             secrets = {}
         logger.error("처리하지 못한 오류:\n%s", redact("".join(traceback.format_exception(exc)), secrets))
-        return _detail(500, MSG_SERVER_ERROR)
+        response = _detail(500, MSG_SERVER_ERROR)
+    if request.url.path.startswith(_SETTINGS_PREFIX):
+        response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 # --- 요청 모양 --------------------------------------------------------------------
@@ -261,6 +285,14 @@ class WorkflowOpenIn(BaseModel):
 class WorkflowSaveIn(WorkflowOpenIn):
     agent_id: StrictStr = Field(max_length=200)
     config_id: StrictStr = Field(max_length=200)
+
+
+class WorkflowPresetIn(WorkflowSaveIn):
+    name: StrictStr  # 길이는 업무 로직이 본다(이름 문구로 400 — imask_backend.workflow_settings)
+
+
+class WorkflowPresetDeleteIn(WorkflowOpenIn):
+    id: StrictStr = Field(max_length=200)
 
 
 # --- 응답 도우미 -------------------------------------------------------------------
@@ -397,16 +429,28 @@ async def retry(analysis_id: str, request: Request, store: StoreDep, upstage: Up
     return _json_out(await run_in_threadpool(retry_out, store, upstage, settings, analysis_id, actor))
 
 
-_NO_STORE = {"Cache-Control": "no-store"}
+# 설정 경로: 저장소는 비밀번호를 확인한 뒤에 얻는다(_store_for). no-store 는 미들웨어가 붙인다.
 
 
 @app.post("/api/py/settings/workflow/open", response_model=dict[str, Any])
-def open_workflow_settings(body: WorkflowOpenIn, store: StoreDep, upstage: UpstageDep, settings: SettingsDep) -> Any:
+def open_workflow_settings(body: WorkflowOpenIn, request: Request, upstage: UpstageDep, settings: SettingsDep) -> Any:
     check_password(settings, body.password)
-    return _json_out(read_workflow(store, upstage, settings), headers=_NO_STORE)
+    return _json_out(open_workflow(_store_for(request, settings), upstage, settings))
 
 
 @app.post("/api/py/settings/workflow", response_model=dict[str, Any])
-def save_workflow_settings(body: WorkflowSaveIn, store: StoreDep, upstage: UpstageDep, settings: SettingsDep) -> Any:
+def save_workflow_settings(body: WorkflowSaveIn, request: Request, upstage: UpstageDep, settings: SettingsDep) -> Any:
     check_password(settings, body.password)
-    return _json_out(save_workflow(store, upstage, settings, body.agent_id, body.config_id), headers=_NO_STORE)
+    return _json_out(save_workflow(_store_for(request, settings), upstage, settings, body.agent_id, body.config_id))
+
+
+@app.post("/api/py/settings/workflow/presets", response_model=dict[str, Any])
+def add_workflow_preset(body: WorkflowPresetIn, request: Request, upstage: UpstageDep, settings: SettingsDep) -> Any:
+    check_password(settings, body.password)
+    return _json_out(add_preset(_store_for(request, settings), upstage, settings, body.name, body.agent_id, body.config_id))
+
+
+@app.post("/api/py/settings/workflow/presets/delete", response_model=dict[str, Any])
+def delete_workflow_preset(body: WorkflowPresetDeleteIn, request: Request, settings: SettingsDep) -> Any:
+    check_password(settings, body.password)
+    return _json_out(delete_preset(_store_for(request, settings), body.id))

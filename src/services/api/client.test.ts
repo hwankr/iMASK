@@ -353,15 +353,63 @@ describe('워크플로우 설정 — POST /settings/workflow…', () => {
   it('비밀번호는 본문에 담고, 주소·헤더에는 넣지 않는다', async () => {
     const { fetch, seen } = fakeFetch(() => json(200, out));
     const client = createApiClient({ fetch });
-    await expect(client.openWorkflowSettings('pw-test')).resolves.toEqual(out);
+    await expect(client.openWorkflowSettings('pw-test')).resolves.toEqual({ ...out, presets: [] });
     await expect(client.saveWorkflowSettings({ password: 'pw-test', agent_id: 'agt_x', config_id: '60' })).resolves.toEqual(out);
+    await client.addWorkflowPreset({ password: 'pw-test', name: '이름', agent_id: 'agt_x', config_id: '60' });
+    await client.deleteWorkflowPreset({ password: 'pw-test', id: ID });
     expect(seen.map((r) => [r.method, r.url])).toEqual([
       ['POST', '/api/py/settings/workflow/open'],
       ['POST', '/api/py/settings/workflow'],
+      ['POST', '/api/py/settings/workflow/presets'],
+      ['POST', '/api/py/settings/workflow/presets/delete'],
     ]);
     expect(seen[0].body).toEqual({ password: 'pw-test' });
     expect(seen[1].body).toEqual({ password: 'pw-test', agent_id: 'agt_x', config_id: '60' });
-    for (const r of seen) expect(JSON.stringify(r.headers)).not.toContain('pw-test');
+    expect(seen[2].body).toEqual({ password: 'pw-test', name: '이름', agent_id: 'agt_x', config_id: '60' });
+    expect(seen[3].body).toEqual({ password: 'pw-test', id: ID });
+    for (const r of seen) {
+      expect(JSON.stringify(r.headers)).not.toContain('pw-test');
+      expect(r.url).not.toContain('pw-test');
+    }
+  });
+
+  it('목록은 응답의 presets 를 그대로(등록한 순서 유지)', async () => {
+    const presets = [
+      { id: 'b', name: '둘째', agent_id: 'agt_b', config_id: '2' },
+      { id: 'a', name: '첫째', agent_id: 'agt_a', config_id: '1' },
+    ];
+    const { fetch } = fakeFetch((req) => json(200, req.url.endsWith('/open') ? { ...out, presets } : { presets }));
+    const client = createApiClient({ fetch });
+    await expect(client.openWorkflowSettings('x')).resolves.toEqual({ ...out, presets });
+    await expect(client.addWorkflowPreset({ password: 'x', name: 'n', agent_id: 'agt_x', config_id: '1' })).resolves.toEqual({ presets });
+    await expect(client.deleteWorkflowPreset({ password: 'x', id: ID })).resolves.toEqual({ presets });
+  });
+
+  it.each([[undefined], [null], ['목록'], [{ id: 'a' }], [3]])('presets 가 배열이 아니면(%j) 빈 목록으로 읽는다', async (presets) => {
+    const { fetch } = fakeFetch((req) => json(200, req.url.endsWith('/open') ? { ...out, presets } : { presets }));
+    const client = createApiClient({ fetch });
+    await expect(client.openWorkflowSettings('x')).resolves.toEqual({ ...out, presets: [] });
+    await expect(client.addWorkflowPreset({ password: 'x', name: 'n', agent_id: 'agt_x', config_id: '1' })).resolves.toEqual({ presets: [] });
+    await expect(client.deleteWorkflowPreset({ password: 'x', id: ID })).resolves.toEqual({ presets: [] });
+  });
+
+  it('모양이 틀린 항목은 뺀다', async () => {
+    const good = { id: 'a', name: '첫째', agent_id: 'agt_a', config_id: '1' };
+    const presets = [null, 'x', 1, { ...good, config_id: 60 }, { id: 'b', name: '이름만' }, good];
+    const { fetch } = fakeFetch(() => json(200, { ...out, presets }));
+    await expect(createApiClient({ fetch }).openWorkflowSettings('x')).resolves.toEqual({ ...out, presets: [good] });
+  });
+
+  it('등록 · 삭제 실패는 서버 문장 그대로(409 는 conflict)', async () => {
+    const taken = fakeFetch(() => json(409, { detail: '같은 이름의 워크플로우가 이미 있습니다.' }));
+    await expect(
+      createApiClient({ fetch: taken.fetch }).addWorkflowPreset({ password: 'x', name: 'n', agent_id: 'agt_x', config_id: '1' }),
+    ).rejects.toMatchObject({ status: 409, code: 'conflict', message: '같은 이름의 워크플로우가 이미 있습니다.' });
+    const bad = fakeFetch(() => json(400, { detail: '요청 형식이 올바르지 않습니다.' }));
+    await expect(createApiClient({ fetch: bad.fetch }).deleteWorkflowPreset({ password: 'x', id: 'nope' })).rejects.toMatchObject({
+      status: 400,
+      message: '요청 형식이 올바르지 않습니다.',
+    });
   });
 
   it('틀린 비밀번호 · 없는 워크플로우는 서버 문장 그대로', async () => {

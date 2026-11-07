@@ -516,6 +516,7 @@ DB 구조를 바꿀 때는 **항상 `supabase/migrations/` 에 SQL 파일을 남
 | `20261104002351_add_analyses_started_at.sql` | `analyses.started_at`(timestamptz, null 허용 — 마지막으로 시작한 시각) 열 하나만 더함. 기존 행은 고치지 않음(모두 null, `updated_at` 그대로). 권한 변화 없음(`service_role` 테이블 권한이 새 열에도 적용). 2026-11-04 Supabase 커넥터로 적용 |
 | `20261104094327_add_analysis_reviews_items.sql` | `analysis_reviews.items`(jsonb, not null, 기본 `{}`, 객체인지 검사 — 검토사항 해결 기록) 열 하나만 더함. 기존 행은 고치지 않음(기본값 `{}`). 권한 변화 없음. 2026-11-04 Supabase 커넥터로 적용 |
 | `20261107034956_add_workflow_settings.sql` | `workflow_settings`(웹 설정 화면이 저장하는 에이전트 ID·설정 번호 — 한 행, RLS 켬), `analyses.config_id`(그 분석을 시작할 때 쓴 설정 번호, null 허용) |
+| `20261107072655_add_workflow_presets.sql` | `workflow_presets`(웹 설정 화면에 이름을 붙여 등록해 둔 워크플로우 목록 — 이름은 겹치지 않음, RLS 켜고 정책 없음, `service_role` 용 select·insert·delete 를 GRANT 로 적음 — `imask` 에서는 프로젝트 기본 권한으로 update 도 가지지만 항목을 고치는 경로는 없음). 적용은 고른 항목의 값을 `workflow_settings` 로 복사하는 것이라 항목을 지워도 지금 적용 값은 그대로이고, 분석을 시작하는 쪽은 이 테이블을 읽지 않음. 2026-11-07 적용 |
 
 - **이미 적용한 파일은 고치지 않습니다.** 바꿀 것이 있으면 새 파일을 추가합니다.
 - **세 테이블 모두 RLS를 켜고 정책은 두지 않았습니다.** 브라우저는 DB에 직접 접근하지 않고, FastAPI가 비밀 키로만 읽고 씁니다. 파일은 FastAPI가 만든 서명된 업로드 주소(2시간 유효)로 브라우저가 버킷에 바로 올립니다. Vercel 함수가 받는 요청은 4.5MB까지라 파일을 서버로 보내지 않기 때문입니다.

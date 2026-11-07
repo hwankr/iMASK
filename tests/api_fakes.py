@@ -19,6 +19,10 @@
 #    updated_at 은 갱신마다 늘 앞 값보다 뒤(트리거처럼 — 조건이 버전 구실을 하게).
 #    update_document 는 upstage_file_id 비교 후 교환 조건(expect_file_id·expect_no_file)을 보고 바뀐 행이 있었는지 돌려준다.
 #    delete_analysis 는 expect_updated_at(읽은 실행만 지우기)을 본다(V-T1-2 R1·R2).
+#    워크플로우 목록(workflow_presets): list_workflow_presets(created_at·id 순, limit)·insert_workflow_preset(같은 이름이면 None —
+#    unique + on conflict do nothing)·delete_workflow_preset(없는 id 도 성공, uuid 열처럼 대소문자 무시). calls 에 적지 않고 preset_calls 에
+#    적는다(fail 은 지킨다).
+#    before_preset_insert 는 한 번 부르는 훅(사전 확인 뒤에 다른 요청이 같은 이름을 넣는 경쟁 흉내).
 #  - FakeUpstageServer 는 httpx.MockTransport 처리기다. 진짜 UpstageClient 를 그대로 쓰게 해서
 #    요청 본문(config_id·include)까지 확인한다. 네트워크는 쓰지 않는다.
 #  값은 모두 지어낸 가짜다(FAKE_*). JWT·Supabase 키 꼴 값은 fake_tokens 가 실행 중에 만든다.
@@ -92,6 +96,10 @@ class FakeStore:
         self.delete_conditions: list[str | None] = []  # delete_analysis 의 expect_updated_at
         self.document_updates: list[tuple[str, dict[str, Any], dict[str, Any]]] = []  # (문서 id, 값, 조건)
         self.workflow: dict[str, Any] | None = None  # 웹에서 저장한 워크플로우 설정(없으면 환경 변수를 쓴다)
+        self.presets: list[dict[str, Any]] = []  # 등록해 둔 워크플로우 목록
+        self.preset_calls: list[str] = []  # 목록 메서드 호출(calls 와 따로 — 기존 호출 순서 시험을 바꾸지 않게)
+        self.preset_limits: list[int] = []  # list_workflow_presets 가 받은 limit
+        self.before_preset_insert: Callable[[FakeStore], None] | None = None  # 한 번(겹친 등록 흉내)
 
     def _call(self, name: str) -> None:
         self.calls.append(name)
@@ -110,6 +118,41 @@ class FakeStore:
             raise StoreError(self.fail_message or "save_workflow_settings: 가짜 실패")
         self.workflow = {"id": 1, "agent_id": agent_id, "config_id": config_id, "updated_at": now_iso()}
         return copy.deepcopy(self.workflow)
+
+    # --- 워크플로우 목록(calls 에 적지 않는다 — 위와 같은 까닭) --------------------------------------
+
+    def _preset_call(self, name: str) -> None:
+        self.preset_calls.append(name)
+        if name in self.fail:
+            raise StoreError(self.fail_message or f"{name}: 가짜 실패")
+
+    def put_preset(self, name: str, agent_id: str, config_id: str, **extra: Any) -> dict[str, Any]:
+        """테스트 준비용: 목록에 행을 바로 넣는다(호출로 세지 않고, 검사 없음 — 틀린 모양도 넣을 수 있다)."""
+        # created_at 은 늘 앞 행보다 뒤(같은 시각에 두 번 넣어도 등록한 순서가 흔들리지 않게)
+        stamp = _after(max((str(p["created_at"]) for p in self.presets), default=None))
+        row = {"id": str(uuid.uuid4()), "name": name, "agent_id": agent_id, "config_id": config_id, "created_at": stamp, **extra}
+        self.presets.append(row)
+        return copy.deepcopy(row)
+
+    def list_workflow_presets(self, limit: int) -> list[dict[str, Any]]:
+        self._preset_call("list_workflow_presets")
+        self.preset_limits.append(limit)
+        rows = sorted(self.presets, key=lambda p: (str(p["created_at"]), str(p["id"])))
+        return copy.deepcopy(rows[:limit])
+
+    def insert_workflow_preset(self, name: str, agent_id: str, config_id: str) -> dict[str, Any] | None:
+        self._preset_call("insert_workflow_preset")
+        if self.before_preset_insert is not None:
+            hook, self.before_preset_insert = self.before_preset_insert, None
+            hook(self)
+        if any(p["name"] == name for p in self.presets):
+            return None  # unique(name) + on conflict do nothing
+        return self.put_preset(name, agent_id, config_id)
+
+    def delete_workflow_preset(self, preset_id: str) -> None:
+        self._preset_call("delete_workflow_preset")
+        # id 는 uuid 열이라 진짜 저장소에서는 대소문자가 달라도 같은 행이다
+        self.presets = [p for p in self.presets if str(p["id"]).lower() != preset_id.lower()]
 
     # --- 테스트 준비용 ----------------------------------------------------------
 

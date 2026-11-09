@@ -1,7 +1,7 @@
 /* ==========================================================================
    헤더 — Main.dc.html 98–112
    높이 --head-h(64 · 1200 미만 56), 좌우 --gutter, 간격 --head-gap / --nav-gap / --nav-ml
-   브랜드 글자: 폭 480 이상 · 사용자 칩: 폭 960 이상
+   브랜드 글자: 폭 480 이상
    모드 전환 링크(실제 분석이 있는 빌드에서만 — 실제 분석 화면 '데모 체험하기', /demo '실제 분석으로'):
    폭 768 이상 긴 글자, 그 아래 짧은 글자('데모' · '실제', /demo 배지도 '데모'), 390 미만은 밑줄 글자
    ========================================================================== */
@@ -136,11 +136,6 @@
   gap: var(--space-14);
   min-width: 0;
 }
-.user {
-  display: flex;
-  align-items: center;
-  gap: var(--space-10);
-}
 
 /* 모드 전환 링크 — 실제 분석이 있는 빌드에서만 배지 앞에 둔다('데모 체험하기' · '실제 분석으로').
    보조 링크답게 작고 차분하게(배지와 같은 높이, 선만 있는 알약) */
@@ -172,38 +167,6 @@
 }
 .modeLinkShort {
   display: none;
-}
-.avatar {
-  width: var(--size-34);
-  height: var(--size-34);
-  border-radius: var(--radius-round);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--accent-soft-2);
-  color: var(--accent-ink);
-  font-size: var(--fs-14);
-  font-weight: var(--fw-heavy);
-}
-.userText {
-  display: flex;
-  flex-direction: column;
-  line-height: var(--lh-125);
-}
-.userName {
-  font-size: var(--fs-14);
-  font-weight: var(--fw-bold);
-}
-.userTeam {
-  font-size: var(--fs-12);
-  color: var(--ink-3);
-}
-
-/* 사용자 칩은 폭 960 이상에서만 (L.userChip) */
-@media (max-width: 959.98px) {
-  .user {
-    display: none;
-  }
 }
 
 /* 휴대폰(< 768): 전환 링크는 짧은 글자('데모' · '실제' — 접근 가능한 이름은 aria-label 로 그대로)로 헤더가 넘치지 않게 하고

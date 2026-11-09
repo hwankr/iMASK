@@ -11,7 +11,7 @@ export interface AppConfig {
   /** 강조색(16진수). tokens.css 의 --accent 기본값과 같게 둔다. */
   readonly accent: string;
   /** 로그인 전 단계의 담당자 정보(데모) */
-  readonly user: { readonly name: string; readonly team: string };
+  readonly user: { readonly name: string };
   /** 업로드 제한 — 파일 개수, 파일당 MB, 허용 확장자(소문자) */
   readonly upload: {
     readonly maxFiles: number;
@@ -38,7 +38,7 @@ export interface AppConfig {
 export const CONFIG = {
   brandName: 'iMASK',
   accent: '#00845C',
-  user: { name: '이지은', team: '여신관리팀' },
+  user: { name: '이지은' },
   upload: { maxFiles: 10, maxFileMB: 20, accept: ['pdf', 'png', 'jpg', 'jpeg'] },
   sim: { requestMs: 1300, startMs: 800, docMs: 1900, retryMs: 2400, uploadMs: 700, uploadRetryMs: 900 },
 } as const satisfies AppConfig;

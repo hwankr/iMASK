@@ -15,7 +15,7 @@ export interface AppShellProps {
 /**
  * 화면 껍데기 — 프로토타입 루트 구조(Main 44·98·113): 화면 높이에 맞춘 세로 flex, 헤더 고정,
  * <main> 이 남은 높이에서 스크롤. 아이콘 스프라이트, 토스트, 알림 영역(LiveRegion)을 한 번씩 둔다.
- * 브랜드명·사용자는 ① 설정값에서. 헤더 '검토 필요' 건수는 ServiceAppHeader 가 데이터 서비스에서 센다
+ * 브랜드명은 ① 설정값에서. 헤더 '검토 필요' 건수는 ServiceAppHeader 가 데이터 서비스에서 센다
  * (ServiceProvider 는 layout 에서 AppShell 바깥을 감싼다).
  *
  * 분석 완료 토스트(AnalysisDoneToast, 원본 onServiceEvent)는 화면이 바뀌어도 한 번만 구독하도록 여기서 그린다.
@@ -30,7 +30,7 @@ export function AppShell({ children }: AppShellProps) {
       <ToastProvider>
         <div className={styles.root} {...rootAttr}>
           <IconSprite />
-          <ServiceAppHeader brandName={CONFIG.brandName} user={CONFIG.user} />
+          <ServiceAppHeader brandName={CONFIG.brandName} />
           <main id="main" className={styles.main}>
             {children}
           </main>

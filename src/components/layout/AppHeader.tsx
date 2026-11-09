@@ -15,8 +15,6 @@ import styles from './AppHeader.module.css';
 export interface AppHeaderProps {
   /** 브랜드명(① 설정값) */
   brandName: string;
-  /** 담당자(① 설정값) */
-  user: { readonly name: string; readonly team: string };
   /**
    * '검토 필요' 건수 — 0보다 크면 배지가 어둡게 채워진다. null 이면 아직 모름(불러오는 중):
    * 배지 자리(회색 빈 알약)만 두어 숫자가 들어와도 메뉴가 밀리지 않게 한다.
@@ -72,11 +70,11 @@ function NavFallback({ count, base }: { count: number | null; base: RouteBase })
  * 헤더 — Main 98–112. 로고 버튼(첫 화면), 브랜드 글자(폭 480 이상), 주 메뉴(문서 분석 · 검토 필요 + 건수),
  * 오른쪽 '설정' 링크(실제 분석 화면 · 폭 768 이상만 — 휴대폰은 헤더 자리가 없어 주소로 연다),
  * 모드 전환 링크(modeSwitch.ts — 실제 분석 화면은 '데모 체험하기', 실제 모드 빌드의 `/demo` 는 '실제 분석으로')와
- * 모드 표시(배지 '실제 분석' · '데모 데이터'), 사용자 칩(폭 960 이상: 첫 글자 동그라미 · 이름 · 팀).
+ * 모드 표시(배지 '실제 분석' · '데모 데이터').
  * 모드 · 기준 경로는 주소 기준(useServiceMode · useRouteBase) — `/demo` 아래는 빌드 모드와 상관없이 데모 표시이고
  * 링크도 `/demo` 기준이다. 데모 빌드(useBuildMode 'demo')에는 전환 링크가 없다. 선택 밑줄은 scaleX 로 움직인다(.32s).
  */
-export function AppHeader({ brandName, user, reviewNeededCount }: AppHeaderProps) {
+export function AppHeader({ brandName, reviewNeededCount }: AppHeaderProps) {
   const count = reviewNeededCount === null ? null : Math.max(0, Math.floor(reviewNeededCount));
   const mode = useServiceMode();
   const base = useRouteBase();
@@ -114,15 +112,6 @@ export function AppHeader({ brandName, user, reviewNeededCount }: AppHeaderProps
         ) : (
           <DemoBadge shortLabel={switchLink ? DEMO_BADGE_SHORT : undefined} />
         )}
-        <div className={styles.user}>
-          <span aria-hidden="true" className={styles.avatar}>
-            {user.name.slice(0, 1)}
-          </span>
-          <div className={styles.userText}>
-            <span className={styles.userName}>{user.name}</span>
-            <span className={styles.userTeam}>{user.team}</span>
-          </div>
-        </div>
       </div>
     </header>
   );

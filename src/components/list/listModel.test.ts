@@ -47,13 +47,13 @@ describe('목록 필터 ↔ URL 검색 파라미터', () => {
 describe('listModel — 프로토타입 listVM 규칙', () => {
   it('요약 숫자와 머리말은 서비스 데이터에서 센다', async () => {
     const all = await sampleList();
-    const m = listModel(all, F(), '이지은');
+    const m = listModel(all, F());
     const high = all.filter((a) => a.risk === 'high').length;
     const needed = all.filter((a) => a.review === 'needed').length;
     expect(m.total).toBe(all.length);
     expect(m.cards.map((c) => c.n)).toEqual([all.length, high, needed]);
     expect(m.cards.map((c) => c.on)).toEqual([true, false, false]);
-    expect(m.heroLead + m.heroStrong + m.heroTail).toBe(needed ? `이지은님, 검토가 필요한 분석이 ${needed}건 있습니다.` : '이지은님, 지금 검토가 필요한 분석은 없습니다.');
+    expect(m.heroLead + m.heroStrong + m.heroTail).toBe(needed ? `검토가 필요한 분석이 ${needed}건 있습니다.` : '지금 검토가 필요한 분석은 없습니다.');
     expect(m.basis).toBe('전체 기준');
     expect(m.resultText).toBe(`전체 ${all.length}건`);
     expect(m.rows).toHaveLength(all.length);

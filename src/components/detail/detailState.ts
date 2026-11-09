@@ -101,8 +101,10 @@ export interface DetailUiState {
 
 /** 원문 맨 위로 스크롤(원본 '__top') */
 export const SCROLL_TOP = '__top';
+/** 원문 맨 아래로 스크롤 — 위로 굴려 앞 쪽으로 넘어갈 때 그 쪽의 끝에서 이어 읽는다 */
+export const SCROLL_BOTTOM = '__bottom';
 
-/** 원문 뷰어 스크롤 대상 — 원문 위치 ID(앵커) 또는 맨 위 */
+/** 원문 뷰어 스크롤 대상 — 원문 위치 ID(앵커) 또는 맨 위 · 맨 아래 */
 export type ViewerScrollTarget = string;
 
 /** 선택·이동 계획 — 상태에 붙일 값과 스크롤 요청 */
@@ -277,14 +279,18 @@ export function planPickDoc(docId: string, mobile: boolean): DetailPlan {
   return { patch, viewer: SCROLL_TOP };
 }
 
-/** 쪽을 옮긴다(원본 setPage) */
-export function planSetPage(page: number): DetailPlan {
-  return { patch: { page }, viewer: SCROLL_TOP };
+/** 쪽을 옮긴다(원본 setPage) — 새 쪽의 맨 위(기본) 또는 맨 아래부터 보인다 */
+export function planSetPage(page: number, at: 'top' | 'bottom' = 'top'): DetailPlan {
+  return { patch: { page }, viewer: at === 'bottom' ? SCROLL_BOTTOM : SCROLL_TOP };
 }
+
+/** 확대 배율 범위(원본 setZoom) */
+export const ZOOM_MIN = 0.4;
+export const ZOOM_MAX = 2;
 
 /** 확대 배율 — 0.1 단위로 반올림, 0.4~2 배(원본 setZoom) */
 export function normalizeZoom(z: number): number {
-  return clamp(Math.round(z * 10) / 10, 0.4, 2);
+  return clamp(Math.round(z * 10) / 10, ZOOM_MIN, ZOOM_MAX);
 }
 
 export interface PickFindingOptions {

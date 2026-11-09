@@ -32,6 +32,7 @@ import {
   planPickLinkDoc,
   planSetPage,
   resolveLeftOpen,
+  SCROLL_BOTTOM,
   SCROLL_TOP,
   toggledMaskPick,
   withMaskPick,
@@ -100,7 +101,8 @@ export interface DetailUi {
   toggleLeft: () => void;
   /* 원문 뷰어 */
   pickDoc: (docId: string) => void;
-  setPage: (page: number) => void;
+  /** 쪽을 옮긴다 — 새 쪽의 맨 위(기본) 또는 맨 아래(위로 굴려 앞 쪽으로 넘어갈 때)부터 */
+  setPage: (page: number, at?: 'top' | 'bottom') => void;
   setZoom: (zoom: number) => void;
   fit: () => void;
   toggleMask: () => void;
@@ -160,6 +162,10 @@ export function useDetailUi(analysis: Analysis, initial?: Partial<DetailUiState>
         if (!vEl.isConnected) return;
         if (vt === SCROLL_TOP) {
           vEl.scrollTo({ top: 0, left: 0 });
+          return;
+        }
+        if (vt === SCROLL_BOTTOM) {
+          vEl.scrollTo({ top: vEl.scrollHeight, left: 0 });
           return;
         }
         const el = vEl.querySelector(attrSel('data-anchor', vt));
@@ -263,7 +269,7 @@ export function useDetailUi(analysis: Analysis, initial?: Partial<DetailUiState>
     setMobileTab: (mTab) => apply({ mTab }),
     toggleLeft: () => apply({ leftOpen: !leftOpen }),
     pickDoc: (docId) => run(planPickDoc(docId, mobile)),
-    setPage: (page) => run(planSetPage(page)),
+    setPage: (page, at) => run(planSetPage(page, at)),
     setZoom: (zoom) => apply({ zoom: normalizeZoom(zoom) }),
     fit: () => apply({ zoom: null }),
     toggleMask: () => apply({ mask: !state.mask }),

@@ -382,6 +382,55 @@
   transform: translateX(var(--space-12));
 }
 
+/* ---------- 쪽 이동 — 원문 양옆(태블릿 · 데스크톱) ----------
+   뷰어 가운데 높이에 떠 있는 둥근 버튼. 줄(.sideRow) 폭은 종이 폭 + 양옆 버튼 자리라 뷰어가 넉넉하면 종이 바로 바깥에,
+   모자라면(화면 맞춤 · 확대) 뷰어 가장자리에 놓인다. 오른쪽은 세로 스크롤 막대(--viewer-sb — DocViewer.tsx 가 잰다) 안쪽.
+   휴대폰은 자리가 없어 도구 줄의 이전 · 다음 버튼을 쓰고, 태블릿 · 데스크톱 도구 줄에는 쪽 번호만 남긴다(.barNav). */
+.sideNav {
+  position: absolute;
+  top: calc(50% - var(--size-20));
+  left: 0;
+  right: var(--viewer-sb, 0px);
+  z-index: var(--z-float);
+  display: flex;
+  justify-content: center;
+  padding: 0 var(--space-8);
+  pointer-events: none;
+}
+.sideRow {
+  display: flex;
+  width: 100%;
+  max-width: calc(var(--paper-w) * var(--paper-zoom) + (var(--space-12) + var(--size-40)) * 2);
+}
+.side.side {
+  pointer-events: auto;
+  border-radius: var(--radius-round);
+  background: var(--frost-toolbar);
+  backdrop-filter: saturate(1.6) blur(var(--space-12));
+  box-shadow: var(--shadow-float);
+  color: var(--ink-2);
+}
+@media (hover: hover) {
+  .side.side:hover:not(:disabled) {
+    background: var(--surface);
+    color: var(--ink);
+  }
+}
+/* 다음 버튼은 혼자 있어도(첫 쪽) 오른쪽 */
+.sideNext {
+  margin-left: auto;
+}
+@media (min-width: 768px) {
+  .barNav.barNav {
+    display: none;
+  }
+}
+@media (max-width: 767.98px) {
+  .sideNav {
+    display: none;
+  }
+}
+
 /* ---------- 휴대폰 누름 영역 (BRIEF §3: 최소 44px) ----------
    보이는 크기(아이콘 32 · 화면 맞춤 · 마스킹 34)와 배치는 그대로 두고 투명 ::after 로 누름 영역만 넓힌다.
    도구 줄은 버튼 사이가 좁아(구분선 칸 9px, 확대↔화면 맞춤 4px) 공통 IconButton 처럼 가운데 기준으로 넓히면

@@ -212,8 +212,10 @@ export function DetailView({ analysis: a, initial, live, onDelete }: DetailViewP
               scrollRef={ui.viewerRef}
               onPrev={() => ui.setPage(v.page - 1)}
               onNext={() => ui.setPage(v.page + 1)}
+              onScrollFlip={(dir) => ui.setPage(v.page + dir, dir < 0 ? 'bottom' : 'top')}
               onZoomOut={() => ui.setZoom(v.zoom - 0.1)}
               onZoomIn={() => ui.setZoom(v.zoom + 0.1)}
+              onZoomTo={ui.setZoom}
               onFit={ui.fit}
               onToggleMask={ui.toggleMask}
               /* 마스킹 미리보기 중에는 탐지 위치를 누르면 고르는 대신 그 항목의 가림을 켜고 끈다 */

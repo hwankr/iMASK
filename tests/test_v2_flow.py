@@ -57,6 +57,7 @@ from imask_backend.results import (
     parse_stages,
     stage_key,
     summarize,
+    v2_next_stage,
 )
 from imask_backend.textsafe import has_unpaired_surrogates
 
@@ -328,6 +329,70 @@ def test_verdict_low_branch_synthetic() -> None:
     assert view["overall"]["level"] == "하" and view["overall"]["next_stage"] == "권장_조치"
     summary = summarize(response)
     assert (summary["risk_level"], summary["final_stage"]) == ("하", "권장_조치")
+    assert_view(view)
+
+
+# v4 워크플로우: 검토 사유가 있어도 risk_level 에 상·중을 내는 끝 노드(판정_<사유>_<등급>) — 케이스, 원래 끝 노드, 새 등급
+V4_GRADED_REVIEW = {
+    "판정_누락_상": ("K", "판정_누락", "상"),
+    "판정_누락_중": ("Q", "판정_누락", "중"),
+    "판정_중복_상": ("T", "판정_중복", "상"),
+    "판정_형식_상": ("L", "판정_형식", "상"),
+    "판정_불일치_상": ("U", "판정_불일치", "상"),
+}
+
+
+@pytest.mark.parametrize(("leaf", "spec"), V4_GRADED_REVIEW.items(), ids=list(V4_GRADED_REVIEW))
+def test_v4_graded_review_goes_to_review_guide(leaf: str, spec: tuple[str, str, str]) -> None:
+    # 등급이 상·중이어도 검토 사유가 있으면 다음 단계는 검토_안내. 검토사항·사유·권장 조치는 옛 판과 같다
+    case, old_leaf, level = spec
+    before = view_of(case)
+    response = load(case)
+    step(response, old_leaf)["model"] = f"Instruct - {leaf}"
+
+    def change(body: dict[str, Any]) -> None:
+        body["risk_level"] = level
+
+    edit(response, leaf, change)
+    view = view_of(response)
+    assert view["decision"]["risk_level"] == level and view["decision"]["review_reasons"] == ANSWERS[case]["review_reasons"]
+    assert view["overall"]["level"] == level and view["overall"]["next_stage"] == STAGE_REVIEW
+    assert view["overall"]["next_text"] == ANSWERS[case]["recommended_action"]
+    summary = summarize(response)
+    assert (summary["risk_level"], summary["final_stage"]) == (level, STAGE_REVIEW)
+    assert ids(view["items"]) == ids(before["items"])
+    assert_view(view)
+
+
+def test_v4_next_stage_rule() -> None:
+    # 옛 판(검토 필요)·정상(사유 없음)은 그대로, 상·중·하 + 사유 → 검토_안내, 빈 글자 사유는 사유가 아니다
+    assert v2_next_stage("검토 필요") == STAGE_REVIEW and v2_next_stage("검토 필요", []) == STAGE_REVIEW
+    assert v2_next_stage("상", []) == "권장_조치" and v2_next_stage("중", None) == "권장_조치"
+    assert v2_next_stage("상", ["형식 오류"]) == STAGE_REVIEW and v2_next_stage("하", ["값 불일치"]) == STAGE_REVIEW
+    assert v2_next_stage("중", ["", "  "]) == "권장_조치" and v2_next_stage("중", "형식 오류") == "권장_조치"
+    assert v2_next_stage(None, ["형식 오류"]) is None and v2_next_stage("모름", ["형식 오류"]) is None
+
+
+def test_v4_grade_check_node_adds_no_items() -> None:
+    # v4 (가)의 Validate 등급_<사유>(웹이 모르는 이름)가 실패해도 검토사항·판정 읽기에 끼어들지 않는다
+    before = view_of("K")
+    response = load("K")
+    chain = step(response, "필수_확인")
+    extra = copy.deepcopy(chain)
+    extra["model"] = "Validate - 등급_누락"
+    response["output"].insert(response["output"].index(chain) + 1, extra)
+
+    def fail_all(av: dict[str, Any]) -> None:
+        av["verdict"] = "red"
+        av["checks"] = [
+            {"name": "상중_항목_있음", "severity": "error", "passed": False, "reason": "조건 불충족", "conditions": []},
+            {"name": "상_항목_있음", "severity": "warning", "passed": False, "reason": "조건 불충족", "conditions": []},
+        ]
+
+    edit(response, "등급_누락", fail_all, field="additional_values")
+    view = view_of(response)
+    assert ids(view["items"]) == ids(before["items"])
+    assert view["overall"] == before["overall"] and view["decision"] == before["decision"]
     assert_view(view)
 
 

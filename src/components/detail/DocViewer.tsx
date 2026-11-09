@@ -288,6 +288,8 @@ export function DocViewer({
     if (edge) scrollEl.current?.focus({ preventScroll: true });
   };
   const zoomStyle = { '--paper-zoom': v.zoom, '--viewer-sb': `${sbW}px`, ...barVar } as CSSProperties;
+  // 옆 쪽 이동 버튼이 있는가(여러 쪽 서류) — 있으면 스크롤 좌우 여백을 버튼 자리만큼 넓혀 화면 맞춤 종이가 버튼 밑으로 들어가지 않게 한다
+  const hasSideNav = !(v.noPrev && v.noNext);
   const wide = !compact;
   const mid = compact && !mobile;
   // 실제 분석 서류 — 원본 파일을 받는 중 · 실패 · 쪽 없음이면 그 화면, 아니면 원본 쪽
@@ -296,7 +298,7 @@ export function DocViewer({
 
   return (
     <section ref={rootEl} aria-label="원문 뷰어" className={styles.viewer} style={zoomStyle} {...panel}>
-      <div ref={setScrollEl} tabIndex={0} aria-label="원문 페이지 영역" className={styles.scroll}>
+      <div ref={setScrollEl} tabIndex={0} aria-label="원문 페이지 영역" className={cx(styles.scroll, hasSideNav && styles.scrollNav)}>
         <div className={cx(styles.fit, styles.nameLine)}>
           <span className={styles.nameIcon}>
             <Icon name="dg-i-file" size={15} />
@@ -354,14 +356,14 @@ export function DocViewer({
       </div>
 
       {/* 쪽 이동 — 원문 양옆(태블릿 · 데스크톱). 넘길 쪽이 없는 쪽 버튼은 그리지 않는다 */}
-      {v.noPrev && v.noNext ? null : (
+      {hasSideNav ? (
         <div className={styles.sideNav}>
           <div className={styles.sideRow}>
-            {v.noPrev ? null : <IconButton label="이전 페이지" icon="dg-i-chev-left" size={40} iconSize={22} strokeWidth={2.2} onClick={() => onSideNav(-1)} className={styles.side} />}
-            {v.noNext ? null : <IconButton label="다음 페이지" icon="dg-i-chev-right" size={40} iconSize={22} strokeWidth={2.2} onClick={() => onSideNav(1)} className={cx(styles.side, styles.sideNext)} />}
+            {v.noPrev ? null : <IconButton label="이전 페이지" icon="dg-i-chev-left" size={36} iconSize={20} strokeWidth={2.2} onClick={() => onSideNav(-1)} className={styles.side} />}
+            {v.noNext ? null : <IconButton label="다음 페이지" icon="dg-i-chev-right" size={36} iconSize={20} strokeWidth={2.2} onClick={() => onSideNav(1)} className={cx(styles.side, styles.sideNext)} />}
           </div>
         </div>
-      )}
+      ) : null}
 
       <div className={styles.barWrap}>
         <div ref={barRef} className={styles.bar}>

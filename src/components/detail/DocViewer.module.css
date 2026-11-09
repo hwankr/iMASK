@@ -383,24 +383,32 @@
 }
 
 /* ---------- 쪽 이동 — 원문 양옆(태블릿 · 데스크톱) ----------
-   뷰어 가운데 높이에 떠 있는 둥근 버튼. 줄(.sideRow) 폭은 종이 폭 + 양옆 버튼 자리라 뷰어가 넉넉하면 종이 바로 바깥에,
-   모자라면(화면 맞춤 · 확대) 뷰어 가장자리에 놓인다. 오른쪽은 세로 스크롤 막대(--viewer-sb — DocViewer.tsx 가 잰다) 안쪽.
+   뷰어 가운데 높이에 떠 있는 둥근 버튼(36). 줄(.sideRow) 폭은 종이 폭 + 양옆 버튼 자리라 뷰어가 넉넉하면 종이 바로 바깥에,
+   모자라면 뷰어 가장자리(6)에 놓인다. 오른쪽은 세로 스크롤 막대(--viewer-sb — DocViewer.tsx 가 잰다) 안쪽.
+   버튼이 있으면 스크롤 좌우 여백을 버튼 자리(6 + 36 + 6 = 48)로 넓힌다(.scrollNav) — 화면 맞춤 배율은 이 여백을 빼고
+   계산하므로(useDetailUi 가 padding-left 를 잰다) 종이가 버튼 밑으로 들어가지 않는다. 확대해 종이가 뷰어보다 넓으면 겹친다.
    휴대폰은 자리가 없어 도구 줄의 이전 · 다음 버튼을 쓰고, 태블릿 · 데스크톱 도구 줄에는 쪽 번호만 남긴다(.barNav). */
 .sideNav {
   position: absolute;
-  top: calc(50% - var(--size-20));
+  top: calc(50% - var(--size-18));
   left: 0;
   right: var(--viewer-sb, 0px);
   z-index: var(--z-float);
   display: flex;
   justify-content: center;
-  padding: 0 var(--space-8);
+  padding: 0 var(--space-6);
   pointer-events: none;
 }
 .sideRow {
   display: flex;
   width: 100%;
-  max-width: calc(var(--paper-w) * var(--paper-zoom) + (var(--space-12) + var(--size-40)) * 2);
+  max-width: calc(var(--paper-w) * var(--paper-zoom) + (var(--space-12) + var(--size-36)) * 2);
+}
+@media (min-width: 768px) {
+  .scrollNav {
+    padding-left: var(--space-48);
+    padding-right: var(--space-48);
+  }
 }
 .side.side {
   pointer-events: auto;

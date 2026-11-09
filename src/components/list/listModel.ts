@@ -7,7 +7,6 @@
 
 import { ASTATUS, RISK, RSTATUS, analysisRiskView, type AnalysisStatus, type ReviewStatus, type RiskLevel } from '@/display/rules';
 import type { IconName } from '@/display/icon-names';
-import { CONFIG } from '@/config/app';
 import { fmtDT } from '@/lib/format';
 import type { Analysis } from '@/services/types';
 
@@ -253,7 +252,7 @@ export interface ListModel {
   rows: ListRow[];
 }
 
-export function listModel(all: readonly Analysis[], f: ListFilters, userName: string = CONFIG.user.name): ListModel {
+export function listModel(all: readonly Analysis[], f: ListFilters): ListModel {
   const total = all.length;
   const high = all.filter((a) => a.risk === 'high').length;
   const needed = all.filter((a) => a.review === 'needed').length;
@@ -304,7 +303,7 @@ export function listModel(all: readonly Analysis[], f: ListFilters, userName: st
     hasData: total > 0,
     empty: total === 0,
     filtered,
-    heroLead: userName + '님, ' + (needed ? '검토가 필요한 분석이 ' : '지금 검토가 필요한 분석은 없습니다.'),
+    heroLead: needed ? '검토가 필요한 분석이 ' : '지금 검토가 필요한 분석은 없습니다.',
     heroStrong: needed ? needed + '건' : '',
     heroTail: needed ? ' 있습니다.' : '',
     basis: filtered ? '검색 결과 기준' : '전체 기준',

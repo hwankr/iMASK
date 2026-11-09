@@ -34,8 +34,9 @@
 #  - 이름 판정은 " - " 뒤의 노드 이름으로 한다. 저장된 key 는 믿지 않는다 — 옛 코드는 step_type validate 라서 사슬 노드를
 #    필수항목_검증 으로 저장했을 수 있다. stage_key·_key_of 가 이 이름들을 새 정규 키로 돌려 서류별 검증 경로에 들어가지 않게 한다
 #    (판정_* 은 모두 STAGE_V2_VERDICT 하나 — 지금 없는 판정_하 도 같다).
-#  - summarize(v2): risk_level = 판정 JSON 의 risk_level(final_flow.read_verdict), final_stage = 그 등급의 다음 단계
-#    (검토 필요 → 검토_안내, 상·중·하 → 권장_조치, 못 읽음 → None), other_document_count = 분류 코드 Other 서류 수,
+#  - summarize(v2): risk_level = 판정 JSON 의 risk_level(final_flow.read_verdict), final_stage = 그 판정의 다음 단계
+#    (검토 필요 → 검토_안내, 상·중·하 → 권장_조치 — 단 review_reasons 가 있으면 검토_안내(v4: 검토가 필요해도 등급을 낸다),
+#    못 읽음 → None), other_document_count = 분류 코드 Other 서류 수,
 #    extracted_document_count = 분류 서류를 읽었는데 Extract 단계가 하나도 없으면(대상 외) 0 — 못 읽은 것이 아니라 없는 것이다.
 #    Extract 단계가 있는데 읽지 못했으면 옛 응답과 같이 None 이다.
 # ==========================================================================
@@ -318,11 +319,18 @@ def is_v2(response_or_stages: Any) -> bool:
         return False
 
 
-def v2_next_stage(level: Any) -> str | None:
-    """설정 60 판정 등급의 다음 단계 — 검토 필요 → 검토_안내, 상·중·하 → 권장_조치, 그 밖 None."""
+def v2_next_stage(level: Any, reasons: Any = None) -> str | None:
+    """설정 60 판정의 다음 단계 — 검토 필요 → 검토_안내, 상·중·하 → 권장_조치, 그 밖 None.
+
+    검토 사유(review_reasons)에 글자가 하나라도 있으면 등급과 상관없이 검토_안내다. v4 워크플로우는 등급과 검토를 나눠
+    검토가 필요해도 risk_level 에 상·중을 낸다(옛 판은 검토 사유가 있으면 risk_level 이 검토 필요라 결과가 같다).
+    """
     if level == "검토 필요":
         return STAGE_REVIEW
-    return STAGE_ACTION if level in ("상", "중", "하") else None
+    if level in ("상", "중", "하"):
+        has_reason = isinstance(reasons, list) and any(isinstance(r, str) and r.strip() for r in reasons)
+        return STAGE_REVIEW if has_reason else STAGE_ACTION
+    return None
 
 
 def summarize(response_or_stages: Any) -> dict[str, Any]:
@@ -358,7 +366,7 @@ def summarize(response_or_stages: Any) -> dict[str, Any]:
 
         decision = read_verdict(stages)
         risk_level = decision.get("risk_level") if isinstance(decision, Mapping) else None
-        final_stage = v2_next_stage(risk_level)
+        final_stage = v2_next_stage(risk_level, decision.get("review_reasons") if isinstance(decision, Mapping) else None)
         others = sum(1 for t in document_types if t.lower() == "other")
         if document_types and not stages_for(stages, STAGE_EXTRACT):
             extracted_count = 0  # 대상 외 — 추출 단계 자체가 없다(머리 주석)

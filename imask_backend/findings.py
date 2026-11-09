@@ -898,7 +898,7 @@ def _v2_overall(decision: Any) -> dict[str, Any]:
     return {
         "level": level,
         "text": decision.get("reason") or "",
-        "next_stage": v2_next_stage(level),
+        "next_stage": v2_next_stage(level, decision.get("review_reasons")),
         "next_text": decision.get("recommended_action") or "",
     }
 

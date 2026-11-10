@@ -31,14 +31,14 @@ describe('내보내기 모달 화면 값 — 원본 modalVM export', () => {
     const svc = createService();
     for (const format of ['csv', 'json'] as const) {
       const file = await svc.buildExport('A1', format);
-      expect(expectedExportName('DG-20261030-0007', format)).toBe(file.name);
+      expect(expectedExportName('IM-20261030-0007', format)).toBe(file.name);
     }
-    expect(expectedExportName('DG-20261030-0007', 'csv')).toBe('iMASK_DG-20261030-0007_검토결과_탐지항목.csv');
+    expect(expectedExportName('IM-20261030-0007', 'csv')).toBe('iMASK_IM-20261030-0007_검토결과_탐지항목.csv');
   });
 
   it('주요 버튼 글자 — 만들기 · 만드는 중 · 다시 내보내기 · 다시 시도', async () => {
     const file = await createService().buildExport('A1', 'csv');
-    const code = 'DG-20261030-0007';
+    const code = 'IM-20261030-0007';
     expect(exportView(freshExport(), code)).toMatchObject({ busy: false, primaryLabel: '파일 만들기 · 저장', doneText: '', preview: '' });
     expect(exportView({ ...freshExport(), state: 'working' }, code)).toMatchObject({ busy: true, primaryLabel: '만드는 중…' });
     const handed = exportView({ format: 'csv', state: 'handed', file, msg: '', at: '2026-11-01 10:05' }, code);

@@ -67,7 +67,7 @@ const WANT: Record<Run, { links: [string, 'confirmed' | 'check', string][]; item
       ['R-02', 'lowconf', undefined],
       ['R-03', 'weaklink', 'L-01'],
     ],
-    bundle: '실패 · 실패 1',
+    bundle: '실패 1건',
     linkRow: '연결 0 · 확인 필요 1',
     risk: '검토 필요',
   },

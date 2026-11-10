@@ -25,12 +25,13 @@ import { useRef, useState, type ReactNode } from 'react';
 import { AnalysisStatusLabel, Banner, Button, Icon, IndeterminateBar, Skeleton, VisuallyHidden, cx } from '@/components/ui';
 import { fmtDT, fmtSize } from '@/lib/format';
 import { listHref, newAnalysisHref } from '@/lib/routes';
+import { NotFoundScreen } from './NotFoundScreen';
 import { requestListFocusOnArrive } from '@/components/list/listFocus';
 import { listReturnHref, useRememberedListQuery } from '@/components/list/listReturn';
 import { DELETE_LABEL, RETRY_LABEL } from '@/components/modals/analysisActionModel';
 import { useDeleteAnalysis } from '@/components/modals/DeleteAnalysis';
 import { useRetryAnalysis } from '@/components/modals/useRetryAnalysis';
-import { useAnalysis, useLiveExtras, useRouteBase } from '@/services/react';
+import { useAnalysis, useLiveExtras, useRouteBase, useServiceMode } from '@/services/react';
 import type { Analysis } from '@/services/types';
 import { DetailView } from '@/components/detail/DetailScreen';
 import { LiveResult } from './LiveResult';
@@ -47,11 +48,12 @@ export function LiveDetailScreen({ id }: { id: string }) {
   useStatusAnnounce(data?.status);
   // 지운 뒤 — 그 기준 경로의 마지막 목록(검색 · 필터 그대로)으로
   const listQuery = useRememberedListQuery(base);
+  const live = useServiceMode() === 'api';
   const del = useDeleteAnalysis({
     onRemoved: (_id, outcome) => {
       if (outcome !== 'deleted') return;
       requestListFocusOnArrive(); // 화면 이동은 포커스를 옮기지 않는다 — 목록이 그려지면 검색칸으로
-      router.push(listReturnHref(base, listQuery));
+      router.push(listReturnHref(base, listQuery, live));
     },
   });
   const askDelete = () => del.ask({ id });
@@ -147,7 +149,7 @@ function LiveView({ a, refreshError, onDelete }: { a: Analysis; refreshError: st
         {polling ? (
           <section className={cx(styles.card, styles.running)} aria-label="진행 상태">
             <IndeterminateBar variant="track" tone="run" size="md" />
-            <p className={styles.runText}>{a.status === 'queued' ? '분석을 준비하고 있습니다.' : 'Upstage 워크플로우가 분석하고 있습니다(보통 1~3분).'}</p>
+            <p className={styles.runText}>{a.status === 'queued' ? '분석을 준비하고 있습니다.' : '분석하고 있습니다. 예상 시간 1분 내외'}</p>
             <p className={styles.runSub}>
               Upstage 상태: <strong>{upstageStatusText(raw?.upstageStatus ?? '')}</strong>
             </p>
@@ -210,23 +212,7 @@ function LoadFailed({ message, onRetry }: { message: string; onRetry: () => Prom
 }
 
 function NotFound() {
-  const base = useRouteBase();
-  return (
-    <div className={styles.screen}>
-      <div className={cx(styles.page, styles.narrow)}>
-        <h1 className={styles.title}>분석 건을 찾을 수 없습니다</h1>
-        <p className={styles.lead}>주소가 틀렸거나 지워진 분석입니다. 새 분석을 시작하거나 목록에서 다시 고르세요.</p>
-        <div className={styles.actions}>
-          <Button href={newAnalysisHref(base)} variant="primary" icon="dg-i-plus">
-            새 분석
-          </Button>
-          <Button href={listHref(base)} variant="secondary">
-            목록으로
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
+  return <NotFoundScreen title="분석 건을 찾을 수 없습니다" lead="주소가 틀렸거나 지워진 분석입니다." withNew />;
 }
 
 function LiveSkeleton() {

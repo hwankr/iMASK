@@ -166,7 +166,7 @@ export function createDemoCore(onChange: () => void, onEvent?: (event: ServiceEv
     const docs: AnalysisDoc[] = isSample
       ? loanDocs().map((d) => Object.assign(d, { status: 'queued' } as const))
       : files.map((f, i) => ({ id: 'u' + (i + 1), title: f.name, name: f.name, ext: f.ext, size: f.size, status: 'queued', pageCount: null, pages: null, error: '' }));
-    const a = mkA({ id, code: 'DG-' + at.slice(0, 10).replace(/-/g, '') + '-' + String(seq).padStart(4, '0'), name, submittedAt: at, status: 'queued', risk: 'unrated', review: 'none', docs, demoQueued: !isSample });
+    const a = mkA({ id, code: 'IM-' + at.slice(0, 10).replace(/-/g, '') + '-' + String(seq).padStart(4, '0'), name, submittedAt: at, status: 'queued', risk: 'unrated', review: 'none', docs, demoQueued: !isSample });
     log(a, { kind: 'request', target: '분석 건', change: '문서 ' + docs.length + '개 분석 요청' });
     db.analyses.unshift(a);
     return a;
@@ -400,7 +400,7 @@ export function createDemoCore(onChange: () => void, onEvent?: (event: ServiceEv
       if (!a) return;
       a.review = 'needed';
       a.reviewedAt = '';
-      log(a, { kind: 'reopen', target: '분석 건', change: '검토 완료 → 검토 필요', reason });
+      log(a, { kind: 'reopen', target: '분석 건', change: reviewStatusView('done').label + ' → ' + reviewStatusView('needed').label, reason });
     },
     logExport(aid, file, state) {
       const a = getA(aid);

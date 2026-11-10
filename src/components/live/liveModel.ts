@@ -162,7 +162,7 @@ const LEVEL_LABELS: ReadonlyMap<string, string> = new Map([
 ]);
 
 /**
- * 분석 요약 '위험도 판정' 머리의 등급 글 — riskText 와 같되, 옆 배지가 같은 등급을 보이면 ''(숨김 — 상 · 배지 '높음', '검토 필요' 를 한 번만).
+ * 분석 요약 '위험도 판정' 머리의 등급 글 — riskText 와 같되, 옆 배지가 같은 등급을 보이면 ''(숨김 — 상 · 배지 '상', '검토 필요' 를 한 번만).
  * 없음 → '판정 없음'(배지 '미평가') · 모르는 값처럼 배지로 알 수 없는 글만 보인다.
  */
 export function judgeLevelText(level: unknown, badgeLabel: string): string {
@@ -323,16 +323,17 @@ export function decisionView(d: RawDecision | null | undefined): DecisionView | 
 }
 
 /**
- * 결과 요약에 더하는 줄(값이 있을 때만) — 묶음 검증(판정 라벨 + 실패 규칙이 있으면 ' · 실패 n'),
+ * 결과 요약에 더하는 줄(값이 있을 때만) — 묶음 검증(판정 라벨 + 건수 하나: 실패 규칙이 있으면 '실패 2건' · '주의 1건',
+ * 없으면 판정 라벨만 '통과'. 판정 라벨을 모르거나 '통과'인데 실패 규칙이 있으면 '실패 n건'),
  * 문서 간 연결('연결 n · 확인 필요 m' — 연결 = confirmed, 확인 필요 = check).
  */
 export function finalFlowRows(bundle: RawBundleCheck | null | undefined, links: readonly Pick<DocLink, 'status'>[]): SummaryRow[] {
   const out: SummaryRow[] = [];
   if (bundle) {
-    const parts: string[] = [];
-    if (bundle.verdict) parts.push(BUNDLE_VERDICTS[bundle.verdict]);
-    if (bundle.failed > 0) parts.push(`실패 ${bundle.failed}`);
-    if (parts.length) out.push({ key: 'bundle', label: '묶음 검증', value: parts.join(' · ') });
+    const label = bundle.verdict ? BUNDLE_VERDICTS[bundle.verdict] : '';
+    let value = label;
+    if (bundle.failed > 0) value = (bundle.verdict && bundle.verdict !== 'green' ? label : BUNDLE_VERDICTS.red) + ' ' + bundle.failed + '건';
+    if (value) out.push({ key: 'bundle', label: '묶음 검증', value });
   }
   if (links.length) {
     const linked = links.filter((l) => l.status === 'confirmed').length;

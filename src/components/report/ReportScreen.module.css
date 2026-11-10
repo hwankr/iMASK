@@ -40,15 +40,6 @@
   align-items: center;
   gap: var(--space-14);
 }
-/* 마스킹 안내 — inline-flex; gap:6px; font-size:13px; color:var(--ink-3) (휴대폰에서는 숨김) */
-.maskNote {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-6);
-  font-size: var(--fs-13);
-  color: var(--ink-3);
-}
-
 /* 결과 내보내기 — 공통 Button lg primary raised(44 · 0 18 0 14 · radius 12 · gap 7 · 그림자 24%).
    원본 글자는 15px(공통 lg 14.5) — 같은 클래스 두 번으로 덮는다 */
 .exportBtn.exportBtn {
@@ -93,10 +84,4 @@
   padding: var(--report-pad);
   font-size: var(--fs-15);
   color: var(--ink-2);
-}
-
-@media (max-width: 767.98px) {
-  .maskNote {
-    display: none;
-  }
 }

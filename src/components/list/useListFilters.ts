@@ -2,7 +2,7 @@
 
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { useRouteBase } from '@/services/react';
+import { useRouteBase, useServiceMode } from '@/services/react';
 import { DEFAULT_FILTERS, filtersToQuery, parseFilters, type ListFilters } from './listModel';
 import { rememberListQuery } from './listReturn';
 
@@ -40,9 +40,11 @@ interface UrlFilterState {
 export function useUrlListFilters(initial?: Partial<ListFilters>): [ListFilters, SetListFilters] {
   const params = useSearchParams();
   const base = useRouteBase();
-  const urlQuery = filtersToQuery(parseFilters(params));
+  // 위험등급 'review' 는 실제 분석 목록만 받는다(데모는 모르는 값과 같게 '전체')
+  const live = useServiceMode() === 'api';
+  const urlQuery = filtersToQuery(parseFilters(params, { live }));
   const [state, setState] = useState<UrlFilterState>(() => ({
-    filters: { ...DEFAULT_FILTERS, ...initial, ...fromUrlOnly(params) },
+    filters: { ...DEFAULT_FILTERS, ...initial, ...fromUrlOnly(params, live) },
     seen: urlQuery,
     pending: [],
   }));
@@ -54,7 +56,7 @@ export function useUrlListFilters(initial?: Partial<ListFilters>): [ListFilters,
     current =
       mine >= 0
         ? { ...state, seen: urlQuery, pending: state.pending.slice(mine + 1) } // 내가 쓴 값이 돌아옴
-        : { filters: parseFilters(params), seen: urlQuery, pending: [] }; // 바깥에서 바뀜 → URL 을 따른다
+        : { filters: parseFilters(params, { live }), seen: urlQuery, pending: [] }; // 바깥에서 바뀜 → URL 을 따른다
     setState(current);
   } else if (state.pending.length > 0 && urlQuery === filtersToQuery(state.filters)) {
     current = { ...state, pending: [] }; // URL 과 화면이 같아졌다 — 남은 기록은 필요 없다
@@ -63,8 +65,8 @@ export function useUrlListFilters(initial?: Partial<ListFilters>): [ListFilters,
 
   const shownQuery = filtersToQuery(current.filters);
   useEffect(() => {
-    rememberListQuery(base, shownQuery);
-  }, [base, shownQuery]);
+    rememberListQuery(base, shownQuery, live);
+  }, [base, shownQuery, live]);
 
   const update: SetListFilters = (patch) => {
     const next = { ...current.filters, ...patch };
@@ -78,8 +80,8 @@ export function useUrlListFilters(initial?: Partial<ListFilters>): [ListFilters,
 }
 
 /** URL 에 실제로 있는 필터 값만(없는 키는 빼서 initial 이 채우게) */
-function fromUrlOnly(params: ReturnType<typeof useSearchParams>): Partial<ListFilters> {
-  const parsed = parseFilters(params);
+function fromUrlOnly(params: ReturnType<typeof useSearchParams>, live: boolean): Partial<ListFilters> {
+  const parsed = parseFilters(params, { live });
   const out: Partial<ListFilters> = {};
   if (params.get('q') !== null) out.q = parsed.q;
   if (params.get('risk') !== null) out.risk = parsed.risk;

@@ -41,7 +41,7 @@ describe('실제 분석 — 탭 3/4개', () => {
     const a = liveAnalysis();
     expect(results(a).tabs.map((t) => [t.value, t.label, t.count, t.tone])).toEqual([
       ['findings', '탐지 항목', 7, 'default'],
-      ['review', '검토 필요', 8, 'warn'],
+      ['review', '검토사항', 8, 'warn'],
       ['links', '문서 간 연결', 3, 'default'],
       ['summary', '분석 요약', undefined, 'default'],
     ]);

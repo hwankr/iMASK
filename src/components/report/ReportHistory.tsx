@@ -16,7 +16,7 @@ export function ReportHistory({ v }: { v: ReportView }) {
       {v.changes.length > 0 ? (
         <ReportChangeTable v={v} />
       ) : (
-        <p className={styles.empty}>담당자가 수정한 탐지 항목이 없습니다. 모든 항목이 최초 AI 결과와 같습니다.</p>
+        <p className={styles.empty}>담당자가 수정한 탐지 항목이 없습니다.</p>
       )}
       <h3 className={cx(styles.h3, styles.h3Log)}>검토 기록</h3>
       <ol className={styles.timeline}>

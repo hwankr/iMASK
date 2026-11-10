@@ -57,7 +57,7 @@
 #    '민감한 값 마스킹') · review 의 다른 값(status done·findings·memo·memo_at·reviewer·reviewed_at·completion_note) 그대로,
 #    거절 두 가지(이 분석의 이름이 아님 — 서울 날짜 하루 다름 → 400, size 0 → 400) → 다시 열기
 #    (reviewer·completion_note 남음, reviewed_at null) → 400 두 가지(모르는 type, 501자 글).
-#    log_export 기대값도 계약대로 따로 만든다: 파일 이름 = iMASK_DG-<created_at 의 서울(UTC+9) 날짜 YYYYMMDD>-<id 의 ASCII
+#    log_export 기대값도 계약대로 따로 만든다: 파일 이름 = iMASK_IM-<created_at 의 서울(UTC+9) 날짜 YYYYMMDD>-<id 의 ASCII
 #    영숫자 앞 4자 대문자> + '_검토결과_탐지항목.csv' | '_검토결과.json'(화면 analysisCode 와 같은 꼴), 크기 표기 = 화면 fmtSize
 #    (1,048,576 미만 max(1, Math.round(b/1024))KB, 아니면 (b/1048576).toFixed(1)MB — JS 처럼 '절반은 올림', _fmt_size).
 #    크기는 그럴듯한 값(CSV 6,127 → 6KB · JSON 1,310,720 → 1.3MB — MB 소수 첫째 자리 동점)을 보낸다.
@@ -210,7 +210,7 @@ REVIEW_ACTOR = "api_e2e"  # 이 스크립트가 보내는 처리자 이름
 SYSTEM_ACTOR = "시스템"
 ANALYSIS_TARGET = "분석 건"
 UNNAMED_FINDING = "이름 없는 항목"
-RISK_LABELS = {"상": "높음", "중": "보통", "하": "낮음", "검토 필요": "검토 필요"}
+RISK_LABELS = {"상": "상", "중": "중", "하": "하", "검토 필요": "검토 필요"}
 FP_REASON = "개인정보가 아닌 번호·문구"  # 오탐 사유 목록(FP_REASONS)의 첫 값
 MSG_REVIEW_BAD_REQUEST = "요청 형식이 올바르지 않습니다."
 MSG_REVIEW_TEXT_TOO_LONG = "메모·사유는 500자 이하로 적어 주세요."
@@ -245,6 +245,9 @@ ITEM_TYPES = {  # 화면 src/display/rules.ts RTYPE 의 키 → 라벨(이력 ta
     "missing": "필수 항목 없음",
     "lowconf": "인식 확인 필요",
     "other": "기타 서류",
+    "maskscope": "가림 범위 확인",
+    "linkage": "서류 간 정보 결합",
+    "reident": "재식별 위험",
 }
 REVIEW_ITEM_KEYS = {"resolved", "note", "resolved_at", "resolved_by"}
 ITEM_MAX_EVIDENCE = 20  # 검토사항 하나의 근거 수(lowconf 는 앞 20쪽)
@@ -277,6 +280,19 @@ LINK_TEXT = {  # state → (basis, missing, check) — {label}{p} = 이름표(40
     "unmatched": ((), "두 서류의 {label}{p} 다릅니다.", LINK_NEXT),
     "insufficient": ((), "비교할 {label}{p} 없습니다.", LINK_NEXT),
 }
+# 설정 60 지급보증거래 신청서 쌍(대상 서류 분류 코드 — 신청인 성명에 본인 성명이 들어 있는지로 비교)의 linked·unmatched 글
+LINK_GUARANTEE_TYPE = "지급보증거래_신청서"
+LINK_GUARANTEE_TEXT = {
+    "linked": (("신청인 성명에 본인 성명이 들어 있습니다.",), "", LINK_TEXT["linked"][2]),
+    "unmatched": ((), "신청인 성명에 본인 성명이 들어 있지 않습니다.", LINK_NEXT),
+}
+# 가린 이름이라 비교하지 않은 쌍(insufficient)의 글. 백엔드 계약(items.link_pairs·bundle_parts): links[] 의 insufficient 쌍 중 가린 이름이 아닌
+# 쌍은 늘 검토사항 weaklink:<기준>:<대상> 을 만들고 가린 이름 쌍은 만들지 않는다 — 그래서 weaklink 가 있는 쌍·대상이 위임장_상속 인 쌍은 기본 글만,
+# weaklink 가 없는 insufficient 쌍은 이 글만 받는다. result.items 가 목록이 아니면(가를 근거가 없다) 둘 다 받는다.
+LINK_MASKED_TEXT = ((), "이름이 가려져 있어 비교할 수 없습니다.", LINK_NEXT)
+LINK_ATTORNEY_TYPE = "위임장_상속"  # 비교할 본인 칸이 없어 늘 기본 근거 부족(가린 이름일 수 없다)
+# v6 결합_확인 두 규칙 → bundle_check label(칸 이름이 아니라 사유 이름 — field 는 null). 이 정확한 대응만 'field null → label null' 의 예외다
+LINKAGE_RULE_LABELS = {"가린이름_연락처_결합_없음": "서류 간 정보 결합", "가린이름_식별정보_없음": "재식별 위험"}
 DECISION_KEYS = ("risk_level", "document_types", "sensitive_categories", "review_reasons", "reason")
 DECISION_LIST_KEYS = ("document_types", "sensitive_categories", "review_reasons")
 DECISION_RISKS = ("상", "중", "하", "검토 필요")
@@ -308,7 +324,7 @@ SEOUL = timezone(timedelta(hours=9))  # 분석 번호의 날짜 기준(서울 = 
 
 # 공유 목록·삭제·다시 분석 계약(shared-analyses — BRIEF §5.2~5.5, §5.8 백엔드 문구)
 LIST_PATH = "/api/py/analyses"
-LIST_ITEM_KEYS = {"id", "name", "status", "error", "created_at", "updated_at", "started_at", "documents", "risk_level", "review"}
+LIST_ITEM_KEYS = {"id", "name", "status", "error", "created_at", "updated_at", "started_at", "documents", "risk_level", "review", "document_count"}
 LIST_DOC_KEYS = {"filename", "size_bytes", "mime_type"}
 MSG_NOT_FOUND = "분석 건을 찾을 수 없습니다."
 MSG_FILE_MISSING = "업로드된 파일을 찾을 수 없습니다. 파일을 다시 올려 주세요."
@@ -760,6 +776,18 @@ def _own_finding_ids(result: Mapping[str, Any], spans: Mapping[int, Any]) -> dic
     return own
 
 
+def _linkage_rule_label(check: Mapping[str, Any]) -> bool:
+    """bundle_check 규칙이 v6 결합_확인 두 규칙 중 하나이고 field null · label 이 그 규칙의 사유 이름인지."""
+    name = check.get("name")
+    return (
+        check.get("group") == "결합_확인"
+        and check.get("field") is None
+        and isinstance(name, str)
+        and name in LINKAGE_RULE_LABELS
+        and check.get("label") == LINKAGE_RULE_LABELS[name]
+    )
+
+
 def _link_problems(links: Any, result: Mapping[str, Any]) -> list[str]:
     """result.links 의 계약 모양(값은 출력하지 않고 'links[n].키' 위치만): 키·순서, L-nn 1부터 연속, id 겹치지 않음·
     'link:<기준>:<대상>', state→status, 두 서류가 보이는 서류(기준 서류는 모두 같음)·쪽이 그 서류 범위 안·finding_ids 가 그 서류의
@@ -767,6 +795,11 @@ def _link_problems(links: Any, result: Mapping[str, Any]) -> list[str]:
     if not isinstance(links, list):
         return ["result.links 가 목록이 아님"]
     spans = {d["index"]: (d["page_start"], max(d["page_start"], d["page_end"])) for d in _visible_docs(result.get("documents"))}
+    doc_types = {d["index"]: d.get("type") for d in _visible_docs(result.get("documents"))}
+    result_items = result.get("items")
+    weak_ids = (
+        {i.get("id") for i in result_items if isinstance(i, Mapping) and i.get("type") == "weaklink"} if isinstance(result_items, list) else None
+    )
     own = _own_finding_ids(result, spans)
     problems: list[str] = []
     anchors: set[int] = set()
@@ -785,12 +818,23 @@ def _link_problems(links: Any, result: Mapping[str, Any]) -> list[str]:
         ]
         if known and isinstance(label, str) and label:
             name = _clip_name(label)
-            want_basis, want_missing, want_check = LINK_TEXT[state]
             fill = {"label": name, "p": _particle(name)}
-            same = (
+            target = link["docs"][1] if isinstance(link["docs"], list) and len(link["docs"]) == 2 else None
+            target_index = target.get("document_index") if isinstance(target, Mapping) else None
+            guarantee = _is_int(target_index) and doc_types.get(target_index) == LINK_GUARANTEE_TYPE
+            wants = [LINK_GUARANTEE_TEXT[state] if guarantee and state in LINK_GUARANTEE_TEXT else LINK_TEXT[state]]
+            if state == "insufficient":
+                weak = weak_ids is not None and isinstance(link["id"], str) and ("weak" + link["id"]) in weak_ids  # link:<a>:<t> → weaklink:<a>:<t>
+                attorney = _is_int(target_index) and doc_types.get(target_index) == LINK_ATTORNEY_TYPE
+                if weak_ids is None:
+                    wants.append(LINK_MASKED_TEXT)  # items 를 읽을 수 없다 — 가림 여부를 가를 근거가 없어 둘 다
+                elif not (weak or attorney):
+                    wants = [LINK_MASKED_TEXT]  # weaklink 가 없는 근거 부족 = 가린 이름 쌍
+            same = any(
                 basis == [b.format(**fill) for b in want_basis]
                 and link["missing"] == want_missing.format(**fill)
                 and link["check"] == want_check
+                for want_basis, want_missing, want_check in wants
             )
             checks.append((same, "글(basis·missing·check)"))
         docs, indexes = link["docs"], []
@@ -873,7 +917,7 @@ def _bundle_problems(bundle: Any) -> list[str]:
             (severity is None or (isinstance(severity, str) and severity in BUNDLE_SEVERITIES), "severity"),
             (isinstance(status, str) and status in BUNDLE_STATUSES, "status"),
             (all(check[k] is None or isinstance(check[k], str) for k in ("field", "label", "group")), "field·label·group"),
-            (check["field"] is not None or check["label"] is None, "label(field 가 null 이면 null)"),
+            (check["field"] is not None or check["label"] is None or _linkage_rule_label(check), "label(field 가 null 이면 null)"),
         ]
         problems += [f"{where}.{name}" for passed, name in rows if not passed]
     ids = [c.get("id") for c in checks if isinstance(c, Mapping) and isinstance(c.get("id"), str)]
@@ -1383,14 +1427,14 @@ def _fmt_size(size: int) -> str:
 
 
 def _export_name(row: Mapping[str, Any], fmt: str, *, shift_days: int = 0) -> str | None:
-    """이 분석의 내보내기 파일 이름(화면 analysisCode 와 같은 꼴): iMASK_DG-<created_at 의 서울 날짜 YYYYMMDD>-<id 의 ASCII
+    """이 분석의 내보내기 파일 이름(화면 analysisCode 와 같은 꼴): iMASK_IM-<created_at 의 서울 날짜 YYYYMMDD>-<id 의 ASCII
     영숫자 앞 4자 대문자> + 형식별 꼬리. shift_days 는 거절 확인용(날짜만 다른 이름). created_at 을 읽지 못하면 None."""
     moment = _when(row.get("created_at"))
     if moment is None:
         return None
     day = moment.astimezone(SEOUL) + timedelta(days=shift_days)
     head = "".join(c for c in str(row.get("id")) if c.isascii() and c.isalnum())[:4].upper()
-    return f"iMASK_DG-{day:%Y%m%d}-{head}{EXPORT_SUFFIXES[fmt]}"
+    return f"iMASK_IM-{day:%Y%m%d}-{head}{EXPORT_SUFFIXES[fmt]}"
 
 
 def _review_targets(result: Any) -> list[dict[str, str]]:
@@ -1435,7 +1479,7 @@ def _review_targets(result: Any) -> list[dict[str, str]]:
 
 
 def _risk_label(result: Mapping[str, Any]) -> str:
-    """S2 의 위험등급 — overall.level(비면 summary.risk_level) 상·중·하·검토 필요 → 높음·보통·낮음·검토 필요, 그 밖 미평가."""
+    """S2 의 위험등급 — overall.level(비면 summary.risk_level) 상·중·하·검토 필요 → 상·중·하·검토 필요, 그 밖 미평가."""
     overall = result.get("overall") if isinstance(result.get("overall"), Mapping) else {}
     level = overall.get("level")
     if not (isinstance(level, str) and _js_trim(level)):
@@ -1451,7 +1495,7 @@ def _system_lines(row: Mapping[str, Any], targets: list[dict[str, str]]) -> list
     items = result.get("items") if isinstance(result.get("items"), list) else []  # 검토사항 수(review-items §5.5)
     base = {"actor": SYSTEM_ACTOR, "target": ANALYSIS_TARGET, "reason": ""}
     return [
-        {"id": "S1", "at": row.get("created_at"), "kind": "request", "change": f"문서 {files}개 분석 요청", **base},
+        {"id": "S1", "at": row.get("created_at"), "kind": "request", "change": f"파일 {files}개 분석 요청", **base},
         {
             "id": "S2",
             "at": row.get("updated_at"),
@@ -1995,7 +2039,7 @@ def _check_reviews(run: Run, analysis_id: str) -> bool:
     flow.write(
         f"complete_review(남은 미확인 {left}건 · 미해결 검토사항 {open_items}건)",
         {"type": "complete_review", "note": TEXT_COMPLETE},
-        ("complete", ANALYSIS_TARGET, f"검토 필요 → 검토 완료{rest}", TEXT_COMPLETE),
+        ("complete", ANALYSIS_TARGET, f"검토 대기 → 검토 완료{rest}", TEXT_COMPLETE),
         complete_check,
     )
     flow.refuse(
@@ -2054,7 +2098,7 @@ def _check_reviews(run: Run, analysis_id: str) -> bool:
     flow.write(
         "reopen_review(reviewer·completion_note 남음, reviewed_at null)",
         {"type": "reopen_review", "reason": TEXT_REOPEN},
-        ("reopen", ANALYSIS_TARGET, "검토 완료 → 검토 필요", TEXT_REOPEN),
+        ("reopen", ANALYSIS_TARGET, "검토 완료 → 검토 대기", TEXT_REOPEN),
         reopen_check,
     )
     flow.refuse("모르는 type → 400", {"type": "delete_everything"}, 400, MSG_REVIEW_BAD_REQUEST)
@@ -2165,6 +2209,7 @@ def _list_expected(row: Mapping[str, Any]) -> dict[str, Any]:
         "documents": [{key: d.get(key) for key in ("filename", "size_bytes", "mime_type")} for d in documents],
         "risk_level": risk if isinstance(risk, str) else None,
         "review": state,
+        "document_count": count if _is_int(count) and count >= 0 else None,  # 분류한 서류 수(bool 아닌 정수 ≥ 0, 그 밖 null)
     }
 
 
@@ -2197,7 +2242,7 @@ def _check_list(run: Run, analysis_id: str, label: str) -> bool:
     if with_result:
         problems.append(f"result 키가 있는 항목 {with_result}개")
     if bad_items:
-        problems.append(f"키가 계약(10개)과 다른 항목 {bad_items}개")
+        problems.append(f"키가 계약(11개)과 다른 항목 {bad_items}개")
     if bad_docs:
         problems.append(f"문서 키가 계약(filename·size_bytes·mime_type)과 다른 항목 {bad_docs}개")
     order = [(_when(item.get("created_at")), str(item.get("id"))) for item in items if isinstance(item, Mapping)]

@@ -7,10 +7,12 @@
 #    1,310,720 B → 1.3MB) 파이썬 round()·format(.1f)(짝수 쪽) 대신 정수 계산으로 '절반은 올림' 한다.
 #    두 구현이 같은 글자인지는 공유 표 tests/fmt_size_cases.json 으로 지킨다(파이썬 테스트 + 화면 vitest).
 #  - 파일 이름 꼴(FILE_NAME_RE, re.fullmatch — '$' 는 끝 줄바꿈을 받으므로 쓰지 않는다. [0-9]·[0-9A-F] 는 ASCII 만):
-#    iMASK_DG-<8자리>-<대문자 hex 4자리>_검토결과_탐지항목.csv | iMASK_DG-<8자리>-<대문자 hex 4자리>_검토결과.json,
-#    확장자가 format 과 맞아야 한다(csv ↔ _검토결과_탐지항목.csv, json ↔ _검토결과.json).
+#    iMASK_IM-<8자리>-<대문자 hex 4자리>_검토결과_탐지항목.csv | iMASK_IM-<8자리>-<대문자 hex 4자리>_검토결과.json,
+#    확장자가 format 과 맞아야 한다(csv ↔ _검토결과_탐지항목.csv, json ↔ _검토결과.json). 새로 받는 기록은 IM- 만이다.
+#    분석 번호 머리글자는 예전에 DG- 였다(web-polish C) — 그때 저장된 이력 줄(target 'iMASK_DG-…')은 저장된 그대로 읽힌다
+#    (이력 읽기는 이름 꼴을 다시 검사하지 않는다 — reviews._stored_line). 옛 꼴은 LEGACY_FILE_NAME_RE 로만 적어 둔다.
 #  - 이 분석의 기대 이름(expected_file_name): 'iMASK_' + 화면 analysisCode(src/services/api/mapping.ts)와 같은 분석 번호
-#    'DG-<created_at 의 서울(UTC+9 고정) 날짜 YYYYMMDD>-<id 의 ASCII 영숫자 앞 4자 대문자>' + 형식별 꼬리.
+#    'IM-<created_at 의 서울(UTC+9 고정) 날짜 YYYYMMDD>-<id 의 ASCII 영숫자 앞 4자 대문자>' + 형식별 꼬리.
 #    created_at 은 화면 Date.parse 와 같은 값이 나오는 꼴만 읽는다: 'YYYY-MM-DD(T| )HH:MM(:SS(.소수)?)?(Z|±HH:MM)'
 #    (ASCII 숫자, 시간대 필수 — 시간대 없는 값은 브라우저 지역 시각으로 읽혀 날짜가 달라질 수 있다. 시간대의 시는 00–23,
 #    분은 00–59 — '+00:60'·'+01:99' 는 파이썬이 다른 시간대로 보정해 읽지만 화면은 NaN 이다). 같은 결과를 보장하는 범위는
@@ -36,7 +38,10 @@ FILE_SUFFIXES = {"csv": "_검토결과_탐지항목.csv", "json": "_검토결과
 EXPORT_KIND = "export"
 EXPORT_REASON = "민감한 값 마스킹"
 
-FILE_NAME_RE = re.compile(r"iMASK_DG-[0-9]{8}-[0-9A-F]{4}_검토결과(?:_탐지항목\.csv|\.json)")
+CODE_PREFIX = "IM-"  # 분석 번호 머리글자(화면 analysisCode 와 같다)
+FILE_NAME_RE = re.compile(r"iMASK_IM-[0-9]{8}-[0-9A-F]{4}_검토결과(?:_탐지항목\.csv|\.json)")
+# 머리글자가 DG- 이던 때의 이름 — 새 기록에는 받지 않는다(저장된 옛 이력 줄은 그대로 읽힌다)
+LEGACY_FILE_NAME_RE = re.compile(r"iMASK_DG-[0-9]{8}-[0-9A-F]{4}_검토결과(?:_탐지항목\.csv|\.json)")
 # created_at 으로 읽는 꼴(화면 parseIsoMs → Date.parse 와 같은 순간이 나오는 것만)
 # 시간대는 Z 또는 ±HH:MM(시 00–23·분 00–59) — '+00:60' 처럼 파이썬이 다른 시간대로 보정해 읽는 값(화면은 NaN)을 받지 않는다
 _CREATED_AT_RE = re.compile(
@@ -107,11 +112,11 @@ def id_head(analysis_id: Any) -> str:
 
 
 def analysis_code(analysis_id: Any, created_at: Any) -> str | None:
-    """분석 번호 'DG-YYYYMMDD-XXXX'. 만든 날짜를 읽지 못하면 None(화면은 'DG-XXXX' — 내보내기 이름 꼴이 아니다)."""
+    """분석 번호 'IM-YYYYMMDD-XXXX'. 만든 날짜를 읽지 못하면 None(화면은 'IM-XXXX' — 내보내기 이름 꼴이 아니다)."""
     date = seoul_date(created_at)
     if date is None:
         return None
-    return f"DG-{date}-{id_head(analysis_id)}"
+    return f"{CODE_PREFIX}{date}-{id_head(analysis_id)}"
 
 
 def expected_file_name(row: Mapping[str, Any], export_format: str) -> str | None:

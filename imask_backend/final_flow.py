@@ -39,12 +39,28 @@
 #    더해 검토사항이 쓴다). findings 는 이것을 한 번 읽어 chain_view 로 bundle_check 를 만든다.
 #  - read_v2_links(stages): Extract 값으로 서류 연결을 계산한다(Match 가 없다) — read_links 와 같은 모양(field·anchor_index·pairs) + 기존
 #    items.link_pairs 가 쓰는 doc_fields(서류 index → 그 서류의 비교 칸 키)·label(고정 '본인 성명').
-#    서류 = 분류 순서의 10서식 서류(Other 제외). 서식이 1종 이하면 연결 없음. 기준 = 본인 칸(V2_SELF_NAMES) 값이 비지 않은 첫 서류.
+#    서류 = 분류 순서의 10서식 서류(Other 제외). 서식이 1종 이하면 연결 없음. 기준 = 본인 칸(V2_SELF_NAMES) 값이 비지 않은 첫 서류
+#    (가림 기호가 없는 값을 먼저 — 아래 v6).
 #    비었는지는 일치_확인 의 [?@](JMESPath 참/거짓)와 같다 — 빈 문자열·null·빈 목록·빈 객체·false 만 빈 값, 공백만인 문자열은 값이고
 #    공백을 정리하지 않는다. 문자열이 아닌 값은 비교할 수 없어 insufficient. 위임장_상속은 늘 insufficient, 지급보증거래_신청서는
 #    신청인 성명에 기준 값이 들어 있으면 linked, 나머지는 값이 정확히 같으면 linked, 대상 칸이 비거나 추출이 없으면 insufficient.
 #    지급보증 칸에 기준 값이 없을 때: 묶음에 소비자피해보상금_지급신청서·외국인_세대구성원_확인서가 둘 다 없으면(분류 코드 기준) 일치_확인 에 지급보증을
 #    비교하는 규칙이 없어 판정과 어긋나지 않게 insufficient, 둘 중 하나라도 있으면 그 규칙이 도니 unmatched 다.
+#
+#  v6(가림_확인·결합_확인이 있는 응답 — 없는 응답은 아래 규칙이 걸릴 값이 없어 결과가 그대로다):
+#  - 사슬(read_chain_rules·read_chain)은 results.V2_CHAIN 순서(대상 → 단위 → 필수 → 형식 → 가림 → 일치 → 결합). 단계는 이름(" - " 뒤 노드 이름)으로
+#    찾으므로 저장된 key 가 필수항목_검증 이어도 같다. 갈래 단계(등급_*·IRP해지_확인·납세자번호_확인·상_확인)는 읽지 않는다.
+#    결합_확인 두 규칙은 field null(조건 트리 첫 칸은 규칙의 대상 칸이 아니다)·label 은 사유 이름 V6_LINKAGE_LABELS(가린이름_연락처_결합_없음
+#    '서류 간 정보 결합', 가린이름_식별정보_없음 '재식별 위험'). read_linkage_passed(stages): error 규칙이 명시적으로(passed 정확히 true) 통과했는지 —
+#    사슬 읽기는 통과 규칙을 버리므로 이 사실만 따로 읽어 검토사항 reident 의 조건으로 넘긴다(findings → items.v2_parts).
+#  - 가린 이름(MASK_MARKS 10개 — 서류간_본인성명_같음 이 비교에서 빼는 글자): read_v2_links 의 기준 = 본인 성명이 비지 않고 가림 기호가 없는 첫 서식,
+#    없으면 본인 성명이 비지 않은 첫 서식. 비교까지 갔을 쌍(기준·대상 값이 모두 비지 않은 문자열)에서 어느 쪽이든 가림 기호가 있으면 insufficient 이고
+#    pairs[].masked True(지급보증 칸도 같다). 위임장·추출 없음·빈 값·문자열 아님은 기존 판정이 먼저다(masked False — 코디네이터 Q2).
+#    가림 여부는 서류마다 비교 칸 값에 한 번만 계산해 기준 고르기·쌍 계산이 같이 쓴다(쌍마다 기준 이름을 다시 훑지 않는다 — 이름 글자 합 + 서류 수에 선형).
+#    pairs[].contains = 지급보증거래_신청서 쌍(포함으로 비교 — 화면 글이 '들어 있다/없다'). 옛 read_links 의 pairs 에는 두 키가 없다.
+#  - masked_name_fields(docs): 결합_확인 두 규칙이 서식마다 보는 이름 칸 V6_MASKED_NAMES(v6_cfg.json 의 `matches [^*…]*` 피연산자 — 자동이체 중_예금주_성명,
+#    휴면 중_원권리자_성명, FATCA 중_예금주_성명, 소비자피해 중_신청인_성명, 체크카드 중_성명_한글, IRP 해지·신규 중_가입자명. 외국인 세대구성원 확인서는
+#    규칙이 보지 않는다) 값에 가림 기호가 든 서류 index → 그 칸 키 — 검토사항 linkage·reident 를 붙일 '가린 이름 서류'(items.v2_parts).
 # ==========================================================================
 
 from __future__ import annotations
@@ -57,7 +73,7 @@ from typing import Any
 
 from .fields import v2_field_info
 from .findings import _attach_extracts, _documents, _ranges, jmes_empty
-from .items import ChainRule
+from .items import ChainRule, js_trim
 from .results import (
     STAGE_BUNDLE_CHECK,
     STAGE_EXTRACT,
@@ -65,6 +81,7 @@ from .results import (
     STAGE_MERGE,
     STAGE_RISK,
     STAGE_V2_CONTENT,
+    STAGE_V2_LINKAGE,
     STAGE_V2_VERDICT,
     V2_CHAIN,
     V2_FORM_CODES,
@@ -199,6 +216,23 @@ V2_GUARANTEE_NAME = "중_신청인_성명"  # 상호 + 대표자가 섞일 수 �
 # 일치_확인 에 지급보증_신청인에_<서식>_본인포함 규칙이 있는 서식(tools/build_full.py consistency_checks)
 V2_GUARANTEE_RULE_FORMS = ("소비자피해보상금_지급신청서", "외국인_세대구성원_확인서")
 V2_LINK_LABEL = "본인 성명"
+# 가림 기호 — v6 일치_확인 서류간_본인성명_같음 의 contains 10개·결합_확인 정규식 [^*＊●○■□◆◇★☆] 와 같은 글자
+MASK_MARKS = frozenset("*＊●○■□◆◇★☆")
+# v6 결합_확인 두 규칙(가린이름_연락처_결합_없음·가린이름_식별정보_없음)이 서식마다 '이름이 가려졌는지' 보는 칸(v6_cfg.json 규칙 조건의
+# `matches [^*…]*` 피연산자 — 두 규칙이 같은 7칸). V2_SELF_NAMES 에서 외국인_세대구성원_확인서(중_본인_성명)만 없다 — 규칙이 그 서식을 보지 않는다.
+V6_MASKED_NAMES = {
+    "자동이체신청서": "중_예금주_성명",
+    "휴면예금지급신청서": "중_원권리자_성명",
+    "FATCA_CRS_본인확인서": "중_예금주_성명",
+    "소비자피해보상금_지급신청서": "중_신청인_성명",
+    "체크카드_가입신청서": "중_성명_한글",
+    "IRP_계약해지신청서": "중_가입자명",
+    "IRP_신규신청서": "중_가입자명",
+}
+V6_LINKAGE_RULE = "가린이름_연락처_결합_없음"  # error → 판정 사유 '서류 간 정보 결합'
+V6_REIDENT_RULE = "가린이름_식별정보_없음"  # warning → 판정 사유 '재식별 위험'
+# 결합_확인 규칙 → bundle_check 의 label(칸 이름이 아니라 사유 이름 — 조건 트리의 첫 칸은 서식마다 다른 이름 칸이다)
+V6_LINKAGE_LABELS = {V6_LINKAGE_RULE: "서류 간 정보 결합", V6_REIDENT_RULE: "재식별 위험"}
 
 # 인용 표시 【†n】 — 고정 글자로 시작해 선형
 _CITATION = re.compile(r"【†\d{1,9}】")
@@ -754,6 +788,9 @@ def _chain_rule(node: str, name: str, item: Mapping[str, Any]) -> ChainRule:
             field, label = key, (info.label if known else None)
         if cell is None and known:
             cell, cell_label = (table, key), info.label
+    if node == STAGE_V2_LINKAGE and name in V6_LINKAGE_LABELS:
+        # 결합 두 규칙: 조건 트리의 첫 칸(자동이체신청서 이름 칸)은 규칙의 대상 칸이 아니다 — field 는 null, label 은 사유 이름
+        field, label = None, V6_LINKAGE_LABELS[name]
     return ChainRule(
         node=node,
         name=name,
@@ -833,6 +870,33 @@ def _read_chain_rules(stages: Stages) -> tuple[list[ChainRule], str | None] | No
     return rules, "green" if verdicts else None
 
 
+def read_linkage_passed(stages: Any) -> bool:
+    """결합_확인 의 error 규칙(가린이름_연락처_결합_없음)이 **명시적으로 통과**했는지 — 그 이름(JS trim)의 규칙이 하나 이상 있고 모두 passed 가
+    정확히 True 일 때만 True. 단계·규칙이 없거나 passed 가 bool 이 아니거나 checks 모양이 틀리면 False(재식별 재료를 추론하지 않는다 — 머리 주석).
+    read_chain_rules 는 통과 규칙을 버리므로(bundle_check 계약) 이 사실만 따로 읽는다."""
+    return _guarded(_read_linkage_passed, stages) is True
+
+
+def _read_linkage_passed(stages: Stages) -> bool:
+    if not is_v2(stages):
+        return False
+    stage = _first(stages, STAGE_V2_LINKAGE)
+    raw = _mapping(stage.get("additional_values")).get("checks") if stage is not None else None
+    if not isinstance(raw, list) or len(raw) > MAX_CHECKS:
+        return False
+    seen = False
+    for item in raw:
+        if not isinstance(item, Mapping):
+            continue
+        name = _name(item.get("name"))
+        if name is None or js_trim(name) != V6_LINKAGE_RULE:
+            continue
+        if item.get("passed") is not True:
+            return False
+        seen = True
+    return seen
+
+
 def chain_view(chain: Any) -> dict[str, Any] | None:
     """read_chain_rules 결과 → {verdict, checks[키 7개]}. 같은 이름은 '이름#2'."""
     if chain is None:
@@ -866,18 +930,43 @@ def _read_chain(stages: Stages) -> dict[str, Any] | None:
 # --- 설정 60: 서류 연결 -------------------------------------------------------------------
 
 
-def _v2_link_status(doc: Any, field: str | None, anchor_value: Any, guarantee_rule: bool) -> str:
-    """쌍 하나의 상태 — 머리 주석. 값은 정리하지 않고 그대로 비교한다. guarantee_rule = 일치_확인 에 지급보증을 비교하는 규칙이 있는 묶음인지."""
+def has_mask(value: Any) -> bool:
+    """문자열에 가림 기호(MASK_MARKS)가 하나라도 있는지 — 값 길이에 선형. 문자열이 아니면 False."""
+    return isinstance(value, str) and not MASK_MARKS.isdisjoint(value)
+
+
+def masked_name_fields(docs: Any) -> dict[int, str]:
+    """결합_확인 이 보는 이름 칸(V6_MASKED_NAMES)의 Extract 값에 가림 기호가 든 서류 index → 그 칸 키(findings._Doc 목록).
+    모양이 틀린 서류는 건너뛴다(값 없는 경고)."""
+    out: dict[int, str] = {}
+    for doc in docs if isinstance(docs, Sequence) else ():
+        try:
+            field = V6_MASKED_NAMES.get(doc.type) if isinstance(doc.type, str) else None
+            if field is not None and doc.extract is not None and _is_int(doc.index) and has_mask(doc.extract[0].get(field)):
+                out.setdefault(doc.index, field)
+        except Exception as exc:  # 그 서류만 — 값 없이 예외 종류만
+            logger.warning("가린 이름 서류 하나를 읽지 못해 건너뜀: %s", type(exc).__name__)
+    return out
+
+
+def _v2_link_status(
+    doc: Any, field: str | None, anchor_value: Any, guarantee_rule: bool, anchor_masked: bool, masks: Mapping[int, bool]
+) -> tuple[str, bool]:
+    """쌍 하나의 (상태, 가린 이름인지) — 머리 주석. 값은 정리하지 않고 그대로 비교한다. guarantee_rule = 일치_확인 에 지급보증을 비교하는
+    규칙이 있는 묶음인지. 가린 이름은 비교까지 갔을 쌍(기준·대상 값이 모두 비지 않은 문자열)에만 — 다른 까닭의 근거 부족이 먼저다.
+    가림 여부는 값마다 한 번 계산해 둔 것을 쓴다(anchor_masked = 기준 값, masks = 서류 index → 그 서류 비교 칸 값) — 쌍마다 기준 이름을 다시 훑지 않는다."""
     if doc.type == V2_ATTORNEY or doc.extract is None or field is None or not isinstance(anchor_value, str):
-        return LINK_INSUFFICIENT
+        return LINK_INSUFFICIENT, False
     value = doc.extract[0].get(field)
     if jmes_empty(value) or not isinstance(value, str):
-        return LINK_INSUFFICIENT
+        return LINK_INSUFFICIENT, False
+    if anchor_masked or masks.get(doc.index, False):
+        return LINK_INSUFFICIENT, True  # 일치_확인 의 서류간_본인성명_같음 이 비교에서 빼는 값
     if doc.type == V2_GUARANTEE:
         if anchor_value in value:
-            return LINK_LINKED
-        return LINK_UNMATCHED if guarantee_rule else LINK_INSUFFICIENT
-    return LINK_LINKED if value == anchor_value else LINK_UNMATCHED
+            return LINK_LINKED, False
+        return (LINK_UNMATCHED if guarantee_rule else LINK_INSUFFICIENT), False
+    return (LINK_LINKED if value == anchor_value else LINK_UNMATCHED), False
 
 
 def read_v2_links(stages: Any) -> dict[str, Any] | None:
@@ -904,28 +993,39 @@ def _read_v2_links(stages: Stages) -> dict[str, Any] | None:
         out["pairs"] = None  # 짝짓기가 제곱 시간이 되기 전에 멈춘다(일부만 잘라 잇지 않는다)
         return out
     _attach_extracts(stages, docs, classify_count)
-    anchor = next(
-        (
-            doc
-            for doc in forms
-            if doc.type in V2_SELF_NAMES and doc.extract is not None and not jmes_empty(doc.extract[0].get(V2_SELF_NAMES[doc.type]))
-        ),
-        None,
-    )
+    # 서류마다 비교 칸 값의 가림 여부를 **한 번만** 계산한다(연결 계산 전체가 이름 글자 합 + 서류 수에 선형이게)
+    masks = {
+        doc.index: has_mask(doc.extract[0].get(doc_fields[doc.index]))
+        for doc in forms
+        if doc.extract is not None and doc.index in doc_fields
+    }
+    named = [
+        doc
+        for doc in forms
+        if doc.type in V2_SELF_NAMES and doc.extract is not None and not jmes_empty(doc.extract[0].get(V2_SELF_NAMES[doc.type]))
+    ]
+    # 기준 = 가림 기호가 없는 본인 성명의 첫 서식, 없으면 본인 성명이 비지 않은 첫 서식(그때 비교할 수 있었던 쌍은 모두 가린 이름)
+    anchor = next((doc for doc in named if not masks.get(doc.index, False)), named[0] if named else None)
     if anchor is None:
         return out
     field = V2_SELF_NAMES[anchor.type]
     anchor_value = anchor.extract[0].get(field)
+    anchor_masked = masks.get(anchor.index, False)
     guarantee_rule = any(doc.type in V2_GUARANTEE_RULE_FORMS for doc in forms)
-    pairs = [
-        {
-            "id": f"link:{anchor.index}:{doc.index}",
-            "target_index": doc.index,
-            "group": None,
-            "status": _v2_link_status(doc, doc_fields.get(doc.index), anchor_value, guarantee_rule),
-        }
-        for doc in forms
-        if doc.index != anchor.index
-    ]
+    pairs = []
+    for doc in forms:
+        if doc.index == anchor.index:
+            continue
+        status, masked = _v2_link_status(doc, doc_fields.get(doc.index), anchor_value, guarantee_rule, anchor_masked, masks)
+        pairs.append(
+            {
+                "id": f"link:{anchor.index}:{doc.index}",
+                "target_index": doc.index,
+                "group": None,
+                "status": status,
+                "masked": masked,
+                "contains": doc.type == V2_GUARANTEE,
+            }
+        )
     out.update(field=field, anchor_index=anchor.index, pairs=pairs)
     return out

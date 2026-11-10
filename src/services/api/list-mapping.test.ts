@@ -26,7 +26,7 @@ describe('목록 항목 → Analysis — 키 하나하나', () => {
     );
     expect(a).toEqual({
       id: 'cd34ab12-0000-4000-8000-000000000000',
-      code: 'DG-20261102-CD34',
+      code: 'IM-20261102-CD34',
       name: '실제 확인',
       submittedAt: '2026-11-02 14:10',
       analyzedAt: '2026-11-02 14:12',
@@ -63,6 +63,7 @@ describe('목록 항목 → Analysis — 키 하나하나', () => {
         createdAt: '2026-11-02T05:10:00.123456+00:00',
         updatedAt: '2026-11-02T05:12:34.900000+00:00',
         startedAt: '2026-11-02T05:10:01.5+00:00',
+        documentCount: null,
       },
     });
   });

@@ -1,5 +1,5 @@
-/* 위험등급별 탐지 분포 막대 — 실제 분석은 미평가 조각을 마지막에(1건 이상일 때), 데모는 높음 · 보통 · 낮음만(바꾸기 전과 같다).
-   실제 분석은 합성 고정 자료(fixtures/done-result.json — 높음 2 · 미평가 17) → toAnalysis → 안전한 사본 순서로 만든다.
+/* 위험등급별 탐지 분포 막대 — 실제 분석은 미평가 조각을 마지막에(1건 이상일 때), 데모는 상 · 중 · 하만(바꾸기 전과 같다).
+   실제 분석은 합성 고정 자료(fixtures/done-result.json — 상 2 · 미평가 17) → toAnalysis → 안전한 사본 순서로 만든다.
    원문 값은 테스트 출력에 옮기지 않는다(개수 · 등급만). */
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -50,23 +50,23 @@ function renderDist(v: ReportView) {
 }
 
 describe('실제 분석 — 분포 막대에 미평가 조각', () => {
-  it('고정 자료(높음 2 · 미평가 17) — 높음 · 미평가 두 조각, 미평가는 마지막(index 1) · aria 같은 규칙', () => {
+  it('고정 자료(상 2 · 미평가 17) — 상 · 미평가 두 조각, 미평가는 마지막(index 1) · aria 같은 규칙', () => {
     const v = liveView();
     expect(v.live).toBe(true);
     expect(segs(v)).toEqual([
-      ['high', '높음', 2, RISK.high.solid, 0],
+      ['high', '상', 2, RISK.high.solid, 0],
       ['unrated', RISK.unrated.label, 17, RISK.unrated.solid, 1],
     ]);
     expect(RISK.unrated.label).toBe('미평가');
-    expect(v.distAria).toBe('위험등급별 탐지 분포: 높음 2건, 미평가 17건');
+    expect(v.distAria).toBe('위험등급별 탐지 분포: 상 2건, 미평가 17건');
     expect(v.nFind).toBe(19);
     // 조각 합 = 탐지 수(머리 '탐지 19건 기준'과 맞는다)
     expect(v.dist.reduce((s, d) => s + d.n, 0)).toBe(v.nFind);
 
     const r = renderDist(v);
-    expect(r.aria).toBe('위험등급별 탐지 분포: 높음 2건, 미평가 17건');
+    expect(r.aria).toBe('위험등급별 탐지 분포: 상 2건, 미평가 17건');
     expect(r.styles).toEqual(['--seg-n:2;--seg-color:var(--hi-solid);--seg-i:0', '--seg-n:17;--seg-color:var(--na-solid);--seg-i:1']);
-    expect(r.legend).toEqual(['높음 2건', '미평가 17건']);
+    expect(r.legend).toEqual(['상 2건', '미평가 17건']);
     expect(r.html).toContain('탐지 19건 기준');
   });
 
@@ -98,22 +98,22 @@ describe('실제 분석 — 분포 막대에 미평가 조각', () => {
     expect(r.html).not.toContain('위험등급별 탐지 분포');
   });
 
-  it('미평가 0건 — 지금과 같다(높음 · 보통 · 낮음 중 1건 이상인 조각만, 미평가 조각 없음)', () => {
+  it('미평가 0건 — 지금과 같다(상 · 중 · 하 중 1건 이상인 조각만, 미평가 조각 없음)', () => {
     const v = liveView((fs) => {
       fs.forEach((f, i) => rate(f, i < 2 ? 'high' : i < 5 ? 'low' : 'medium'));
     });
     expect(segs(v)).toEqual([
-      ['high', '높음', 2, RISK.high.solid, 0],
-      ['medium', '보통', 14, RISK.medium.solid, 1],
-      ['low', '낮음', 3, RISK.low.solid, 2],
+      ['high', '상', 2, RISK.high.solid, 0],
+      ['medium', '중', 14, RISK.medium.solid, 1],
+      ['low', '하', 3, RISK.low.solid, 2],
     ]);
-    expect(v.distAria).toBe('위험등급별 탐지 분포: 높음 2건, 보통 14건, 낮음 3건');
+    expect(v.distAria).toBe('위험등급별 탐지 분포: 상 2건, 중 14건, 하 3건');
     const only = liveView((fs) => fs.forEach((f) => rate(f, 'low')));
-    expect(segs(only)).toEqual([['low', '낮음', 19, RISK.low.solid, 0]]);
-    expect(only.distAria).toBe('위험등급별 탐지 분포: 낮음 19건');
+    expect(segs(only)).toEqual([['low', '하', 19, RISK.low.solid, 0]]);
+    expect(only.distAria).toBe('위험등급별 탐지 분포: 하 19건');
   });
 
-  it('네 등급이 모두 있으면 높음 · 보통 · 낮음 · 미평가 차례(index 0~3)', () => {
+  it('네 등급이 모두 있으면 상 · 중 · 하 · 미평가 차례(index 0~3)', () => {
     const v = liveView((fs) => {
       fs.forEach((f, i) => (i === 0 ? rate(f, 'high') : i === 1 ? rate(f, 'medium') : i === 2 ? rate(f, 'low') : unrate(f)));
     });
@@ -123,16 +123,16 @@ describe('실제 분석 — 분포 막대에 미평가 조각', () => {
       ['low', 1, 2],
       ['unrated', 16, 3],
     ]);
-    expect(v.distAria).toBe('위험등급별 탐지 분포: 높음 1건, 보통 1건, 낮음 1건, 미평가 16건');
+    expect(v.distAria).toBe('위험등급별 탐지 분포: 상 1건, 중 1건, 하 1건, 미평가 16건');
     expect(renderDist(v).styles.map((s) => s.split(';')[2])).toEqual(['--seg-i:0', '--seg-i:1', '--seg-i:2', '--seg-i:3']);
   });
 });
 
-/* ---------- 데모 — 높음 · 보통 · 낮음만(바꾸기 전 규칙) ---------- */
+/* ---------- 데모 — 상 · 중 · 하만(바꾸기 전 규칙) ---------- */
 
 const OLD_LEVELS = ['high', 'medium', 'low'] as const;
 
-/** 바꾸기 전 규칙 — 높음 · 보통 · 낮음 중 1건 이상인 조각, index 는 남은 차례 */
+/** 바꾸기 전 규칙 — 상 · 중 · 하 중 1건 이상인 조각, index 는 남은 차례 */
 function oldDist(a: Analysis): DistSegment[] {
   return OLD_LEVELS.map((key) => ({ key, label: RISK[key].label, n: a.findings.filter((f) => f.risk === key).length, color: RISK[key].solid }))
     .filter((d) => d.n > 0)
@@ -140,7 +140,7 @@ function oldDist(a: Analysis): DistSegment[] {
 }
 const oldAria = (d: DistSegment[]) => '위험등급별 탐지 분포: ' + (d.length ? d.map((x) => x.label + ' ' + x.n + '건').join(', ') : '탐지 없음');
 
-describe('데모 — 분포 막대가 바꾸기 전 규칙(높음 · 보통 · 낮음만)과 같다', () => {
+describe('데모 — 분포 막대가 바꾸기 전 규칙(상 · 중 · 하만)과 같다', () => {
   it('처음 샘플의 모든 분석 건', async () => {
     const svc = createService();
     const list = await svc.list();

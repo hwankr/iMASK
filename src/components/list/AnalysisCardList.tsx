@@ -45,7 +45,7 @@ export function AnalysisCardList({
               <div className={styles.head}>
                 <span className={styles.name}>{r.name}</span>
                 <span className={styles.meta}>
-                  문서 {r.docs}개 · 접수 {r.date}
+                  {r.docs === null ? '' : '문서 ' + r.docs + '개 · '}접수 {r.date}
                 </span>
               </div>
               <dl className={styles.facts}>

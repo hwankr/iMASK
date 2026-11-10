@@ -76,7 +76,7 @@ describe('실제 분석 보고서 — 검토사항이 든 결과', () => {
 
   it('대상 문서 표 — 남은 검토사항 열과 서류별 미해결 수', () => {
     expect(v.docOpenCol).toBe(true);
-    expect(heads(html).slice(0, 7)).toEqual(['문서', '형식·페이지', '처리 상태', '탐지', '높음', '담당자 확인', '남은 검토사항']);
+    expect(heads(html).slice(0, 7)).toEqual(['문서', '형식·페이지', '처리 상태', '탐지', '상', '담당자 확인', '남은 검토사항']);
     expect(v.docs.map((d) => [d.id, d.open])).toEqual([
       ['doc-0', 1],
       ['doc-1', 0],

@@ -277,7 +277,7 @@ export function ComponentsBoard() {
               {REVIEW_KEYS.map((k) => (
                 <ReviewStatusPill key={k} status={k} size="md" />
               ))}
-              <span className={styles.noteMl}>‘검토 필요’만 어둡게 채워 할 일이 눈에 먼저 들어오게 합니다.</span>
+              <span className={styles.noteMl}>‘검토 대기’만 어둡게 채워 할 일이 눈에 먼저 들어오게 합니다.</span>
             </div>
             <RowLabel title="탐지 확인 상태" sub="아이콘 + 글자" />
             <div className={styles.wrapStatus}>
@@ -445,7 +445,7 @@ export function ComponentsBoard() {
                 className={styles.max420}
                 tabs={[
                   { value: 'findings', label: '탐지 항목', count: 23 },
-                  { value: 'review', label: '검토 필요', count: 5, tone: 'warn' },
+                  { value: 'review', label: '검토사항', count: 5, tone: 'warn' },
                   { value: 'links', label: '문서 간 연결', count: 3 },
                 ]}
               />
@@ -529,7 +529,7 @@ export function ComponentsBoard() {
         <div className={styles.grid2top}>
           <div className={styles.stack12}>
             <Banner shape="card" variant="running" title="분석 중입니다 · 문서 3개 중 1개 완료" description="정확한 진행률은 표시하지 않습니다." />
-            <Banner shape="card" variant="partial" title="문서 3개 중 1개를 분석하지 못했습니다." description="이미 찾은 고위험 정보는 그대로 둡니다." />
+            <Banner shape="card" variant="partial" title="문서 3개 중 1개를 분석하지 못했습니다." description="이미 찾은 상 등급 정보는 그대로 둡니다." />
             <Banner shape="card" variant="done" title={`검토 완료 · ${CONFIG.user.name} · 2026.10.29 09:12`} description="위험등급과 최초 결과는 유지됩니다." />
             <Banner
               shape="card"

@@ -32,9 +32,10 @@ describe('데모 내보내기 — T0 기준 파일과 바이트가 같다(JSON �
     vi.useRealTimers();
   });
 
+  // T0 기준 + web-polish T2 표시 말(등급 상·중·하 · 검토 대기 · 분석 ID IM-) — 그 밖의 바이트는 T0 와 같다(T2 보고서에 근거)
   const T0 = {
-    A1: { csv: ['7e3b50a47c13236da8260959de1440d57fb6d7fdeb36d07771403ca257b3f735', 6127], json: ['0ca7c0665c3bacaa56fb7028a2c0a9116ffddcd27b553d62967f23dcaee54723', 22021] },
-    A5: { csv: ['529073f0a60cb7dabcb8bba3fb46dde240e7f07cc6b4a5bd87d6501155943936', 1211], json: ['37d76551007902798ccbe1c67c218ed0c6a0b45fcab38246bd7e4c5b64526540', 5172] },
+    A1: { csv: ['1f6c629c47b8a0b47c77907f2e96f5653c36458c76fc571fc0deceb0b7ca644a', 6058], json: ['ff48a46d8061133675a350f4d6776a95b98e1b66f7bbee2444be440c57312726', 21946] },
+    A5: { csv: ['e52f4eeb32f8e390a73785d6409889baf47b24953ce08caeae1561c16e932cf3', 1199], json: ['d71810fc7df2eea151369dfd5dbb4ebd4a8edd2a3a0e752aeb8c3077135a46da', 5154] },
   } as const;
 
   for (const id of ['A1', 'A5'] as const) {
@@ -120,7 +121,7 @@ describe('실제 분석 파일 — 합성 고정 자료', () => {
   it('CSV — 데모와 같은 17열 · BOM · CRLF · 적용규칙 빈 값 · 미평가 · 파일 이름', () => {
     const file = liveFile(a, 'csv');
     expect(file.name).toBe(`${CONFIG.brandName}_${a.code}_검토결과_탐지항목.csv`);
-    expect(file.name).toMatch(/^iMASK_DG-\d{8}-[0-9A-F]{4}_검토결과_탐지항목\.csv$/);
+    expect(file.name).toMatch(/^iMASK_IM-\d{8}-[0-9A-F]{4}_검토결과_탐지항목\.csv$/);
     expect(file.mime).toBe('text/csv;charset=utf-8');
     expect(file.text.startsWith('﻿')).toBe(true);
     expect(file.text.endsWith('\r\n')).toBe(true);
@@ -319,7 +320,7 @@ describe('아주 긴 원문 값 — 안전한 사본 → 파일', () => {
 describe('칸 도우미', () => {
   it('isFormulaLike — 첫 글자 집합과 앞 공백', () => {
     for (const s of ['=', '+1', '-', '@', '＝', '＋', '－', '＠', '\t', '\r', '\n', ' =1', '   +1', ' -1', '　@x']) expect(isFormulaLike(s), JSON.stringify(s)).toBe(true);
-    for (const s of ['', 'a=1', '1-2', '높음', '010-****-1234', 'D1-01', '( =1)', '*-1']) expect(isFormulaLike(s), JSON.stringify(s)).toBe(false);
+    for (const s of ['', 'a=1', '1-2', '상', '010-****-1234', 'D1-01', '( =1)', '*-1']) expect(isFormulaLike(s), JSON.stringify(s)).toBe(false);
   });
 
   it('csvCell — 숫자는 그대로(음수 포함), 따옴표 규칙, 수식 막기', () => {

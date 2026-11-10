@@ -46,7 +46,7 @@ export const DEV_STATES: readonly DevState[] = [
   { id: 'detail-failed', group: 'detail', title: '전체 분석 실패', phoneOnly: false },
   { id: 'detail-completed', group: 'detail', title: '검토 완료', phoneOnly: false },
   { id: 'detail-nolocation', group: 'detail', title: '원문 위치 정보 없음', phoneOnly: false },
-  { id: 'detail-review', group: 'detail', title: '검토 필요 탭', phoneOnly: false },
+  { id: 'detail-review', group: 'detail', title: '검토사항 탭', phoneOnly: false },
   { id: 'detail-links', group: 'detail', title: '문서 간 연결', phoneOnly: false },
   { id: 'detail-edit', group: 'detail', title: '분류 수정', phoneOnly: false },
   { id: 'detail-complete', group: 'detail', title: '검토 완료 확인 (남은 항목 있음)', phoneOnly: false },

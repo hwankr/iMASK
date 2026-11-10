@@ -153,7 +153,7 @@ def test_scope_of_the_real_shaped_result_matches_the_screen_numbering() -> None:
     nums = [t.num for t in env.scope.targets]
     assert len(nums) == 29  # 서류 5개(10/2/5/7/5) — 기타 서류(6쪽)는 항목 없음
     assert nums[:3] == ["D1-01", "D1-02", "D1-03"] and nums[9:12] == ["D1-10", "D2-01", "D2-02"] and nums[-1] == "D5-05"
-    assert env.scope.risk_label == "높음"
+    assert env.scope.risk_label == "상"
 
 
 def test_hundredth_finding_in_one_document_keeps_three_digits() -> None:
@@ -263,8 +263,8 @@ def test_full_flow_transitions_and_history_lines(env: Env) -> None:
         line(11, 11, "memo", "분석 건", "검토 메모 삭제"),
         line(12, 12, "confirm", "D1-02 고유식별정보", "미확인 → 확인함"),
         line(13, 13, "confirm", "탐지 항목 1건", "미확인 → 확인함", "D1-03"),
-        line(14, 14, "complete", "분석 건", "검토 필요 → 검토 완료 (남은 항목: 미확인 탐지 1건)", "완료 메모"),
-        line(15, 15, "reopen", "분석 건", "검토 완료 → 검토 필요", "다시 봄"),
+        line(14, 14, "complete", "분석 건", "검토 대기 → 검토 완료 (남은 항목: 미확인 탐지 1건)", "완료 메모"),
+        line(15, 15, "reopen", "분석 건", "검토 완료 → 검토 대기", "다시 봄"),
     ]
     assert env.history() == expected
     assert out.review["history"][2:] == expected  # 응답 = S1·S2 + 저장된 줄
@@ -296,12 +296,12 @@ def test_confirm_many_uses_request_order_for_the_reason(env: Env) -> None:
 def test_complete_with_two_open_and_with_none(env: Env) -> None:
     env.act("confirm_many", at=1, finding_ids=["D1-01", "D1-02"])
     env.act("complete_review", at=2, note="")
-    assert env.history()[-1] == line(2, 2, "complete", "분석 건", "검토 필요 → 검토 완료 (남은 항목: 미확인 탐지 2건)")
+    assert env.history()[-1] == line(2, 2, "complete", "분석 건", "검토 대기 → 검토 완료 (남은 항목: 미확인 탐지 2건)")
     assert env.row()["status"] == "done" and env.row()["reviewer"] == ACTOR and env.row()["reviewed_at"] == iso(2)
     env.act("reopen_review", at=3, reason="r")
     env.act("confirm_many", at=4, finding_ids=["D1-03", "D2-01"])
     env.act("complete_review", at=5, note="끝", actor="박검토")
-    assert env.history()[-1] == line(5, 5, "complete", "분석 건", "검토 필요 → 검토 완료", "끝", actor="박검토")
+    assert env.history()[-1] == line(5, 5, "complete", "분석 건", "검토 대기 → 검토 완료", "끝", actor="박검토")
     assert env.row()["reviewer"] == "박검토"
 
 
@@ -309,7 +309,7 @@ def test_false_positive_and_reclassified_do_not_count_as_open(env: Env) -> None:
     env.act("mark_false_positive", at=1, finding_id="D1-01", reason_type="기타", note="")
     env.act("reclassify", at=2, finding_id="D1-02", subject="보증인", reason="")
     env.act("complete_review", at=3, note="")
-    assert env.history()[-1]["change"] == "검토 필요 → 검토 완료 (남은 항목: 미확인 탐지 2건)"
+    assert env.history()[-1]["change"] == "검토 대기 → 검토 완료 (남은 항목: 미확인 탐지 2건)"
 
 
 def test_reclassify_all_three_fields_in_demo_order(env: Env) -> None:
@@ -368,7 +368,7 @@ def test_reopen_keeps_reviewer_and_completion_note(env: Env) -> None:
     row = env.row()
     assert (row["status"], row["reviewer"], row["completion_note"], row["reviewed_at"]) == ("needed", ACTOR, "완료 메모", None)
     assert out.review["reviewer"] == ACTOR
-    assert env.history()[-1] == line(2, 2, "reopen", "분석 건", "검토 완료 → 검토 필요", "다시", actor="박검토")
+    assert env.history()[-1] == line(2, 2, "reopen", "분석 건", "검토 완료 → 검토 대기", "다시", actor="박검토")
 
 
 def test_whitespace_only_text_counts_as_saved_like_javascript(env: Env) -> None:
@@ -646,7 +646,7 @@ def test_block_without_a_row_is_the_default_with_two_system_lines(env: Env) -> N
         "findings": {},
         "items": {},
         "history": [
-            {"id": "S1", "at": analysis["created_at"], "actor": "시스템", "kind": "request", "target": "분석 건", "change": "문서 1개 분석 요청", "reason": ""},
+            {"id": "S1", "at": analysis["created_at"], "actor": "시스템", "kind": "request", "target": "분석 건", "change": "파일 1개 분석 요청", "reason": ""},
             {
                 "id": "S2",
                 "at": analysis["updated_at"],
@@ -664,11 +664,11 @@ def test_block_without_a_row_is_the_default_with_two_system_lines(env: Env) -> N
 @pytest.mark.parametrize(
     ("risk", "summary", "label"),
     [
-        ("상", None, "높음"),
-        ("중", None, "보통"),
-        ("하", None, "낮음"),
+        ("상", None, "상"),
+        ("중", None, "중"),
+        ("하", None, "하"),
         ("검토 필요", None, "검토 필요"),
-        (None, {"risk_level": " 중 "}, "보통"),
+        (None, {"risk_level": " 중 "}, "중"),
         (None, {"risk_level": " 검토 필요 "}, "검토 필요"),
         (None, {"risk_level": "검토필요"}, "미평가"),
         (None, {"risk_level": "x"}, "미평가"),
@@ -686,7 +686,7 @@ def test_system_line_counts_uploaded_document_rows() -> None:
     env = make_env(store=store)
     store.documents["extra"] = {**next(iter(store.docs_of(env.id))), "id": "extra", "created_at": "9999"}
     block = _read(env)
-    assert block is not None and block["history"][0]["change"] == "문서 2개 분석 요청"
+    assert block is not None and block["history"][0]["change"] == "파일 2개 분석 요청"
 
 
 def test_block_for_unreviewable_is_none_without_reading_the_row() -> None:

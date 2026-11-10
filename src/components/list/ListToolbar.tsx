@@ -19,13 +19,16 @@ export function ListToolbar({
   filters,
   setFilters,
   mobile,
+  live = false,
 }: {
   all: readonly Analysis[];
   filters: ListFilters;
   setFilters: SetListFilters;
   mobile: boolean;
+  /** 실제 분석 목록 — 위험등급 필터에 '검토 필요' 선택지 */
+  live?: boolean;
 }) {
-  const [risk, status, review, sort] = dropdownModels(all);
+  const [risk, status, review, sort] = dropdownModels(all, live);
   const opts = <V extends string>(m: typeof risk) =>
     m.options.map((o): DropdownOption<V> => ({ value: o.value as V, label: o.label, icon: o.icon, iconColor: o.iconColor, tileColor: o.tileColor, count: o.count }));
 

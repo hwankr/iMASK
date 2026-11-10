@@ -25,7 +25,7 @@ function fakeEnv(overrides: Partial<DownloadEnv> = {}) {
   return { env, log, blobs, timers };
 }
 
-const CSV = { name: 'iMASK_DG-20261030-0007_검토결과_탐지항목.csv', mime: 'text/csv;charset=utf-8', text: '﻿항목ID,정보종류\r\nF-01,이름\r\n' };
+const CSV = { name: 'iMASK_IM-20261030-0007_검토결과_탐지항목.csv', mime: 'text/csv;charset=utf-8', text: '﻿항목ID,정보종류\r\nF-01,이름\r\n' };
 
 describe('downloadFile — 브라우저 다운로드', () => {
   it('Blob 을 만들어 앵커를 누르고 handed 를 돌려준다', () => {
@@ -69,7 +69,7 @@ describe('downloadFile — 브라우저 다운로드', () => {
   it('바이너리(Uint8Array) — 바이트 그대로 담고 mime 을 붙인다', async () => {
     const { env, blobs, log } = fakeEnv();
     const data = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x00, 0xff, 0x80]);
-    const PDF = { name: 'iMASK_DG-20261105-0001_마스킹.pdf', mime: 'application/pdf', data };
+    const PDF = { name: 'iMASK_IM-20261105-0001_마스킹.pdf', mime: 'application/pdf', data };
     expect(downloadFile(PDF, env)).toEqual({ state: 'handed' });
     expect(log).toEqual(['create', 'click blob:fake/1 ' + PDF.name]);
     expect(blobs[0].type).toBe('application/pdf');

@@ -181,31 +181,31 @@ def test_fmt_size_matches_exact_rational_rounding_over_a_sweep() -> None:
 
 # (id, created_at, 화면 analysisCode 가 내는 code) — 손으로 계산(서울 = UTC+9, id 의 ASCII 영숫자 앞 4자 대문자)
 SCREEN_CODES = [
-    (ANALYSIS_ID, "2026-11-04T14:59:59.999999+00:00", "DG-20261104-7B94"),  # 서울 23:59:59.999 — 그날
-    (ANALYSIS_ID, "2026-11-04T15:00:00+00:00", "DG-20261105-7B94"),  # 서울 00:00 — 다음 날
-    (ANALYSIS_ID, "2026-11-04T14:59:59.999999Z", "DG-20261104-7B94"),
-    (ANALYSIS_ID, "2026-11-04T15:00:00Z", "DG-20261105-7B94"),
-    (ANALYSIS_ID, "2026-11-04T15:00:00.000000+00:00", "DG-20261105-7B94"),
-    (ANALYSIS_ID, "2026-11-04T15:00:00.000001+00:00", "DG-20261105-7B94"),
-    (ANALYSIS_ID, "2026-11-04T14:59:59.9999999+00:00", "DG-20261104-7B94"),  # 7자리(화면은 3자리로 자름 — 둘 다 내림)
-    (ANALYSIS_ID, "2026-11-04 15:00:00+00:00", "DG-20261105-7B94"),  # Postgres 꼴 공백
-    (ANALYSIS_ID, "2026-11-04T14:59+00:00", "DG-20261104-7B94"),  # 초 없음
-    (ANALYSIS_ID, "2026-11-04T00:00:00-00:00", "DG-20261104-7B94"),
-    (ANALYSIS_ID, "2026-11-04T23:59:59+09:00", "DG-20261104-7B94"),
-    (ANALYSIS_ID, "2026-11-05T00:00:00+09:00", "DG-20261105-7B94"),
-    (ANALYSIS_ID, "2026-11-03T23:30:00-05:00", "DG-20261104-7B94"),  # UTC 11-04 04:30 → 서울 13:30
-    (ANALYSIS_ID, "2026-12-31T15:00:00+00:00", "DG-20270101-7B94"),  # 해 넘김
-    (ANALYSIS_ID, "2028-02-28T15:00:00+00:00", "DG-20280229-7B94"),  # 윤일
+    (ANALYSIS_ID, "2026-11-04T14:59:59.999999+00:00", "IM-20261104-7B94"),  # 서울 23:59:59.999 — 그날
+    (ANALYSIS_ID, "2026-11-04T15:00:00+00:00", "IM-20261105-7B94"),  # 서울 00:00 — 다음 날
+    (ANALYSIS_ID, "2026-11-04T14:59:59.999999Z", "IM-20261104-7B94"),
+    (ANALYSIS_ID, "2026-11-04T15:00:00Z", "IM-20261105-7B94"),
+    (ANALYSIS_ID, "2026-11-04T15:00:00.000000+00:00", "IM-20261105-7B94"),
+    (ANALYSIS_ID, "2026-11-04T15:00:00.000001+00:00", "IM-20261105-7B94"),
+    (ANALYSIS_ID, "2026-11-04T14:59:59.9999999+00:00", "IM-20261104-7B94"),  # 7자리(화면은 3자리로 자름 — 둘 다 내림)
+    (ANALYSIS_ID, "2026-11-04 15:00:00+00:00", "IM-20261105-7B94"),  # Postgres 꼴 공백
+    (ANALYSIS_ID, "2026-11-04T14:59+00:00", "IM-20261104-7B94"),  # 초 없음
+    (ANALYSIS_ID, "2026-11-04T00:00:00-00:00", "IM-20261104-7B94"),
+    (ANALYSIS_ID, "2026-11-04T23:59:59+09:00", "IM-20261104-7B94"),
+    (ANALYSIS_ID, "2026-11-05T00:00:00+09:00", "IM-20261105-7B94"),
+    (ANALYSIS_ID, "2026-11-03T23:30:00-05:00", "IM-20261104-7B94"),  # UTC 11-04 04:30 → 서울 13:30
+    (ANALYSIS_ID, "2026-12-31T15:00:00+00:00", "IM-20270101-7B94"),  # 해 넘김
+    (ANALYSIS_ID, "2028-02-28T15:00:00+00:00", "IM-20280229-7B94"),  # 윤일
     # 시간대 범위 끝(시 23·분 59)과 분 단위 시간대 — 화면도 같은 날짜(V-T1-1 m1 뒤에도 그대로)
-    (ANALYSIS_ID, "2026-11-04T00:00:00+23:59", "DG-20261103-7B94"),  # UTC 11-03 00:01 → 서울 09:01
-    (ANALYSIS_ID, "2026-11-04T00:00:00-23:59", "DG-20261105-7B94"),  # UTC 11-04 23:59 → 서울 11-05 08:59
-    (ANALYSIS_ID, "2026-11-04T20:44:59+05:45", "DG-20261104-7B94"),  # UTC 14:59:59 → 서울 23:59:59
-    (ANALYSIS_ID, "2026-11-04T20:45:00+05:45", "DG-20261105-7B94"),  # UTC 15:00 → 서울 00:00
-    (ANALYSIS_ID, "2026-11-04T05:59:59.999999-09:00", "DG-20261104-7B94"),
-    (ANALYSIS_ID, "2026-11-04T06:00:00-09:00", "DG-20261105-7B94"),
-    ("ab-c-d9f0-0000-4000-8000-000000000000", "2026-11-04T00:00:00Z", "DG-20261104-ABCD"),  # 영숫자만 셈
-    ("00000000-0000-4000-8000-000000000000", "2026-11-04T00:00:00Z", "DG-20261104-0000"),
-    ("FFFFFFFF-0000-4000-8000-000000000000", "2026-11-04T00:00:00Z", "DG-20261104-FFFF"),
+    (ANALYSIS_ID, "2026-11-04T00:00:00+23:59", "IM-20261103-7B94"),  # UTC 11-03 00:01 → 서울 09:01
+    (ANALYSIS_ID, "2026-11-04T00:00:00-23:59", "IM-20261105-7B94"),  # UTC 11-04 23:59 → 서울 11-05 08:59
+    (ANALYSIS_ID, "2026-11-04T20:44:59+05:45", "IM-20261104-7B94"),  # UTC 14:59:59 → 서울 23:59:59
+    (ANALYSIS_ID, "2026-11-04T20:45:00+05:45", "IM-20261105-7B94"),  # UTC 15:00 → 서울 00:00
+    (ANALYSIS_ID, "2026-11-04T05:59:59.999999-09:00", "IM-20261104-7B94"),
+    (ANALYSIS_ID, "2026-11-04T06:00:00-09:00", "IM-20261105-7B94"),
+    ("ab-c-d9f0-0000-4000-8000-000000000000", "2026-11-04T00:00:00Z", "IM-20261104-ABCD"),  # 영숫자만 셈
+    ("00000000-0000-4000-8000-000000000000", "2026-11-04T00:00:00Z", "IM-20261104-0000"),
+    ("FFFFFFFF-0000-4000-8000-000000000000", "2026-11-04T00:00:00Z", "IM-20261104-FFFF"),
 ]
 
 
@@ -261,7 +261,7 @@ def test_unreadable_created_at_has_no_expected_name(created_at: Any) -> None:
 
 
 def test_years_without_four_digits_have_no_expected_name() -> None:
-    # 화면처럼 해를 0 으로 채우지 않는다 → 'DG-9991104-…' 는 이름 꼴(8자리)이 아니다
+    # 화면처럼 해를 0 으로 채우지 않는다 → 'IM-9991104-…' 는 이름 꼴(8자리)이 아니다
     assert seoul_date("0999-11-04T00:00:00Z") == "9991104"
     assert expected_file_name({"id": ANALYSIS_ID, "created_at": "0999-11-04T00:00:00Z"}, "csv") is None
 
@@ -291,7 +291,7 @@ def test_short_or_non_hex_heads_have_no_expected_name() -> None:
 
 
 def test_fixture_name_is_the_seoul_date_not_the_utc_date() -> None:
-    assert CODE == "DG-20261105-7B94" and CREATED_AT.startswith("2026-11-04T15")
+    assert CODE == "IM-20261105-7B94" and CREATED_AT.startswith("2026-11-04T15")
     assert expected_file_name({"id": ANALYSIS_ID, "created_at": CREATED_AT}, "csv") == CSV_NAME
 
 
@@ -319,7 +319,7 @@ def test_good_bodies_parse() -> None:
     action = validate_action(export_body(format="json", size=22021, state="saved", file_name=JSON_NAME))
     assert (action.export_format, action.export_size, action.export_state, action.file_name) == ("json", 22021, "saved", JSON_NAME)
     # 이름 꼴만 본다 — 다른 분석의 이름도 본문 단계에서는 통과(분석을 읽은 뒤 400)
-    assert validate_action(export_body(file_name="iMASK_DG-19991231-0000_검토결과_탐지항목.csv")).file_name.endswith(".csv")
+    assert validate_action(export_body(file_name="iMASK_IM-19991231-0000_검토결과_탐지항목.csv")).file_name.endswith(".csv")
 
 
 @pytest.mark.parametrize("size", [1, 2, 6127, MAX_EXPORT_BYTES - 1, MAX_EXPORT_BYTES])
@@ -372,25 +372,25 @@ def test_file_name_must_be_a_string(value: Any) -> None:
     assert _bad(export_body(file_name=value)) == MSG_FORMAT
 
 
-STEM = "iMASK_DG-20261105-7B94"
+STEM = "iMASK_IM-20261105-7B94"
 BAD_NAMES: dict[str, tuple[str, str]] = {
-    "brand_upper": ("csv", "IMASK_DG-20261105-7B94_검토결과_탐지항목.csv"),
-    "brand_other": ("csv", "DocGuard_DG-20261105-7B94_검토결과_탐지항목.csv"),
-    "no_brand": ("csv", "DG-20261105-7B94_검토결과_탐지항목.csv"),
-    "no_underscore": ("csv", "iMASKDG-20261105-7B94_검토결과_탐지항목.csv"),
+    "brand_upper": ("csv", "IMASK_IM-20261105-7B94_검토결과_탐지항목.csv"),
+    "brand_other": ("csv", "DocGuard_IM-20261105-7B94_검토결과_탐지항목.csv"),
+    "no_brand": ("csv", "IM-20261105-7B94_검토결과_탐지항목.csv"),
+    "no_underscore": ("csv", "iMASKIM-20261105-7B94_검토결과_탐지항목.csv"),
     "lower_dg": ("csv", "iMASK_dg-20261105-7B94_검토결과_탐지항목.csv"),
-    "lower_hex": ("csv", "iMASK_DG-20261105-7b94_검토결과_탐지항목.csv"),
-    "non_hex": ("csv", "iMASK_DG-20261105-7G94_검토결과_탐지항목.csv"),
-    "date_7": ("csv", "iMASK_DG-2026115-7B94_검토결과_탐지항목.csv"),
-    "date_9": ("csv", "iMASK_DG-202611050-7B94_검토결과_탐지항목.csv"),
-    "date_dashes": ("csv", "iMASK_DG-2026-11-05-7B94_검토결과_탐지항목.csv"),
-    "hex_3": ("csv", "iMASK_DG-20261105-7B9_검토결과_탐지항목.csv"),
-    "hex_5": ("csv", "iMASK_DG-20261105-7B94A_검토결과_탐지항목.csv"),
-    "no_date": ("csv", "iMASK_DG-7B94_검토결과_탐지항목.csv"),
-    "fullwidth_date": ("csv", "iMASK_DG-２０２６1105-7B94_검토결과_탐지항목.csv"),
-    "fullwidth_hex": ("csv", "iMASK_DG-20261105-７B94_검토결과_탐지항목.csv"),
-    "arabic_indic_date": ("csv", "iMASK_DG-\u0662\u0660\u0662\u06661105-7B94_검토결과_탐지항목.csv"),
-    "superscript_digit": ("csv", "iMASK_DG-2026110\u00b2-7B94_검토결과_탐지항목.csv"),
+    "lower_hex": ("csv", "iMASK_IM-20261105-7b94_검토결과_탐지항목.csv"),
+    "non_hex": ("csv", "iMASK_IM-20261105-7G94_검토결과_탐지항목.csv"),
+    "date_7": ("csv", "iMASK_IM-2026115-7B94_검토결과_탐지항목.csv"),
+    "date_9": ("csv", "iMASK_IM-202611050-7B94_검토결과_탐지항목.csv"),
+    "date_dashes": ("csv", "iMASK_IM-2026-11-05-7B94_검토결과_탐지항목.csv"),
+    "hex_3": ("csv", "iMASK_IM-20261105-7B9_검토결과_탐지항목.csv"),
+    "hex_5": ("csv", "iMASK_IM-20261105-7B94A_검토결과_탐지항목.csv"),
+    "no_date": ("csv", "iMASK_IM-7B94_검토결과_탐지항목.csv"),
+    "fullwidth_date": ("csv", "iMASK_IM-２０２６1105-7B94_검토결과_탐지항목.csv"),
+    "fullwidth_hex": ("csv", "iMASK_IM-20261105-７B94_검토결과_탐지항목.csv"),
+    "arabic_indic_date": ("csv", "iMASK_IM-\u0662\u0660\u0662\u06661105-7B94_검토결과_탐지항목.csv"),
+    "superscript_digit": ("csv", "iMASK_IM-2026110\u00b2-7B94_검토결과_탐지항목.csv"),
     "trailing_lf": ("csv", CSV_NAME + "\n"),
     "trailing_crlf": ("csv", CSV_NAME + "\r\n"),
     "leading_lf": ("csv", "\n" + CSV_NAME),
@@ -487,7 +487,7 @@ def _raw(size: str = "6127", name: str = CSV_NAME, *, extra: str = "") -> bytes:
         _raw(name=CSV_NAME + "\\n"),  # 이스케이프한 끝 줄바꿈
         _raw(name=CSV_NAME + "\\u0000"),
         _raw(name=CSV_NAME + "\\ud800"),
-        _raw(name="iMASK_DG-20261105-7B94_\\uac80\\ud1a0\\uacb0\\uacfc_\\ud0d0\\uc9c0\\ud56d\\ubaa9.csv\\n"),
+        _raw(name="iMASK_IM-20261105-7B94_\\uac80\\ud1a0\\uacb0\\uacfc_\\ud0d0\\uc9c0\\ud56d\\ubaa9.csv\\n"),
         b'{"type":"log_export","actor":"\xea\xb9\x80","format":"csv","size":6127,"state":"handed","file_name":' + b"[" * 100_000 + b"]" * 100_000 + b"}",
         b'{"type":"log_export","actor":"\xea\xb9\x80","format":"csv","size":' + b"[" * 30_000 + b"]" * 30_000 + b',"state":"handed","file_name":"x"}',
         _raw()[:-1],  # 잘린 본문
@@ -629,7 +629,7 @@ def test_export_never_writes_the_analysis_row(store: FakeStore) -> None:
 
 @pytest.mark.parametrize("analysis_id", ["not-a-uuid", "", "00000000-0000-4000-8000-000000000000"])
 def test_unknown_analysis_is_404_even_with_a_wrong_name(store: FakeStore, analysis_id: str) -> None:
-    for body in (export_body(), export_body(file_name="iMASK_DG-20000101-0000_검토결과_탐지항목.csv")):
+    for body in (export_body(), export_body(file_name="iMASK_IM-20000101-0000_검토결과_탐지항목.csv")):
         err = act_error(store, body, analysis_id=analysis_id)
         assert (err.status_code, err.detail) == (404, MSG_NOT_FOUND)
 
@@ -655,19 +655,19 @@ def test_uppercase_path_id_is_the_same_analysis(store: FakeStore) -> None:
 def test_unreviewable_is_409_before_the_name_check(status: str, result: Any) -> None:
     store = FakeStore()
     put_analysis(store, status=status, result=result, with_result=False)
-    for body in (export_body(), export_body(file_name="iMASK_DG-20000101-0000_검토결과_탐지항목.csv")):
+    for body in (export_body(), export_body(file_name="iMASK_IM-20000101-0000_검토결과_탐지항목.csv")):
         err = act_error(store, body)
         assert (err.status_code, err.detail) == (409, MSG_NOT_REVIEWABLE)
     assert "get_review" not in store.calls and store.review_writes == []
 
 
 WRONG_NAMES = {
-    "other_analysis": "iMASK_DG-20261105-3C1D_검토결과_탐지항목.csv",
-    "utc_date": "iMASK_DG-20261104-7B94_검토결과_탐지항목.csv",  # UTC 날짜(서울 날짜가 아님)
-    "next_day": "iMASK_DG-20261106-7B94_검토결과_탐지항목.csv",
-    "id_one_off": "iMASK_DG-20261105-7B95_검토결과_탐지항목.csv",
-    "id_tail": "iMASK_DG-20261105-89AB_검토결과_탐지항목.csv",  # id 의 뒤 4자
-    "zero_id": "iMASK_DG-20261105-0000_검토결과_탐지항목.csv",
+    "other_analysis": "iMASK_IM-20261105-3C1D_검토결과_탐지항목.csv",
+    "utc_date": "iMASK_IM-20261104-7B94_검토결과_탐지항목.csv",  # UTC 날짜(서울 날짜가 아님)
+    "next_day": "iMASK_IM-20261106-7B94_검토결과_탐지항목.csv",
+    "id_one_off": "iMASK_IM-20261105-7B95_검토결과_탐지항목.csv",
+    "id_tail": "iMASK_IM-20261105-89AB_검토결과_탐지항목.csv",  # id 의 뒤 4자
+    "zero_id": "iMASK_IM-20261105-0000_검토결과_탐지항목.csv",
 }
 
 
@@ -683,7 +683,7 @@ def test_name_of_another_analysis_is_400_without_touching_the_review_row(store: 
 
 def test_names_of_two_analyses_only_fit_their_own(store: FakeStore) -> None:
     put_analysis(store, analysis_id=OTHER_ID, created_at="2026-11-05T00:00:00Z")
-    other_name = "iMASK_DG-20261105-3C1D_검토결과_탐지항목.csv"
+    other_name = "iMASK_IM-20261105-3C1D_검토결과_탐지항목.csv"
     assert act_error(store, export_body(file_name=other_name)).status_code == 400
     assert act_error(store, export_body(), analysis_id=OTHER_ID).status_code == 400
     assert act(store, export_body(file_name=other_name), analysis_id=OTHER_ID, at=1).changed
@@ -699,7 +699,7 @@ def test_names_of_two_analyses_only_fit_their_own(store: FakeStore) -> None:
 def test_row_with_unreadable_created_at_is_400(created_at: Any) -> None:
     store = FakeStore()
     put_analysis(store, created_at=created_at)
-    for name in (CSV_NAME, "iMASK_DG-20261104-7B94_검토결과_탐지항목.csv"):
+    for name in (CSV_NAME, "iMASK_IM-20261104-7B94_검토결과_탐지항목.csv"):
         err = act_error(store, export_body(file_name=name))
         assert (err.status_code, err.detail) == (400, MSG_FORMAT)
     assert store.review_writes == []
@@ -708,11 +708,11 @@ def test_row_with_unreadable_created_at_is_400(created_at: Any) -> None:
 @pytest.mark.parametrize(
     ("created_at", "name"),
     [
-        ("2026-11-04T14:59:59.999999+00:00", "iMASK_DG-20261104-7B94_검토결과_탐지항목.csv"),
-        ("2026-11-04T14:59:59.999999Z", "iMASK_DG-20261104-7B94_검토결과_탐지항목.csv"),
-        ("2026-11-04T15:00:00+00:00", "iMASK_DG-20261105-7B94_검토결과_탐지항목.csv"),
-        ("2026-11-04T15:00:00Z", "iMASK_DG-20261105-7B94_검토결과_탐지항목.csv"),
-        ("2026-11-04T15:00:00.000000+00:00", "iMASK_DG-20261105-7B94_검토결과_탐지항목.csv"),
+        ("2026-11-04T14:59:59.999999+00:00", "iMASK_IM-20261104-7B94_검토결과_탐지항목.csv"),
+        ("2026-11-04T14:59:59.999999Z", "iMASK_IM-20261104-7B94_검토결과_탐지항목.csv"),
+        ("2026-11-04T15:00:00+00:00", "iMASK_IM-20261105-7B94_검토결과_탐지항목.csv"),
+        ("2026-11-04T15:00:00Z", "iMASK_IM-20261105-7B94_검토결과_탐지항목.csv"),
+        ("2026-11-04T15:00:00.000000+00:00", "iMASK_IM-20261105-7B94_검토결과_탐지항목.csv"),
     ],
 )
 def test_midnight_boundary_rows(created_at: str, name: str) -> None:

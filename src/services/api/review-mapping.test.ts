@@ -81,7 +81,7 @@ describe('올바른 검토 기록 — 항목 · 분석에 덧씌운다', () => {
     },
     history: [
       { id: 'S1', at: '2026-11-02T05:10:00.123456+00:00', actor: '시스템', kind: 'request', target: '분석 건', change: '문서 1개 분석 요청', reason: '' },
-      { id: 'S2', at: '2026-11-02T05:10:34.900000+00:00', actor: '시스템', kind: 'ai', target: '분석 건', change: '분석 완료 · 탐지 19건 · 위험등급 높음 · 검토사항 0건', reason: '' },
+      { id: 'S2', at: '2026-11-02T05:10:34.900000+00:00', actor: '시스템', kind: 'ai', target: '분석 건', change: '분석 완료 · 탐지 19건 · 위험등급 상 · 검토사항 0건', reason: '' },
       { id: 'H1', at: '2026-11-03T01:02:03+00:00', actor: '김민지', kind: 'confirm', target: 'D1-01 이름', change: '미확인 → 확인함', reason: '' },
       { id: 'H2', at: '2026-11-03T15:30:00Z', actor: '김민지', kind: 'fp', target: 'D1-02 주민등록번호', change: '고유식별정보 → 오탐 (이미 가려진 값)', reason: '원본에서 가려져 있음' },
       { id: 'H3', at: '2026-11-03T01:10:00+00:00', actor: '김민지', kind: 'memo', target: '분석 건', change: '검토 메모 저장', reason: '검토 메모' },

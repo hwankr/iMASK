@@ -39,7 +39,7 @@ ANALYSIS_KEYS = {
     "poll_error",
     "review",
 }
-ITEM_KEYS = {"id", "name", "status", "error", "created_at", "updated_at", "started_at", "documents", "risk_level", "review"}
+ITEM_KEYS = {"id", "name", "status", "error", "created_at", "updated_at", "started_at", "documents", "risk_level", "review", "document_count"}
 LIST_DOC_KEYS = {"filename", "size_bytes", "mime_type"}
 
 MSG_FORMAT = "요청 형식이 올바르지 않습니다."

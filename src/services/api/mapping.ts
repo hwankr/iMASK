@@ -1,6 +1,6 @@
 /* ==========================================================================
    AnalysisOut(T2 계약) → Analysis(화면 도메인 타입) — 순수 함수
-   - 분석 번호 code = 'DG-YYYYMMDD-XXXX'(만든 날짜는 서울 시각, XXXX = id 앞 4자 대문자).
+   - 분석 번호 code = 'IM-YYYYMMDD-XXXX'(만든 날짜는 서울 시각, XXXX = id 앞 4자 대문자).
    - 시각은 'YYYY-MM-DD HH:mm'(Asia/Seoul — src/lib/format.ts 의 형식과 같다). 한국은 서머타임이 없어
      UTC+9 로 고정 계산한다(브라우저 시간대와 무관하게 같은 값).
    - 위험도는 result.overall.level(공통 계약), 없으면 result.summary.risk_level:
@@ -25,6 +25,7 @@
    - 목록(GET /analyses)은 상세 매핑과 따로 읽는다(readAnalysisList · toListAnalysis — 가벼운 항목):
      docs = 올린 파일 행(toDoc 과 같은 모양, 문서 id 가 없어 분석 안에서 겹치지 않는 'f1'·'f2'… 를 만든다),
      위험등급 = risk_level(상·중·하·검토 필요 → high·medium·low·review, 그 밖 · null → unrated), 검토 상태 = review(done · needed, 그 밖 none),
+     분류한 서류 수 = document_count(bool 아닌 정수 ≥ 0, 그 밖 null — raw.documentCount. 상세는 result.summary.document_count 같은 규칙),
      탐지 항목 · 검토사항 · 연결 · 이력 = 빈 값, raw 는 result null · detailReady false · reviewable false.
      응답이 객체가 아니거나 analyses 가 배열이 아니면 null(목록 불러오기 실패). 객체가 아니거나 id 가 빈 항목만 뺀다. 순서는 서버 순서.
    ========================================================================== */
@@ -87,13 +88,13 @@ export function seoulNow(date: Date = new Date()): string {
   return seoulDateTime(date.toISOString());
 }
 
-/** 분석 번호 'DG-YYYYMMDD-XXXX' — 만든 날짜(서울) + id 앞 4자 대문자. 날짜를 모르면 'DG-XXXX' */
+/** 분석 번호 'IM-YYYYMMDD-XXXX' — 만든 날짜(서울) + id 앞 4자 대문자. 날짜를 모르면 'IM-XXXX' */
 export function analysisCode(id: unknown, createdAt: unknown): string {
   const head = str(id).replace(/[^0-9a-zA-Z]/g, '').slice(0, 4).toUpperCase();
   const ms = parseIsoMs(createdAt);
-  if (Number.isNaN(ms)) return `DG-${head}`;
+  if (Number.isNaN(ms)) return `IM-${head}`;
   const [y, mo, d] = seoulParts(ms);
-  return `DG-${y}${pad2(mo)}${pad2(d)}-${head}`;
+  return `IM-${y}${pad2(mo)}${pad2(d)}-${head}`;
 }
 
 /** 상태 값 → 화면 상태. 모르는 값은 queued */
@@ -110,6 +111,18 @@ export function riskFromLevel(level: unknown): AnalysisRisk {
   if (s === '하') return 'low';
   if (s === '검토 필요') return 'review';
   return 'unrated';
+}
+
+/** 분류한 서류 수 — bool 아닌 정수 ≥ 0 이면 그 값, 아니면 null(목록 행 document_count · 결과 summary.document_count 와 같은 규칙) */
+export function documentCount(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+/** result.summary.document_count → documentCount(없으면 null) */
+function summaryDocumentCount(result: unknown): number | null {
+  if (!result || typeof result !== 'object') return null;
+  const summary = (result as { summary?: unknown }).summary;
+  return summary && typeof summary === 'object' ? documentCount((summary as { document_count?: unknown }).document_count) : null;
 }
 
 /** result.summary.risk_level(없으면 null) */
@@ -251,6 +264,7 @@ export function toAnalysis(out: AnalysisOut): Analysis {
     createdAt: str(out.created_at),
     updatedAt: str(out.updated_at),
     startedAt: str(out.started_at),
+    documentCount: summaryDocumentCount(result),
   };
   return {
     id: str(out.id),
@@ -311,6 +325,7 @@ export function toListAnalysis(item: unknown): Analysis | null {
     createdAt: str(item.created_at),
     updatedAt: str(item.updated_at),
     startedAt: str(item.started_at),
+    documentCount: documentCount(item.document_count),
   };
   return {
     id,

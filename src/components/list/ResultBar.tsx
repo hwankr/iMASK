@@ -3,14 +3,15 @@ import type { ListModel } from './listModel';
 import styles from './ResultBar.module.css';
 
 /**
- * 결과 줄 — 기준 표시('전체 기준' · '검색 결과 기준'), 결과 문구, 걸렀을 때 부가 문구와 '검색·필터 초기화'. Main 165–172.
+ * 결과 줄 — 걸렀을 때 기준 표시('검색 결과 기준'), 결과 문구, 걸렀을 때 부가 문구와 '검색·필터 초기화'. Main 165–172.
+ * (걸러 보지 않을 때의 '전체 기준'은 바로 옆 '전체 n건'과 같은 말이라 그리지 않는다 — model.basis 가 빈 글.)
  * 결과 부분은 aria-live(polite)로 바뀔 때 읽힌다.
  */
 export function ResultBar({ model, onReset }: { model: ListModel; onReset: () => void }) {
   return (
     <div className={styles.bar}>
       <div aria-live="polite" className={styles.result}>
-        <span className={cx(styles.basis, model.filtered && styles.basisOn)}>{model.basis}</span>
+        {model.basis ? <span className={cx(styles.basis, model.filtered && styles.basisOn)}>{model.basis}</span> : null}
         <span className={styles.text}>{model.resultText}</span>
         {model.filtered ? <span className={styles.sub}>{model.resultSub}</span> : null}
       </div>

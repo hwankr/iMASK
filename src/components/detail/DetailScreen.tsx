@@ -28,7 +28,7 @@ import { useDeleteAnalysis } from '@/components/modals/DeleteAnalysis';
 import { useLiveStages } from '@/components/live/liveHooks';
 import { listHref, reportHref } from '@/lib/routes';
 import type { LiveExtras } from '@/services';
-import { useAnalysis, useRouteBase } from '@/services/react';
+import { useAnalysis, useRouteBase, useServiceMode } from '@/services/react';
 import type { Analysis } from '@/services/types';
 import { ReviewModal } from '@/components/modals/ReviewModal';
 import { READ_ONLY_ACTIONS, useDetailActions } from './detailActions';
@@ -80,11 +80,12 @@ export function DetailScreen({ id, initial }: DetailScreenProps) {
   const { data, error, refresh } = useAnalysis(id);
   // 지운 뒤 — 그 기준 경로의 마지막 목록(검색 · 필터 그대로)으로
   const listQuery = useRememberedListQuery(base);
+  const live = useServiceMode() === 'api';
   const del = useDeleteAnalysis({
     onRemoved: (_id, outcome) => {
       if (outcome !== 'deleted') return;
       requestListFocusOnArrive(); // 화면 이동은 포커스를 옮기지 않는다 — 목록이 그려지면 검색칸으로
-      router.push(listReturnHref(base, listQuery));
+      router.push(listReturnHref(base, listQuery, live));
     },
   });
   // 지우는 중 · 지운 뒤 떠나는 중 — 그동안은 '찾을 수 없음'으로 목록에 보내지 않는다(번쩍임 · 두 번 이동 없이)

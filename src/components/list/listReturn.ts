@@ -12,6 +12,8 @@ import { DEFAULT_FILTERS, filtersToQuery, parseFilters, type ListFilters } from 
    기준 경로(src/lib/routes.ts)마다 따로 기억한다 — 루트('') 는 `imask:list-query`, 데모 `/demo` 는
    `imask:demo:list-query`. `/demo` 에서 건 필터가 실제 분석 화면의 헤더 · '목록으로' 링크로 새지 않게(그 반대도).
    이동 주소 함수는 기준 경로를 꼭 받아 그 기준의 목록 주소를 만든다(루트 기준 결과는 예전과 같다).
+   live(그 기준 경로의 화면이 실제 분석 — 부르는 쪽이 useServiceMode() === 'api' 로 넘긴다)일 때만 위험등급 'review' 를 받는다.
+   데모 기준은 모르는 값처럼 '전체'로 읽어(listModel.parseFilters) 기억 · 이동 주소에 싣지 않는다.
 
    프로토타입 동작(Main 1655 goHome · 2589 goList · 2569 nav):
    - 상세의 '목록으로'(goList) · 새 분석 '취소' — 필터·정렬을 그대로 둔다
@@ -74,8 +76,8 @@ function createListMemory(key: string): ListMemory {
 const memories: Record<RouteBase, ListMemory> = { '': createListMemory(KEYS['']), [DEMO_BASE]: createListMemory(KEYS[DEMO_BASE]) };
 
 /** 목록 화면이 지금 필터를 적는다(정규형 검색 문자열, 물음표 없음) — 그 기준 경로의 기억에 */
-export function rememberListQuery(base: RouteBase, query: string): void {
-  memories[base].write(filtersToQuery(parseFilters(new URLSearchParams(query))));
+export function rememberListQuery(base: RouteBase, query: string, live = false): void {
+  memories[base].write(filtersToQuery(parse(query, live)));
 }
 
 /** 서버 렌더·하이드레이션 첫 렌더는 '' — 링크가 목록 첫 화면으로 그려졌다가 기억한 값으로 바뀐다(불일치 없음) */
@@ -93,26 +95,31 @@ function href(base: RouteBase, f: ListFilters): string {
   return listHref(base, filtersToQuery(f));
 }
 
-/** 상세 '목록으로' · 새 분석 '취소' — 마지막 목록 그대로 */
-export function listReturnHref(base: RouteBase, query: string): string {
-  return href(base, parseFilters(new URLSearchParams(query)));
+/** 기억한 검색 문자열 → 필터(그 기준 화면의 모드 규칙 — live 일 때만 위험등급 'review') */
+function parse(query: string, live: boolean): ListFilters {
+  return parseFilters(new URLSearchParams(query), { live });
 }
 
-/** 헤더 '문서 분석' — '검토 필요' 필터만 푼다 */
-export function listNavHref(base: RouteBase, query: string): string {
-  const f = parseFilters(new URLSearchParams(query));
+/** 상세 '목록으로' · 새 분석 '취소' — 마지막 목록 그대로 */
+export function listReturnHref(base: RouteBase, query: string, live = false): string {
+  return href(base, parse(query, live));
+}
+
+/** 헤더 '문서 분석' — '검토 대기' 필터만 푼다 */
+export function listNavHref(base: RouteBase, query: string, live = false): string {
+  const f = parse(query, live);
   return href(base, { ...f, review: f.review === 'needed' ? 'all' : f.review });
 }
 
-/** 헤더 '검토 필요' — 검색·위험·상태를 풀고 검토 필요만(정렬 유지) */
-export function reviewNeededHref(base: RouteBase, query: string): string {
-  const f = parseFilters(new URLSearchParams(query));
+/** 헤더 '검토 대기' — 검색·위험·상태를 풀고 검토 대기만(정렬 유지) */
+export function reviewNeededHref(base: RouteBase, query: string, live = false): string {
+  const f = parse(query, live);
   return href(base, { ...DEFAULT_FILTERS, review: 'needed', sort: f.sort });
 }
 
 /** 로고 — 검색·필터를 모두 푼다(정렬 유지) */
-export function listHomeHref(base: RouteBase, query: string): string {
-  const f = parseFilters(new URLSearchParams(query));
+export function listHomeHref(base: RouteBase, query: string, live = false): string {
+  const f = parse(query, live);
   return href(base, { ...DEFAULT_FILTERS, sort: f.sort });
 }
 

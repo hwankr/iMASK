@@ -16,7 +16,7 @@ import { Icon, TextField, useToast } from '@/components/ui';
 import { CONFIG } from '@/config/app';
 import { detailHref } from '@/lib/routes';
 import type { AnalysisService } from '@/services/analysis-service';
-import { useRouteBase, useService } from '@/services/react';
+import { useRouteBase, useService, useServiceMode } from '@/services/react';
 import type { UploadFile } from '@/services/types';
 import { DropZone } from './DropZone';
 import { FileList } from './FileList';
@@ -72,6 +72,7 @@ export function UploadScreen({ initial, sampleFromQuery = false }: UploadScreenP
   const router = useRouter();
   const base = useRouteBase();
   const listQuery = useRememberedListQuery(base);
+  const live = useServiceMode() === 'api';
   const service = useService();
   const toast = useToast();
   const [up, setUp] = useState<UploadState>(() => initUpload(initial));
@@ -189,7 +190,7 @@ export function UploadScreen({ initial, sampleFromQuery = false }: UploadScreenP
   /* ---------- 이동 · 시작(원본 cancel · startAnalysis) ---------- */
   const cancel = () => {
     // 원본 cancel(2033): 목록으로 — 마지막 목록의 검색·필터·정렬을 그대로 둔다
-    if (!busy) router.push(listReturnHref(base, listQuery));
+    if (!busy) router.push(listReturnHref(base, listQuery, live));
   };
 
   const onSubmit = (e: FormEvent<HTMLFormElement>) => {

@@ -53,8 +53,8 @@ describe('listModel — 프로토타입 listVM 규칙', () => {
     expect(m.total).toBe(all.length);
     expect(m.cards.map((c) => c.n)).toEqual([all.length, high, needed]);
     expect(m.cards.map((c) => c.on)).toEqual([true, false, false]);
-    expect(m.heroLead + m.heroStrong + m.heroTail).toBe(needed ? `검토가 필요한 분석이 ${needed}건 있습니다.` : '지금 검토가 필요한 분석은 없습니다.');
-    expect(m.basis).toBe('전체 기준');
+    expect(m.heroLead + m.heroStrong + m.heroTail).toBe(needed ? `검토를 기다리는 분석이 ${needed}건 있습니다.` : '검토를 기다리는 분석이 없습니다.');
+    expect(m.basis).toBe(''); // 걸러 보지 않을 때는 '전체 n건'과 같은 말이라 기준 칩을 그리지 않는다
     expect(m.resultText).toBe(`전체 ${all.length}건`);
     expect(m.rows).toHaveLength(all.length);
   });
@@ -87,7 +87,7 @@ describe('listModel — 프로토타입 listVM 규칙', () => {
     expect(m.cards[2].on).toBe(true);
     expect(m.cards[0].on).toBe(false);
     const fHigh = m.rows.filter((r) => r.risk === 'high').length;
-    expect(m.resultSub).toBe(`이 중 고위험 ${fHigh}건 · 검토 필요 ${m.rows.length}건`);
+    expect(m.resultSub).toBe(`이 중 상 등급 ${fHigh}건 · 검토 대기 ${m.rows.length}건`);
   });
 
   it('검색 결과 없음 문구 — 검색어가 있으면 따옴표로, 없으면 필터 문구', async () => {
@@ -124,9 +124,9 @@ describe('드롭다운 — 건수는 전체 목록 기준', () => {
   it('위험등급 · 분석 상태 · 검토 상태 건수, 정렬 선택지 2개', async () => {
     const all = await sampleList();
     const [risk, status, review, sort] = dropdownModels(all);
-    expect(risk.options.map((o) => o.label)).toEqual(['전체', '높음', '보통', '낮음', '미평가']);
+    expect(risk.options.map((o) => o.label)).toEqual(['전체', '상', '중', '하', '미평가']);
     expect(status.options.map((o) => o.label)).toEqual(['전체', '대기', '분석 중', '완료', '일부 실패', '실패']);
-    expect(review.options.map((o) => o.label)).toEqual(['전체', '미검토', '검토 필요', '검토 완료']);
+    expect(review.options.map((o) => o.label)).toEqual(['전체', '미검토', '검토 대기', '검토 완료']);
     expect(sort.options.map((o) => o.label)).toEqual(['최근 접수순', '위험도순']);
     expect(risk.options[0].count).toBe(all.length);
     expect(risk.options.slice(1).reduce((n, o) => n + (o.count ?? 0), 0)).toBe(all.length);

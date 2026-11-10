@@ -63,7 +63,8 @@
 #  - documents[].validation 은 null, 서류별 checks 도 없다(검증은 묶음 하나의 사슬).
 #  - decision = final_flow.read_verdict(키 8개), overall = {level: risk_level, text: reason, next_text: recommended_action, next_stage},
 #    bundle_check = final_flow.chain_view, links = final_flow.read_v2_links → items.link_pairs·build_links,
-#    items = items.v2_parts(칸별 판독 불가·실패 규칙·연결) + 사유 보충(ReviewNote). 각각 실패해도 그 값만 빈 값이다(_quiet).
+#    items = items.v2_parts(칸별 판독 불가·실패 규칙·연결·v6 결합 — 가린 이름 서류는 final_flow.masked_name_fields) + 사유 보충(ReviewNote).
+#    각각 실패해도 그 값만 빈 값이다(_quiet).
 #  - 차이 경고: 값이 있는 접두어 칸의 토큰(서류코드.칸 — 칸은 접두어를 뗀 키, 표 칸도 같은 꼴, 등급별)과 판정 목록 3키가 다르면 등급별 개수만
 #    경고 로그를 남긴다. 화면은 Extract 를 따르고 판정 목록은 그대로 보존한다.
 #  새 코드의 로그는 고정 글자 + 예외 종류 + 개수만이다(바깥 문자열을 넣지 않는다).
@@ -918,8 +919,10 @@ def _build_view_v2(stages: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     reads = _quiet("read_v2_links", lambda: final_flow.read_v2_links(stages), None)
     pairs = _quiet("link_pairs", lambda: link_pairs(documents, findings, reads, _doc_names()), [])
     unreadable = _quiet("unreadable", lambda: {d.index: _v2_unreadable(d) for d in ordered}, {})
+    masked = _quiet("masked_names", lambda: final_flow.masked_name_fields(ordered), {})
+    linkage_passed = _quiet("linkage_passed", lambda: final_flow.read_linkage_passed(stages), False)
     rules = chain[0] if chain is not None else []
-    bundle = _quiet("v2_parts", lambda: v2_parts(documents, unreadable, rules, pairs, _doc_names()), None)
+    bundle = _quiet("v2_parts", lambda: v2_parts(documents, unreadable, rules, pairs, _doc_names(), masked, linkage_passed), None)
     review = ReviewNote(reasons=decision.get("review_reasons"), level=decision.get("risk_level")) if decision is not None else ReviewNote()
     return {
         "documents": documents,

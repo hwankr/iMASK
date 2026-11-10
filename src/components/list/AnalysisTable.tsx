@@ -127,7 +127,7 @@ function TableRow({
           </div>
         </div>
       </td>
-      <td className={cx(styles.td, styles.docs)}>{r.docs}개</td>
+      <td className={cx(styles.td, styles.docs)}>{r.docs === null ? '-' : r.docs + '개'}</td>
       <td className={styles.td}>
         <RiskBadge level={r.risk} size="sm" />
       </td>

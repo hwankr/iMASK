@@ -129,8 +129,10 @@ def test_items_have_exactly_the_contract_keys_in_db_order(ctx: Ctx) -> None:
         "documents": [{"filename": "묶음.pdf", "size_bytes": len(b"%PDF-1.7\n% fake synthetic pdf\n"), "mime_type": "application/pdf"}],
         "risk_level": "상",
         "review": "needed",
+        "document_count": 2,
     }
     assert items[-1]["error"] == "실패 이유" and items[-1]["review"] == "none" and items[-1]["risk_level"] is None
+    assert items[-1]["document_count"] is None
 
 
 def test_list_never_carries_internal_columns_or_the_result(ctx: Ctx) -> None:

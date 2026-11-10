@@ -2,6 +2,7 @@
 
 import type { CSSProperties } from 'react';
 import { Icon, IconButton, Spinner, cx } from '@/components/ui';
+import { RISK } from '@/display/rules';
 import type { DocModel } from './detailModel';
 import { Tip } from './Tip';
 import styles from './DocList.module.css';
@@ -28,7 +29,7 @@ function DocStatus({ d }: { d: DocModel }) {
       {d.status.spin ? <Spinner size={12} /> : <Icon name={d.status.icon} size={14} strokeWidth={2.1} />}
       {d.status.label}
       {d.hasCount ? <span className={styles.nFind}>· 탐지 {d.nFind}</span> : null}
-      {d.hasHigh ? <span className={styles.nHigh}>· 높음 {d.nHigh}</span> : null}
+      {d.hasHigh ? <span className={styles.nHigh}>· {RISK.high.label} {d.nHigh}</span> : null}
     </span>
   );
 }

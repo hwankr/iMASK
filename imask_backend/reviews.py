@@ -96,7 +96,7 @@ FP_REASONS = ("개인정보가 아닌 번호·문구", "다른 정보 종류를 
 # 탐지 항목 확인 상태(FSTATUS) 라벨
 FSTATUS = {"open": "미확인", "confirmed": "확인함", "false_positive": "오탐", "reclassified": "분류 수정"}
 # 검토 상태(RSTATUS 중 저장하는 두 값) 라벨
-RSTATUS = {"needed": "검토 필요", "done": "검토 완료"}
+RSTATUS = {"needed": "검토 대기", "done": "검토 완료"}
 # 이력 구분(HKIND) 키
 HKIND = (
     "ai",
@@ -148,7 +148,7 @@ AI_SUBJECT_FALLBACK = "기타"
 AI_EXPOSURE_FALLBACK = "전체 노출"
 SYSTEM_ACTOR = "시스템"
 ANALYSIS_TARGET = "분석 건"
-RISK_LABELS = {"상": "높음", "중": "보통", "하": "낮음", "검토 필요": "검토 필요"}  # 화면 riskFromLevel + ANALYSIS_RISK 라벨
+RISK_LABELS = {"상": "상", "중": "중", "하": "하", "검토 필요": "검토 필요"}  # 화면 riskFromLevel + ANALYSIS_RISK 라벨(상·중·하·검토 필요)
 UNRATED_LABEL = "미평가"
 REPLACEMENT = "�"
 ELLIPSIS = "…"
@@ -263,7 +263,7 @@ class ItemTarget:
 class ReviewScope:
     targets: tuple[Target, ...]
     by_id: Mapping[str, Target]  # 계약 id → 처음 나온 항목
-    risk_label: str  # S2 의 위험등급(높음·보통·낮음·검토 필요·미평가)
+    risk_label: str  # S2 의 위험등급(상·중·하·검토 필요·미평가)
     items: tuple[ItemTarget, ...] = ()  # 검토사항(저장할 수 없는 것도 — S2 개수·남은 항목 수에 센다)
     item_by_id: Mapping[str, ItemTarget] = field(default_factory=dict)  # 계약 id → 저장할 수 있는 검토사항
 
@@ -646,7 +646,7 @@ def _system_lines(row: Mapping[str, Any], scope: ReviewScope) -> list[dict[str, 
             "actor": SYSTEM_ACTOR,
             "kind": "request",
             "target": ANALYSIS_TARGET,
-            "change": f"문서 {files}개 분석 요청",
+            "change": f"파일 {files}개 분석 요청",
             "reason": "",
         },
         {

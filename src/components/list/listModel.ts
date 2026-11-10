@@ -3,16 +3,20 @@
    - 데이터는 서비스(useAnalyses)가 준 분석 목록이다. 샘플 데이터를 직접 쓰지 않는다.
    - 라벨·색·아이콘은 ② 표시 규칙(src/display/rules.ts)에서 가져온다.
    - 필터 값은 URL 검색 파라미터(q · risk · status · review · sort)와 서로 바꿀 수 있다.
+   - 위험등급 필터의 risk=review(위험도 판정 '검토 필요')는 실제 분석 목록만 받는다 — 선택지(dropdownModels 의 live)와
+     주소 읽기(parseFilters 의 live) 둘 다. 데모(그리고 데모 빌드의 루트)는 그대로라 `risk=review` 를 모르는 값(`risk=zzz`)과 똑같이 '전체'로 읽는다.
+   - 문서 수: 실제 분석(raw 가 있는 분석)은 분류한 서류 수(raw.documentCount — 모르면 null → '-'), 데모는 올린 문서 수.
    ========================================================================== */
 
-import { ASTATUS, RISK, RSTATUS, analysisRiskView, type AnalysisStatus, type ReviewStatus, type RiskLevel } from '@/display/rules';
+import { ANALYSIS_RISK, ASTATUS, RISK, RSTATUS, analysisRiskView, type AnalysisStatus, type ReviewStatus, type RiskLevel } from '@/display/rules';
 import type { IconName } from '@/display/icon-names';
 import { fmtDT } from '@/lib/format';
 import type { Analysis } from '@/services/types';
 
 /* ---------- 필터 ---------- */
 
-export type RiskFilter = 'all' | RiskLevel;
+/** 위험등급 필터 — 'review' 는 분석 건 위험도 '검토 필요'(실제 분석 목록만 선택지가 있다) */
+export type RiskFilter = 'all' | RiskLevel | 'review';
 export type StatusFilter = 'all' | AnalysisStatus;
 export type ReviewFilter = 'all' | ReviewStatus;
 export type SortKey = 'recent' | 'risk';
@@ -42,8 +46,13 @@ export interface SearchParamsLike {
   get(name: string): string | null;
 }
 
-/** URL 검색 파라미터 → 필터. 모르는 값은 기본값('전체' · 최근 접수순). */
-export function parseFilters(params: SearchParamsLike | null | undefined): ListFilters {
+/** 주소 읽기 선택 — live(실제 분석 목록)일 때만 위험등급 'review' 를 받는다 */
+export interface ParseFilterOptions {
+  live?: boolean;
+}
+
+/** URL 검색 파라미터 → 필터. 모르는 값은 기본값('전체' · 최근 접수순). 위험등급 'review' 는 live 일 때만(아니면 모르는 값과 같다). */
+export function parseFilters(params: SearchParamsLike | null | undefined, opts: ParseFilterOptions = {}): ListFilters {
   const get = (k: string) => (params ? params.get(k) : null);
   const risk = get('risk');
   const status = get('status');
@@ -51,7 +60,7 @@ export function parseFilters(params: SearchParamsLike | null | undefined): ListF
   const sort = get('sort');
   return {
     q: get('q') ?? '',
-    risk: risk !== null && own(RISK, risk) ? (risk as RiskLevel) : 'all',
+    risk: risk !== null && (own(RISK, risk) || (opts.live === true && risk === 'review')) ? (risk as RiskLevel | 'review') : 'all',
     status: status !== null && own(ASTATUS, status) ? (status as AnalysisStatus) : 'all',
     review: review !== null && own(RSTATUS, review) ? (review as ReviewStatus) : 'all',
     sort: sort !== null && (SORT_KEYS as readonly string[]).includes(sort) ? (sort as SortKey) : 'recent',
@@ -87,7 +96,8 @@ export interface ListRow {
   name: string;
   /** '첫 파일명 외 n개' */
   files: string;
-  docs: number;
+  /** 문서 수 — 실제 분석은 분류한 서류 수(모르면 null), 데모는 올린 문서 수 */
+  docs: number | null;
   risk: string;
   status: string;
   review: string;
@@ -112,7 +122,7 @@ export function toRow(a: Analysis): ListRow {
     id: a.id,
     name: a.name,
     files: a.docs[0] ? a.docs[0].name + (nDocs > 1 ? ' 외 ' + (nDocs - 1) + '개' : '') : '-',
-    docs: nDocs,
+    docs: a.raw ? (a.raw.documentCount ?? null) : nDocs,
     risk: a.risk,
     status: a.status,
     review: a.review,
@@ -139,7 +149,7 @@ function byDate(x: Analysis, y: Analysis): number {
   return y.submittedAt > x.submittedAt ? 1 : y.submittedAt < x.submittedAt ? -1 : 0;
 }
 
-/** 위험도순 — 분석 건 위험도 순위(검토 필요 → 높음 → 보통 → 낮음 → 미평가), 같으면 최근 접수순 */
+/** 위험도순 — 분석 건 위험도 순위(검토 필요 → 상 → 중 → 하 → 미평가), 같으면 최근 접수순 */
 export function sortAnalyses(rows: readonly Analysis[], sort: SortKey): Analysis[] {
   return rows.slice().sort(sort === 'risk' ? (x, y) => analysisRiskView(y.risk).rank - analysisRiskView(x.risk).rank || byDate(x, y) : byDate);
 }
@@ -184,15 +194,17 @@ export const SORT_OPTIONS: readonly DropdownOptionModel[] = [
   { value: 'risk', label: '위험도순', icon: RISK.high.glyph, iconColor: RISK.high.fg, tileColor: RISK.high.bg },
 ];
 
-/** 드롭다운 4개 — 위험등급 · 분석 상태 · 검토 상태(건수는 전체 목록 기준) · 정렬 */
-export function dropdownModels(all: readonly Analysis[]): DropdownModel[] {
+/** 드롭다운 4개 — 위험등급 · 분석 상태 · 검토 상태(건수는 전체 목록 기준) · 정렬. live(실제 분석)면 위험등급의 '전체' 다음에 '검토 필요' */
+export function dropdownModels(all: readonly Analysis[], live = false): DropdownModel[] {
   const count = (field: 'risk' | 'status' | 'review', v: string) => all.filter((a) => a[field] === v).length;
+  const review = ANALYSIS_RISK.review;
   return [
     {
       id: 'risk',
       title: '위험등급',
       options: [
         { ...ALL_OPTION, count: all.length },
+        ...(live ? [{ value: review.key, label: review.label, icon: review.glyph, iconColor: review.fg, tileColor: review.bg, count: count('risk', review.key) }] : []),
         ...(Object.keys(RISK) as RiskLevel[]).map((k) => ({ value: k, label: RISK[k].label, icon: RISK[k].glyph, iconColor: RISK[k].fg, tileColor: RISK[k].bg, count: count('risk', k) })),
       ],
     },
@@ -220,6 +232,10 @@ export function dropdownModels(all: readonly Analysis[]): DropdownModel[] {
 
 export type SummaryCardId = 'total' | 'high' | 'needed';
 
+/** 요약 카드 · 결과 부가 문구의 이름 — 위험등급 '상'(② RISK) · 검토 상태 '검토 대기'(② RSTATUS) */
+const HIGH_CARD = RISK.high.label + ' 등급';
+const NEEDED = RSTATUS.needed.label;
+
 export interface SummaryCard {
   id: SummaryCardId;
   label: string;
@@ -229,7 +245,6 @@ export interface SummaryCard {
   iconColor: string;
   color: string;
   on: boolean;
-  hint: string;
   aria: string;
 }
 
@@ -270,30 +285,27 @@ export function listModel(all: readonly Analysis[], f: ListFilters): ListModel {
       iconColor: 'var(--ink-2)',
       color: 'var(--ink)',
       on: !filtered,
-      hint: filtered ? '누르면 검색 · 필터를 모두 해제합니다' : '모든 분석 건을 보고 있습니다',
       aria: '전체 분석 ' + total + '건' + (filtered ? ', 누르면 검색과 필터 해제' : ''),
     },
     {
       id: 'high',
-      label: '고위험',
+      label: HIGH_CARD,
       n: high,
       icon: 'dg-i-alert',
       iconColor: 'var(--hi)',
       color: 'var(--hi)',
       on: f.risk === 'high',
-      hint: f.risk === 'high' ? '필터 적용 중 · 다시 누르면 해제' : '위험등급이 ‘높음’인 분석 건',
-      aria: '고위험 ' + high + '건, ' + (f.risk === 'high' ? '필터 해제' : '고위험만 보기'),
+      aria: HIGH_CARD + ' ' + high + '건, ' + (f.risk === 'high' ? '필터 해제' : HIGH_CARD + '만 보기'),
     },
     {
       id: 'needed',
-      label: '검토 필요',
+      label: NEEDED,
       n: needed,
       icon: 'dg-i-flag',
       iconColor: 'var(--ink)',
       color: 'var(--ink)',
       on: f.review === 'needed',
-      hint: f.review === 'needed' ? '필터 적용 중 · 다시 누르면 해제' : '담당자 확인이 필요한 분석 건',
-      aria: '검토 필요 ' + needed + '건, ' + (f.review === 'needed' ? '필터 해제' : '검토 필요만 보기'),
+      aria: NEEDED + ' ' + needed + '건, ' + (f.review === 'needed' ? '필터 해제' : NEEDED + '만 보기'),
     },
   ];
   return {
@@ -303,12 +315,13 @@ export function listModel(all: readonly Analysis[], f: ListFilters): ListModel {
     hasData: total > 0,
     empty: total === 0,
     filtered,
-    heroLead: needed ? '검토가 필요한 분석이 ' : '지금 검토가 필요한 분석은 없습니다.',
+    heroLead: needed ? '검토를 기다리는 분석이 ' : '검토를 기다리는 분석이 없습니다.',
     heroStrong: needed ? needed + '건' : '',
     heroTail: needed ? ' 있습니다.' : '',
-    basis: filtered ? '검색 결과 기준' : '전체 기준',
+    // 걸러 보지 않을 때는 바로 옆 '전체 n건'과 같은 말이라 기준 칩을 비운다(ResultBar 가 그리지 않는다)
+    basis: filtered ? '검색 결과 기준' : '',
     resultText: filtered ? shown.length + '건 표시 · 전체 ' + total + '건 중' : '전체 ' + total + '건',
-    resultSub: '이 중 고위험 ' + fHigh + '건 · 검토 필요 ' + fNeeded + '건',
+    resultSub: '이 중 ' + HIGH_CARD + ' ' + fHigh + '건 · ' + NEEDED + ' ' + fNeeded + '건',
     noResults: shown.length === 0,
     noResultsText: q
       ? '‘' + q + '’에 맞는 분석명이나 파일명이 없습니다. 검색어를 바꾸거나 필터를 초기화해 보세요.'

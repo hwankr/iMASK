@@ -62,10 +62,10 @@ export function ReportRemaining({ v }: { v: ReportView }) {
   );
 }
 
-/** 06 권장 조치 — Main 665–668(실제 분석은 05, 없으면 '-') */
+/** 06 권장 조치 — Main 665–668(실제 분석은 05, 없으면 '-'). 제목은 v.recsTitle(실제 분석은 다음 단계 이름 — 검토 안내 · 권장 조치) */
 export function ReportRecs({ v }: { v: ReportView }) {
   return (
-    <ReportSection n={v.sections.recs} title="권장 조치">
+    <ReportSection n={v.sections.recs} title={v.recsTitle}>
       {v.recs.length > 0 ? (
         <ol className={styles.list}>
           {v.recs.map((r, i) => (

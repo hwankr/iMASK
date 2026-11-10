@@ -16,6 +16,8 @@ const nextConfig: NextConfig = {
   // 빈 글자로 정해 두면 그 분기가 빌드 때 거짓이 되어 빠진다. 값이 'api' 면 그대로 'api'(모드 판단은 src/services/mode.ts 와 같다).
   env: {
     NEXT_PUBLIC_IMASK_SERVICE: process.env.NEXT_PUBLIC_IMASK_SERVICE ?? "",
+    // 개발용 경로(/dev/**)를 운영 빌드에서도 열지(1) — 빌드 때 글자로 넣는다(src/dev/devPages.ts). 값이 없으면 운영 빌드에서 404.
+    IMASK_DEV_PAGES: process.env.IMASK_DEV_PAGES ?? "",
   },
   // FastAPI 백엔드(api/index.py)로 가는 길. Vercel 공식 nextjs-fastapi 템플릿과 같은 방식이다.
   // - 개발(next dev): 로컬 uvicorn(기본 127.0.0.1:8000, IMASK_API_DEV_URL 로 바꿈)으로 그대로 넘긴다.

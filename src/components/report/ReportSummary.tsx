@@ -50,7 +50,6 @@ export function ReportSummary({ v }: { v: ReportView }) {
           </div>
         </div>
       ) : null}
-      <p className={styles.keep}>최종 위험등급은 분석 결과를 그대로 유지합니다. 담당자의 검토 완료나 오탐 표시로 위험등급이 자동으로 바뀌지 않습니다.</p>
     </ReportSection>
   );
 }

@@ -120,9 +120,9 @@ describe('라벨', () => {
     // 분석 요약 머리의 등급 글 — 옆 배지가 같은 등급을 보이면 숨김
     expect(judgeLevelText('검토 필요', '검토 필요')).toBe('');
     expect(judgeLevelText(' 검토 필요 ', '검토 필요')).toBe('');
-    expect(judgeLevelText('상', '높음')).toBe('');
-    expect(judgeLevelText('중', '보통')).toBe('');
-    expect(judgeLevelText('하', '낮음')).toBe('');
+    expect(judgeLevelText('상', '상')).toBe('');
+    expect(judgeLevelText('중', '중')).toBe('');
+    expect(judgeLevelText('하', '하')).toBe('');
     expect(judgeLevelText('상', '미평가')).toBe('상');
     expect(judgeLevelText(null, '미평가')).toBe('판정 없음');
     expect(judgeLevelText('검토 필요', '미평가')).toBe('검토 필요');

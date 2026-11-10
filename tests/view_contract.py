@@ -41,7 +41,10 @@ RISKS = {"high", "medium", "low", "unrated"}
 # 검토사항(review-items BRIEF §5.3) — 키는 이 순서 그대로(link_id 는 final-flow T3 에서 맨 뒤에)
 ITEM_KEYS = ("id", "number", "type", "document_index", "page", "finding_id", "title", "desc", "next", "evidence", "link_id")
 EVIDENCE_KEYS = ("label", "page", "finding_ids", "finding_id")
-ITEM_TYPE_KEYS = {"unreadable", "cutoff", "mismatch", "weaklink", "nolocation", "failed", "format", "duplicate", "missing", "lowconf", "other"}
+ITEM_TYPE_KEYS = {
+    "unreadable", "cutoff", "mismatch", "weaklink", "nolocation", "failed", "format", "duplicate", "missing", "lowconf", "other",
+    "maskscope", "linkage", "reident",  # v6
+}
 LINK_MISMATCH_ID = re.compile(r"mismatch:[0-9]+:[0-9]+")
 NUMBER = re.compile(r"R-\d{2,}")
 MAX_EVIDENCE = 20
@@ -67,6 +70,8 @@ V2_DECISION_KEYS = (
 )
 V2_DECISION_LIST_KEYS = {"document_types", "high_risk_items", "medium_risk_items", "low_risk_items", "review_reasons"}
 BUNDLE_CHECK_KEYS = ("id", "name", "severity", "status", "field", "label", "group")
+# v6 결합_확인 두 규칙 → bundle_check label(칸 이름이 아니라 사유 이름 — field 는 null)
+LINKAGE_RULE_LABELS = {"가린이름_연락처_결합_없음": "서류 간 정보 결합", "가린이름_식별정보_없음": "재식별 위험"}
 
 
 def _int(value: Any) -> bool:
@@ -282,7 +287,9 @@ def assert_bundle_check(bundle: Any) -> None:
         assert check["status"] in ("pass", "fail", "absent", "unknown"), check
         for key in ("field", "label", "group"):
             assert _str_or_none(check[key]), check
-        if check["field"] is None:
+        if check["group"] == "결합_확인" and check["name"] in LINKAGE_RULE_LABELS:  # v6 결합 두 규칙: field null + 사유 이름 label(T1 D4)
+            assert check["field"] is None and check["label"] == LINKAGE_RULE_LABELS[check["name"]], check
+        elif check["field"] is None:
             assert check["label"] is None, check
 
 

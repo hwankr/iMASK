@@ -50,7 +50,7 @@ export function ReportHead({ v, generatedAt }: { v: ReportView; generatedAt: str
             <Icon name="dg-i-info" size={17} />
           </span>
           <span>
-            <strong className={styles.noteStrong}>검토가 아직 완료되지 않았습니다.</strong> 이 보고서는 현재까지 기록된 검토 내용을 보여줍니다.
+            <strong className={styles.noteStrong}>검토가 아직 완료되지 않았습니다.</strong>
           </span>
         </div>
       ) : null}

@@ -146,7 +146,7 @@ export function LiveUploadScreen() {
             <div className={styles.titles}>
               <span className={styles.eyebrow}>새 분석 · 실제 분석</span>
               <h1 className={styles.title}>분석할 서류 묶음을 올려 주세요</h1>
-              <p className={styles.lead}>분석은 1~3분까지 걸릴 수 있습니다.</p>
+              <p className={styles.lead}>예상 시간 1분 내외</p>
             </div>
           </div>
 
@@ -172,7 +172,7 @@ export function LiveUploadScreen() {
 
           <TextField
             label="분석명"
-            labelNote="(선택 · 비우면 파일 이름)"
+            labelNote="(선택)"
             value={name}
             onChange={(e) => setName(e.target.value)}
             disabled={busy}

@@ -70,10 +70,10 @@ REVIEW_WRITES = 18  # 검토 동작 13 + 검토사항 해결·다시 열기·다
 REVIEW_POSTS = 33  # 보내는 review-actions POST 수
 REVIEW_OK_POSTS = 19  # 그중 200(쓰기 18 + changed false 1)
 # 내보내기 기록(log_export) 기대값 — 계약대로 손으로 적은 값(ANALYSIS_ID 의 영숫자 앞 4자 '0000', CREATED_AT 06:41 UTC = 서울 11-03)
-EXPORT_CODE = "DG-20261103-0000"
+EXPORT_CODE = "IM-20261103-0000"
 EXPORT_CSV = f"iMASK_{EXPORT_CODE}_검토결과_탐지항목.csv"
 EXPORT_JSON = f"iMASK_{EXPORT_CODE}_검토결과.json"
-EXPORT_WRONG = "iMASK_DG-20261104-0000_검토결과_탐지항목.csv"  # 하루 다른 날짜(이 분석의 이름이 아님)
+EXPORT_WRONG = "iMASK_IM-20261104-0000_검토결과_탐지항목.csv"  # 하루 다른 날짜(이 분석의 이름이 아님)
 EXPORT_POSTS = (27, 28, 29, 30)  # log_export POST 순번(CSV · JSON · 이름 아님 400 · size 0 400) — 잠김 409 넷 뒤, 다시 열기 앞
 MSG_NOT_FOUND = "분석 건을 찾을 수 없습니다."
 REMOVED = "정리: 이번 실행이 만든 분석을 지웠습니다(DELETE 204 · 다시 읽어 404)"  # 끝 정리 — 204 뒤 다시 읽어 없음 확인
@@ -1218,12 +1218,12 @@ def test_fmt_size_agrees_with_backend_on_a_sweep(script: Any) -> None:
 @pytest.mark.parametrize(
     ("analysis_id", "created_at", "code"),
     [
-        (ANALYSIS_ID, CREATED_AT, "DG-20261103-0000"),  # 소수 초 5자리
-        ("7b944f1e-1234-4abc-8def-0123456789ab", "2026-11-04T15:00:00+00:00", "DG-20261105-7B94"),  # 서울 자정(다음 날)
-        ("7b944f1e-1234-4abc-8def-0123456789ab", "2026-11-04T14:59:59.999999+00:00", "DG-20261104-7B94"),  # 자정 바로 앞
-        ("7b944f1e-1234-4abc-8def-0123456789ab", "2026-11-04T15:00:00Z", "DG-20261105-7B94"),  # Z
-        ("7b944f1e-1234-4abc-8def-0123456789ab", "2026-12-31T15:00:00.123456+00:00", "DG-20270101-7B94"),  # 해 넘김
-        ("ab-c1-2345-6789", "2026-11-04T05:06:07.123456+00:00", "DG-20261104-ABC1"),  # 하이픈 건너뜀
+        (ANALYSIS_ID, CREATED_AT, "IM-20261103-0000"),  # 소수 초 5자리
+        ("7b944f1e-1234-4abc-8def-0123456789ab", "2026-11-04T15:00:00+00:00", "IM-20261105-7B94"),  # 서울 자정(다음 날)
+        ("7b944f1e-1234-4abc-8def-0123456789ab", "2026-11-04T14:59:59.999999+00:00", "IM-20261104-7B94"),  # 자정 바로 앞
+        ("7b944f1e-1234-4abc-8def-0123456789ab", "2026-11-04T15:00:00Z", "IM-20261105-7B94"),  # Z
+        ("7b944f1e-1234-4abc-8def-0123456789ab", "2026-12-31T15:00:00.123456+00:00", "IM-20270101-7B94"),  # 해 넘김
+        ("ab-c1-2345-6789", "2026-11-04T05:06:07.123456+00:00", "IM-20261104-ABC1"),  # 하이픈 건너뜀
     ],
     ids=["fraction5", "seoul_midnight", "before_midnight", "zulu", "new_year", "hyphens"],
 )
@@ -2497,7 +2497,7 @@ def test_item_actions_store_the_contract_values(script: Any, capsys: Any) -> Non
             "id": "H15",
             "kind": "complete",
             "target": "분석 건",
-            "change": "검토 필요 → 검토 완료 (남은 항목: 미확인 탐지 26건, 미해결 검토사항 5건)",
+            "change": "검토 대기 → 검토 완료 (남은 항목: 미확인 탐지 26건, 미해결 검토사항 5건)",
             "reason": "api_e2e 검토 완료",
         },
     ]
@@ -2597,7 +2597,7 @@ STATE_409 = "검토사항 상태가 바뀌었습니다. 새로 고친 뒤 다시
         (_answer(19, 409, STATE_409), "(기대 404 검토사항을 찾을 수 없습니다.)"),
         (_answer(20, 200), "HTTP 200"),
         (_answer(21, 400, "메모·사유에 쓸 수 없는 문자가 있습니다."), "(기대 400 메모·사유는 500자 이하로 적어 주세요.)"),
-        (_after_post(22, _last_line("change", "검토 필요 → 검토 완료 (남은 항목: 미확인 탐지 26건)")), "새 이력 change: 계약과 다름"),
+        (_after_post(22, _last_line("change", "검토 대기 → 검토 완료 (남은 항목: 미확인 탐지 26건)")), "새 이력 change: 계약과 다름"),
         (_answer(25, 409, STATE_409), "(기대 409 검토를 완료한 분석은 바꿀 수 없습니다.)"),
         (_answer(26, 200), "HTTP 200"),
         (_after_post(31, _review_row(items={})), "review items 가 바뀜"),
@@ -3282,6 +3282,63 @@ def test_script_contract_checks_accept_every_v2_result(script: Any, case: str) -
     assert want is not None and reason == ""
     own = [i for i in view["items"] if i["id"].startswith(script.V2_OWN_ITEMS)]
     assert script._items_compare(own, want, skip=("number",)) == []
+
+
+def _v6_view(case: str) -> dict[str, Any]:
+    from imask_backend.analyses import build_result, result_out
+
+    path = Path(__file__).resolve().parent / "fixtures" / "v6" / f"case_{case}.json"
+    return result_out(build_result(json.loads(path.read_bytes().decode("utf-8")), "9"))
+
+
+def _link_text_problems(script: Any, view: dict[str, Any]) -> list[str]:
+    return [p for p in script._final_problems(view) if p.endswith("글(basis·missing·check)")]
+
+
+MASKED_TEXT = "이름이 가려져 있어 비교할 수 없습니다."
+PLAIN_TEXT = "비교할 본인 성명이 없습니다."
+
+
+def test_link_text_check_tells_masked_pairs_from_other_insufficient_pairs(script: Any) -> None:
+    # 백엔드 계약: 가린 이름 insufficient 쌍은 weaklink 를 만들지 않고, 다른 근거 부족 쌍은 weaklink:<기준>:<대상> 을 만든다
+    attorney, masked = _v2_view("A"), _v6_view("V")  # A link:0:3 = 위임장 쌍(weaklink:0:3), V link:0:1 = 가린 이름 쌍(weaklink 없음)
+    assert _link_text_problems(script, attorney) == [] and _link_text_problems(script, masked) == []
+    row = next(link for link in attorney["links"] if link["id"] == "link:0:3")
+    assert row["missing"] == PLAIN_TEXT
+    row["missing"] = MASKED_TEXT  # 위임장 쌍에 가린 이름 문장 — 받지 않는다
+    assert _link_text_problems(script, attorney)
+    attorney["items"] = [i for i in attorney["items"] if i["id"] != "weaklink:0:3"]  # weaklink 가 없어도 위임장은 기본 문장만
+    assert _link_text_problems(script, attorney)
+    row = masked["links"][0]
+    assert row["missing"] == MASKED_TEXT
+    row["missing"] = PLAIN_TEXT  # 가린 이름 쌍에 기본 문장 — 받지 않는다
+    assert _link_text_problems(script, masked)
+
+
+def test_link_text_check_follows_the_weaklink_item(script: Any) -> None:
+    view = _v6_view("V")
+    view["items"] = [*view["items"], {**view["items"][0], "id": "weaklink:0:1", "type": "weaklink", "link_id": "link:0:1"}]
+    assert _link_text_problems(script, view)  # weaklink 가 있는 쌍은 기본 문장만
+    view["links"][0]["missing"] = PLAIN_TEXT
+    assert _link_text_problems(script, view) == []
+    for items in (None, "목록 아님"):  # items 를 읽을 수 없으면 가를 근거가 없어 둘 다 받는다
+        for text in (MASKED_TEXT, PLAIN_TEXT):
+            loose = {**_v6_view("V"), "items": items}
+            loose["links"][0]["missing"] = text
+            assert _link_text_problems(script, loose) == []
+
+
+def test_bundle_check_label_exception_is_only_the_two_linkage_rules(script: Any) -> None:
+    view = _v6_view("V")
+    assert script._final_problems(view) == []
+    for change in (
+        {"label": "재식별 위험"},  # 규칙과 라벨이 엇갈림
+        {"name": "모르는_결합_규칙", "id": "모르는_결합_규칙"},
+        {"group": "일치_확인"},
+    ):
+        broken = _v6_view("V")
+        broken["bundle_check"]["checks"][0].update(change)
+        assert any(p.endswith("label(field 가 null 이면 null)") for p in script._final_problems(broken)), change
 
 
 @pytest.mark.parametrize("case", V2_CASES)

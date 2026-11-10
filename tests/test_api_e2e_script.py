@@ -3284,6 +3284,63 @@ def test_script_contract_checks_accept_every_v2_result(script: Any, case: str) -
     assert script._items_compare(own, want, skip=("number",)) == []
 
 
+def _v6_view(case: str) -> dict[str, Any]:
+    from imask_backend.analyses import build_result, result_out
+
+    path = Path(__file__).resolve().parent / "fixtures" / "v6" / f"case_{case}.json"
+    return result_out(build_result(json.loads(path.read_bytes().decode("utf-8")), "9"))
+
+
+def _link_text_problems(script: Any, view: dict[str, Any]) -> list[str]:
+    return [p for p in script._final_problems(view) if p.endswith("글(basis·missing·check)")]
+
+
+MASKED_TEXT = "이름이 가려져 있어 비교할 수 없습니다."
+PLAIN_TEXT = "비교할 본인 성명이 없습니다."
+
+
+def test_link_text_check_tells_masked_pairs_from_other_insufficient_pairs(script: Any) -> None:
+    # 백엔드 계약: 가린 이름 insufficient 쌍은 weaklink 를 만들지 않고, 다른 근거 부족 쌍은 weaklink:<기준>:<대상> 을 만든다
+    attorney, masked = _v2_view("A"), _v6_view("V")  # A link:0:3 = 위임장 쌍(weaklink:0:3), V link:0:1 = 가린 이름 쌍(weaklink 없음)
+    assert _link_text_problems(script, attorney) == [] and _link_text_problems(script, masked) == []
+    row = next(link for link in attorney["links"] if link["id"] == "link:0:3")
+    assert row["missing"] == PLAIN_TEXT
+    row["missing"] = MASKED_TEXT  # 위임장 쌍에 가린 이름 문장 — 받지 않는다
+    assert _link_text_problems(script, attorney)
+    attorney["items"] = [i for i in attorney["items"] if i["id"] != "weaklink:0:3"]  # weaklink 가 없어도 위임장은 기본 문장만
+    assert _link_text_problems(script, attorney)
+    row = masked["links"][0]
+    assert row["missing"] == MASKED_TEXT
+    row["missing"] = PLAIN_TEXT  # 가린 이름 쌍에 기본 문장 — 받지 않는다
+    assert _link_text_problems(script, masked)
+
+
+def test_link_text_check_follows_the_weaklink_item(script: Any) -> None:
+    view = _v6_view("V")
+    view["items"] = [*view["items"], {**view["items"][0], "id": "weaklink:0:1", "type": "weaklink", "link_id": "link:0:1"}]
+    assert _link_text_problems(script, view)  # weaklink 가 있는 쌍은 기본 문장만
+    view["links"][0]["missing"] = PLAIN_TEXT
+    assert _link_text_problems(script, view) == []
+    for items in (None, "목록 아님"):  # items 를 읽을 수 없으면 가를 근거가 없어 둘 다 받는다
+        for text in (MASKED_TEXT, PLAIN_TEXT):
+            loose = {**_v6_view("V"), "items": items}
+            loose["links"][0]["missing"] = text
+            assert _link_text_problems(script, loose) == []
+
+
+def test_bundle_check_label_exception_is_only_the_two_linkage_rules(script: Any) -> None:
+    view = _v6_view("V")
+    assert script._final_problems(view) == []
+    for change in (
+        {"label": "재식별 위험"},  # 규칙과 라벨이 엇갈림
+        {"name": "모르는_결합_규칙", "id": "모르는_결합_규칙"},
+        {"group": "일치_확인"},
+    ):
+        broken = _v6_view("V")
+        broken["bundle_check"]["checks"][0].update(change)
+        assert any(p.endswith("label(field 가 null 이면 null)") for p in script._final_problems(broken)), change
+
+
 @pytest.mark.parametrize("case", V2_CASES)
 def test_v2_analysis_id_mode_only_reads_and_passes(script: Any, capsys: Any, case: str) -> None:
     api = FakeApi(poll_mode="done", result=_v2_result(case))

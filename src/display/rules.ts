@@ -130,7 +130,7 @@ export interface ReviewItemTypeView {
   readonly icon: IconName;
 }
 
-/** 앞 6개는 디자인(데모) 종류, 그 뒤(format·duplicate·missing·lowconf·other)는 실제 분석 검토사항 종류다.
+/** 앞 6개는 디자인(데모) 종류, 그 뒤(format·duplicate·missing·lowconf·other·maskscope·linkage·reident)는 실제 분석 검토사항 종류다.
  *  백엔드 imask_backend 의 종류 표가 이 키·라벨·순서를 그대로 가진다(pytest 가 이 파일을 읽어 맞춰 본다). */
 export const RTYPE = {
   unreadable: { label: '판독 불가', icon: 'dg-i-eye-off' },
@@ -144,6 +144,9 @@ export const RTYPE = {
   missing: { label: '필수 항목 없음', icon: 'dg-i-alert' },
   lowconf: { label: '인식 확인 필요', icon: 'dg-i-eye-half' },
   other: { label: '기타 서류', icon: 'dg-i-file' },
+  maskscope: { label: '가림 범위 확인', icon: 'dg-i-eye' },
+  linkage: { label: '서류 간 정보 결합', icon: 'dg-i-link' },
+  reident: { label: '재식별 위험', icon: 'dg-i-search' },
 } as const satisfies Record<string, ReviewItemTypeView>;
 
 export type ReviewItemType = keyof typeof RTYPE;

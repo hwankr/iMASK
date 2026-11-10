@@ -756,7 +756,7 @@ def test_item_types_match_screen_rtype() -> None:
     assert match, "rules.ts 에 RTYPE 가 없다"
     pairs = re.findall(r"^\s*(\w+): \{ label: '([^']*)'", match.group(1), re.MULTILINE)
     assert pairs == list(ITEM_TYPES.items())  # 키·라벨·순서
-    assert list(ITEM_TYPES)[-3:] == ["missing", "lowconf", "other"]
+    assert list(ITEM_TYPES)[-6:] == ["missing", "lowconf", "other", "maskscope", "linkage", "reident"]  # v6 세 종류는 맨 뒤(D1)
     assert {m.type for m in MATERIALS} <= set(ITEM_TYPES)
 
 

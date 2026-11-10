@@ -34,6 +34,10 @@
 #  - 이름 판정은 " - " 뒤의 노드 이름으로 한다. 저장된 key 는 믿지 않는다 — 옛 코드는 step_type validate 라서 사슬 노드를
 #    필수항목_검증 으로 저장했을 수 있다. stage_key·_key_of 가 이 이름들을 새 정규 키로 돌려 서류별 검증 경로에 들어가지 않게 한다
 #    (판정_* 은 모두 STAGE_V2_VERDICT 하나 — 지금 없는 판정_하 도 같다).
+#  - v6(설정 9 계열): 사슬에 가림_확인(형식 뒤)·결합_확인(일치 뒤)이 더해졌다 — V2_CHAIN 순서 = 대상 → 단위 → 필수 → 형식 → 가림 → 일치 → 결합.
+#    갈래를 고르는 Validate(등급_* — 모두 STAGE_V2_GRADE 하나, IRP해지_확인, 납세자번호_확인)도 이름으로 제 키를 받는다(사슬이 아니다 —
+#    final_flow 가 읽지 않는다). 이 코드보다 먼저 저장된 v6 분석은 이 단계들의 key 가 필수항목_검증 이지만 _key_of 가 이름을 먼저 보므로
+#    저장된 key 와 상관없이 같은 결과다.
 #  - summarize(v2): risk_level = 판정 JSON 의 risk_level(final_flow.read_verdict), final_stage = 그 판정의 다음 단계
 #    (검토 필요 → 검토_안내, 상·중·하 → 권장_조치 — 단 review_reasons 가 있으면 검토_안내(v4: 검토가 필요해도 등급을 낸다),
 #    못 읽음 → None), other_document_count = 분류 코드 Other 서류 수,
@@ -66,13 +70,28 @@ STAGE_V2_TARGET = "대상_확인"
 STAGE_V2_UNIT = "단위_확인"
 STAGE_V2_REQUIRED = "필수_확인"
 STAGE_V2_FORMAT = "형식_확인"
+STAGE_V2_MASK = "가림_확인"  # v6 — 번호 칸 가림 범위
 STAGE_V2_CONSISTENT = "일치_확인"
+STAGE_V2_LINKAGE = "결합_확인"  # v6 — 가린 이름 + 연락처·식별 정보
 STAGE_V2_HIGH = "상_확인"
 STAGE_V2_CONTENT = "내용_검토"
 STAGE_V2_VERDICT = "판정"
-V2_CHAIN = (STAGE_V2_TARGET, STAGE_V2_UNIT, STAGE_V2_REQUIRED, STAGE_V2_FORMAT, STAGE_V2_CONSISTENT)
-_V2_NAMED = frozenset({*V2_CHAIN, STAGE_V2_HIGH, STAGE_V2_CONTENT})
+# v6 갈래 단계(등급·판정을 고르는 Validate — 실패가 아니다). 등급_* 은 모두 STAGE_V2_GRADE 하나(판정_* 과 같은 방식)
+STAGE_V2_IRP = "IRP해지_확인"
+STAGE_V2_TAXPAYER = "납세자번호_확인"
+STAGE_V2_GRADE = "등급"
+V2_CHAIN = (
+    STAGE_V2_TARGET,
+    STAGE_V2_UNIT,
+    STAGE_V2_REQUIRED,
+    STAGE_V2_FORMAT,
+    STAGE_V2_MASK,
+    STAGE_V2_CONSISTENT,
+    STAGE_V2_LINKAGE,
+)
+_V2_NAMED = frozenset({*V2_CHAIN, STAGE_V2_HIGH, STAGE_V2_CONTENT, STAGE_V2_IRP, STAGE_V2_TAXPAYER})
 V2_VERDICT_PREFIX = "판정_"
+V2_GRADE_PREFIX = "등급_"
 V2_EXTRACT_PREFIX = "Information Extract - "
 # 설정 60 의 서식 코드(분류 코드·추출 노드 이름). 이름은 final_flow.FINAL_DOC_TYPES
 V2_FORM_CODES = (
@@ -105,6 +124,9 @@ STAGE_KEYS = (
     STAGE_V2_HIGH,
     STAGE_V2_CONTENT,
     STAGE_V2_VERDICT,
+    STAGE_V2_IRP,
+    STAGE_V2_TAXPAYER,
+    STAGE_V2_GRADE,
 )
 
 # 정규 이름과 다르게 오는 실제 이름(output[].model)
@@ -156,6 +178,8 @@ def _v2_key(name: Any) -> str | None:
         return node
     if node.startswith(V2_VERDICT_PREFIX):
         return STAGE_V2_VERDICT
+    if node.startswith(V2_GRADE_PREFIX):
+        return STAGE_V2_GRADE
     if name.startswith(V2_EXTRACT_PREFIX) and node in _V2_FORM_SET:
         return STAGE_EXTRACT
     return None

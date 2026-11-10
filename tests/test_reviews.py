@@ -646,7 +646,7 @@ def test_block_without_a_row_is_the_default_with_two_system_lines(env: Env) -> N
         "findings": {},
         "items": {},
         "history": [
-            {"id": "S1", "at": analysis["created_at"], "actor": "시스템", "kind": "request", "target": "분석 건", "change": "문서 1개 분석 요청", "reason": ""},
+            {"id": "S1", "at": analysis["created_at"], "actor": "시스템", "kind": "request", "target": "분석 건", "change": "파일 1개 분석 요청", "reason": ""},
             {
                 "id": "S2",
                 "at": analysis["updated_at"],
@@ -686,7 +686,7 @@ def test_system_line_counts_uploaded_document_rows() -> None:
     env = make_env(store=store)
     store.documents["extra"] = {**next(iter(store.docs_of(env.id))), "id": "extra", "created_at": "9999"}
     block = _read(env)
-    assert block is not None and block["history"][0]["change"] == "문서 2개 분석 요청"
+    assert block is not None and block["history"][0]["change"] == "파일 2개 분석 요청"
 
 
 def test_block_for_unreviewable_is_none_without_reading_the_row() -> None:

@@ -7,7 +7,8 @@
 #    저장소 질의 한 번(store.list_analyses — result 열 전체 없이 JSON 경로 두 값만). Upstage 를 부르지 않고 쓰지 않는다.
 #    항목: id·name·status·error·created_at·updated_at·started_at·documents(올린 파일 — filename·size_bytes·mime_type,
 #    만든 순)·risk_level(문자열만)·review(list_review — done 이고 서류 수가 bool 아닌 정수 ≥ 1 이면 검토 행 status 가
-#    'done' 일 때 'done', 그 밖 'needed' / 그 밖 분석 'none'). 상세는 build_view 의 유효 서류로 '검토할 수 있음'을 보므로
+#    'done' 일 때 'done', 그 밖 'needed' / 그 밖 분석 'none')·document_count(분류한 서류 수 summary.document_count — bool 아닌
+#    정수 ≥ 0 이면 그 값, 그 밖 null. 분석 상태와 상관없이 저장된 값 그대로). 상세는 build_view 의 유효 서류로 '검토할 수 있음'을 보므로
 #    서류 수 ≥ 1 인데 유효 서류 0 인 결과는 목록 needed·상세 review null 로 어긋난다(알려진 차이 — 고치지 않음).
 #    행 하나를 만들다 예외가 나면 값 없는 경고 후 그 행만 뺀다.
 #  - 삭제(delete_analysis): 404(uuid 아님·행 없음) → Storage 원본 지우기(없음이 확인된 객체는 성공, 남았거나 확인
@@ -142,6 +143,7 @@ def list_item(row: Mapping[str, Any]) -> dict[str, Any]:
         raise TypeError("목록 행이 객체가 아닙니다")
     status = row.get("status")
     risk_level = row.get("risk_level")
+    document_count = row.get("document_count")
     return {
         "id": row.get("id"),
         "name": row.get("name"),
@@ -152,7 +154,8 @@ def list_item(row: Mapping[str, Any]) -> dict[str, Any]:
         "started_at": row.get("started_at"),
         "documents": _list_documents(row.get("documents")),
         "risk_level": risk_level if isinstance(risk_level, str) else None,
-        "review": list_review(status, row.get("document_count"), row.get("analysis_reviews")),
+        "review": list_review(status, document_count, row.get("analysis_reviews")),
+        "document_count": document_count if _is_int(document_count) and document_count >= 0 else None,
     }
 
 

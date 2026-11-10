@@ -1652,7 +1652,7 @@ def test_link_rows_use_each_documents_field_and_fixed_label() -> None:
     row = next(link for link in view["links"] if link["id"] == "link:0:1")
     assert row["title"] == "외국인 세대구성원 확인서 · 지급보증거래 신청서"
     assert row["field"] == "중_본인_성명" and row["label"] == "본인 성명"
-    assert row["basis"] == ["두 서류의 본인 성명이 같습니다."] and row["missing"] == ""
+    assert row["basis"] == ["신청인 성명에 본인 성명이 들어 있습니다."] and row["missing"] == ""  # 지급보증 쌍(D9)
     assert row["docs"][0]["fields"].startswith("본인 성명 ") and row["docs"][0]["finding_ids"] == ["0:중_본인_성명"]
     assert row["docs"][1]["fields"].startswith("신청인 성명 ") and row["docs"][1]["finding_ids"] == ["1:중_신청인_성명"]
     target = finding(view, "1:중_신청인_성명")

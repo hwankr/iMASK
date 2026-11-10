@@ -77,8 +77,19 @@
 #      항목이 키와 안 맞음·목록을 못 읽음, 또는 <코드>_못읽은칸_없음 실패인데 칸별 항목 없음 | unreadable | unreadable:<i> | 첫 쪽
 #      필수_확인 실패(못읽은칸 규칙 제외)                      | missing    | missing:<i>:<규칙>      | 첫 쪽
 #      형식_확인 실패                                          | format     | format:<i>:<규칙>       | 그 칸 탐지 항목 쪽 '값 보기', 없으면 첫 쪽
+#      가림_확인 실패(v6)                                      | maskscope  | maskscope:<i>:<규칙>    | 위와 같음
 #      일치_확인 실패                                          | mismatch   | mismatch:<i>:<규칙>     | 위와 같음(link_id null)
 #      단위_확인 실패 <코드>_한건                              | duplicate  | duplicate:<코드>        | 첫 쪽
+#      결합_확인 가린이름_연락처_결합_없음 실패(v6)            | linkage    | linkage:<i>             | 가린 이름 서류의 그 이름 칸 탐지 항목 쪽 '값 보기', 없으면 첫 쪽
+#      결합_확인 가린이름_식별정보_없음 실패(error 규칙은 passed true) | reident | reident:<i>        | 위와 같음
+#      위 둘인데 가린 이름 서류를 못 찾음                      | linkage·reident | review:<종류>      | 첫 보이는 서류 첫 쪽(글은 위와 같다)
+#
+#    v6 순서: 한 서류 안에서 사슬 순서(필수 → 형식 → 가림 → 일치 → 결합)와 같게 — maskscope 는 chain_rules 재료 안에서 format 뒤·mismatch 앞,
+#    linkage·reident 는 따로 재료(linkage)라 연결(links — 연결의 mismatch·weaklink) 뒤·nolocation 앞. 세 종류 모두 link_id null.
+#    가린 이름 서류 = 결합_확인 이 보는 이름 칸(final_flow.V6_MASKED_NAMES)의 값에 가림 기호가 든 첫 보이는 서류(findings 가 masked_name_fields 로
+#    넘긴다). warning 규칙(→ '재식별 위험')은 error 규칙(→ '서류 간 정보 결합')이 **명시적으로 통과**했을 때만 만든다(final_flow.read_linkage_passed —
+#    워크플로우 갈래와 같다). error 규칙이 실패·없음·passed 가 bool 아님이면 재식별 재료를 추론하지 않고 판정 사유 보충(review:<종류>)에 맡긴다.
+#    모르는 결합 규칙·passed 가 bool 이 아닌 결합 규칙은 만들지 않는다. 가림 규칙의 칸 이름 L 은 아래 일반 규칙(트리에서 대응표 이름이 있는 첫 칸, 표 칸 포함).
 #
 #    규칙 → 서류: ChainRule.code(조건 트리 양쪽 피연산자의 nodeName → path 의 extract."<코드>" → 규칙 이름의 <코드>_)의 첫 보이는 서류. 못 찾거나 묶음에
 #    그 서식이 없으면 첫 보이는 서류. 칸 이름 L: RULE_LABELS → 트리에서 대응표 이름이 있는 첫 칸(조건마다 왼쪽 → 오른쪽) → 규칙 이름.
@@ -88,8 +99,13 @@
 #    사유 보충(_review_items, build_items 의 review 인자): 판정 review_reasons 의 알려진 사유 중 그 사유의 종류 항목이 하나도 없는 것마다 첫 보이는
 #    서류에 review:<종류> 하나(title 은 사유 글자, 예: 내용_검토 모순은 실패 규칙이 없다). 모르는 사유 글자는 쓰지 않고 verdict:<i>(VERDICT_* 문구).
 #    등급이 검토 필요 인데 항목이 하나도 없을 때도 verdict:<i>. 이 항목들은 첫 보이는 서류의 항목 뒤에 오고, 같은 사유가 두 번 와도 같은 계약 id 는 처음 것만이다.
+#    v6 사유 '가림 범위 확인 필요'·'서류 간 정보 결합'·'재식별 위험'은 각각 maskscope·linkage·reident 종류다(REVIEW_REASONS) — 그 종류 항목이 없으면
+#    review:<종류>(desc·next 는 위 재료와 같은 글)라 verdict:<i> 가 뜨지 않는다.
 #    mismatch 는 이제 link_id 가 null 일 수 있다 — 연결 항목은 id 꼴 mismatch:<정수>:<정수> 인 것만이다.
 #    link_pairs: links 에 doc_fields 가 있으면(read_v2_links) 서류별 칸으로 찾고, fields 글은 그 서류 칸 이름 + masked, 글의 이름표는 label.
+#    v6 연결: pairs[].masked(가린 이름 — insufficient 만)인 쌍은 links[] 에 남기되 missing 이 LINK_MASKED 이고 검토사항(weaklink·mismatch)을 만들지 않는다.
+#    pairs[].contains(지급보증거래 신청서 쌍 — 설정 60 의 doc_fields 가 있을 때만)는 linked basis LINK_CONTAINS · unmatched missing LINK_NOT_CONTAINS
+#    (insufficient 와 검토사항 mismatch 의 글은 그대로). 옛 read_links 의 쌍에는 두 키가 없어 글이 그대로다.
 # ==========================================================================
 
 from __future__ import annotations
@@ -119,6 +135,9 @@ ITEM_TYPES: dict[str, str] = {
     "missing": "필수 항목 없음",
     "lowconf": "인식 확인 필요",
     "other": "기타 서류",
+    "maskscope": "가림 범위 확인",
+    "linkage": "서류 간 정보 결합",
+    "reident": "재식별 위험",
 }
 
 # --- 한도 ------------------------------------------------------------------------------
@@ -149,7 +168,11 @@ SEVERITY_ERROR = "error"
 NODE_UNIT = "단위_확인"
 NODE_REQUIRED = "필수_확인"
 NODE_FORMAT = "형식_확인"
+NODE_MASK = "가림_확인"
 NODE_CONSISTENT = "일치_확인"
+NODE_LINKAGE = "결합_확인"
+LINKAGE_RULE = "가린이름_연락처_결합_없음"  # final_flow.V6_LINKAGE_RULE
+REIDENT_RULE = "가린이름_식별정보_없음"  # final_flow.V6_REIDENT_RULE
 
 # --- 글(BRIEF §5.3 표 — {…} 만 바뀐다) -----------------------------------------------------------
 MISSING_DESC = "필수 항목 검증을 통과하지 못했습니다."
@@ -179,6 +202,9 @@ LINK_DIFFERENT = "두 서류의 {label}{p} 다릅니다."
 LINK_NOTHING = "비교할 {label}{p} 없습니다."  # weaklink 설명과 같다
 LINK_CHECK_LINKED = "두 서류를 함께 보관·전달할 때 열람 권한을 확인해 주세요."
 LINK_NO_VALUE = "{label} 값 없음"
+LINK_MASKED = "이름이 가려져 있어 비교할 수 없습니다."  # 가린 이름 쌍(insufficient)의 missing
+LINK_CONTAINS = "신청인 성명에 본인 성명이 들어 있습니다."  # 지급보증거래 신청서 쌍(포함 비교) linked 의 basis
+LINK_NOT_CONTAINS = "신청인 성명에 본인 성명이 들어 있지 않습니다."  # 그 쌍 unmatched 의 missing
 # 설정 60 재료의 글
 UNREADABLE_FIELD_TITLE = "{label}{p} 판독되지 않았습니다"
 UNREADABLE_TITLE = "판독되지 않은 칸이 있습니다"
@@ -189,6 +215,21 @@ RULE_MISMATCH_TITLE = "{label} 값이 맞지 않습니다"
 RULE_MISMATCH_DESC = "값 일치 검증을 통과하지 못했습니다."
 DUPLICATE_TITLE = "{name} 여러 건"
 DUPLICATE_DESC = "같은 서식이 여러 건 있습니다."
+# v6 재료의 글(가림_확인·결합_확인)
+MASKSCOPE_TITLE = "{label} 가림 범위 확인 필요"
+MASKSCOPE_DESC = "번호 일부가 가려져 있습니다. 남은 자리로 번호가 드러나지 않는지 확인이 필요합니다."
+MASKSCOPE_NEXT = "원본과 대조해 가림 범위를 확인해 주세요."
+LINKAGE_TITLE = "이름을 가린 서류가 다른 서류와 이어집니다"
+LINKAGE_DESC = "같은 연락처가 다른 서류에도 있어 가린 이름이 드러날 수 있습니다."
+LINKAGE_NEXT = "이어지는 연락처를 함께 가리거나 서류를 나눠 처리해 주세요."
+REIDENT_TITLE = "이름을 가렸지만 식별 정보가 남아 있습니다"
+REIDENT_DESC = "같은 서류의 생년월일·연락처·주소 등으로 누구의 서류인지 드러날 수 있습니다."
+REIDENT_NEXT = "남은 식별 정보를 함께 가리거나 가림 범위를 다시 정해 주세요."
+# 결합_확인 재료 종류 → (title, desc, next)
+LINKAGE_TEXTS = {
+    "linkage": (LINKAGE_TITLE, LINKAGE_DESC, LINKAGE_NEXT),
+    "reident": (REIDENT_TITLE, REIDENT_DESC, REIDENT_NEXT),
+}
 # 규칙 이름 → 글에 넣을 칸 이름(필드로 이름이 안 나오는 규칙만)
 RULE_LABELS = {
     "FATCA_납세의무_예이면_행마다_번호또는사유": "납세자번호 또는 미제출 사유",
@@ -208,6 +249,9 @@ REVIEW_REASONS: dict[str, tuple[str, str, str, frozenset[str]]] = {
     "형식 오류": ("format", FORMAT_DESC, MISSING_NEXT, frozenset({"format"})),
     "같은 서식 여러 건": ("duplicate", DUPLICATE_DESC, MISSING_NEXT, frozenset({"duplicate"})),
     "대상 외 서류": ("other", OTHER_DESC, OTHER_NEXT, frozenset({"other"})),
+    "가림 범위 확인 필요": ("maskscope", MASKSCOPE_DESC, MASKSCOPE_NEXT, frozenset({"maskscope"})),
+    "서류 간 정보 결합": ("linkage", LINKAGE_DESC, LINKAGE_NEXT, frozenset({"linkage"})),
+    "재식별 위험": ("reident", REIDENT_DESC, REIDENT_NEXT, frozenset({"reident"})),
 }
 REVIEW_LEVEL = "검토 필요"
 
@@ -365,6 +409,8 @@ class LinkPair:
     target_name: str  # 대상 서류 이름(clip_name)
     anchor: LinkSide
     target: LinkSide
+    masked: bool = False  # 가린 이름이라 비교하지 않은 쌍(insufficient 만) — 검토사항을 만들지 않는다
+    contains: bool = False  # 지급보증거래 신청서 쌍(신청인 성명에 본인 성명이 들어 있는지로 비교)
 
 
 @dataclass(frozen=True)
@@ -394,10 +440,11 @@ class UnreadablePart:
 class RulePart:
     """설정 60 실패 규칙 하나가 서류 하나에 내는 후보 재료(v2_parts 가 만든다)."""
 
-    kind: str  # missing · format · mismatch · duplicate
+    kind: str  # missing · format · maskscope · mismatch · duplicate · linkage · reident
     name: str  # 규칙 이름(duplicate 는 서식 코드)
     label: str  # 글에 넣을 이름(L, duplicate 는 서식 이름). 자르기 전
     cell: tuple[str | None, str] | None = None  # 근거로 찾을 칸 (표, 칸)
+    fallback: bool = False  # linkage·reident — 가린 이름 서류를 못 찾아 첫 보이는 서류에 둔 것(계약 id review:<종류>)
 
 
 @dataclass(frozen=True)
@@ -416,6 +463,7 @@ class DocBundle:
     links: tuple[LinkPair, ...] = ()  # 이 서류가 대상인 쌍(쌍 순서)
     unreadable: tuple[UnreadablePart, ...] = ()  # 설정 60 판독 불가
     rules: tuple[RulePart, ...] = ()  # 설정 60 실패 규칙(사슬 순서)
+    linkage: tuple[RulePart, ...] = ()  # v6 결합_확인 실패(linkage·reident — 연결 재료 뒤에 온다)
 
 
 EMPTY_BUNDLE = DocBundle()
@@ -761,8 +809,11 @@ def _rule_item(ctx: DocContext, part: RulePart, hits: Mapping[tuple[str | None, 
             next_step=MISSING_NEXT,
             evidence=[_first_page(ctx)],
         )
+    next_step = MISSING_NEXT
     if part.kind == "format":
         kind, title, desc = "format", FORMAT_TITLE.format(label=shown), FORMAT_DESC
+    elif part.kind == "maskscope":
+        kind, title, desc, next_step = "maskscope", MASKSCOPE_TITLE.format(label=shown), MASKSCOPE_DESC, MASKSCOPE_NEXT
     elif part.kind == "mismatch":
         kind, title, desc = "mismatch", RULE_MISMATCH_TITLE.format(label=shown), RULE_MISMATCH_DESC
     else:
@@ -776,19 +827,51 @@ def _rule_item(ctx: DocContext, part: RulePart, hits: Mapping[tuple[str | None, 
         finding_id=None,
         title=title,
         desc=desc,
-        next_step=MISSING_NEXT,
+        next_step=next_step,
         evidence=[evidence],
     )
+
+
+def _cell_hits(ctx: DocContext) -> dict[tuple[str | None, str], list[VisibleFinding]]:
+    """서류의 탐지 항목을 칸 (표, 칸)별로 한 번만 나눈다(규칙마다 다시 훑지 않게)."""
+    hits: dict[tuple[str | None, str], list[VisibleFinding]] = {}
+    for finding in ctx.findings:
+        if finding.id is not None:
+            hits.setdefault(split_cell(finding.field), []).append(finding)
+    return hits
 
 
 def _from_chain_rules(ctx: DocContext) -> list[Maker]:
     if not ctx.bundle.rules:
         return []
-    hits: dict[tuple[str | None, str], list[VisibleFinding]] = {}
-    for finding in ctx.findings:  # 서류의 탐지 항목을 칸별로 한 번만 나눈다(규칙마다 다시 훑지 않게)
-        if finding.id is not None:
-            hits.setdefault(split_cell(finding.field), []).append(finding)
+    hits = _cell_hits(ctx)
     return [partial(_rule_item, ctx, part, hits) for part in ctx.bundle.rules]
+
+
+def _linkage_item(ctx: DocContext, part: RulePart, hits: Mapping[tuple[str | None, str], list[VisibleFinding]]) -> dict[str, Any] | None:
+    texts = LINKAGE_TEXTS.get(part.kind)
+    if texts is None:
+        return None
+    title, desc, next_step = texts
+    evidence = _first_page(ctx) if part.fallback else _cell_evidence(ctx, part.cell, hits)
+    return _item(
+        ctx,
+        part.kind,
+        f"review:{part.kind}" if part.fallback else f"{part.kind}:{ctx.index}",
+        page=evidence["page"],
+        finding_id=None,
+        title=title,
+        desc=desc,
+        next_step=next_step,
+        evidence=[evidence],
+    )
+
+
+def _from_linkage(ctx: DocContext) -> list[Maker]:
+    if not ctx.bundle.linkage:
+        return []
+    hits = _cell_hits(ctx)
+    return [partial(_linkage_item, ctx, part, hits) for part in ctx.bundle.linkage]
 
 
 def _rule_label(rule: ChainRule) -> str:
@@ -811,13 +894,25 @@ def _rule_part(rule: ChainRule, name: str, names: Mapping[str, str], unmatched: 
         return RulePart("missing", name, _rule_label(rule))
     if rule.node == NODE_FORMAT:
         return RulePart("format", name, _rule_label(rule), rule.cell)
+    if rule.node == NODE_MASK:
+        return RulePart("maskscope", name, _rule_label(rule), rule.cell)
     if rule.node == NODE_CONSISTENT:
         if unmatched and (name == BETWEEN_DOCS_RULE or name.startswith(GUARANTEE_RULE_PREFIX)):
             return None  # 연결의 mismatch 항목과 겹친다
         if name.isascii() and name.isdigit():
             return None  # id 가 연결 항목 꼴 mismatch:<정수>:<정수> 가 된다
         return RulePart("mismatch", name, _rule_label(rule), rule.cell)
-    return None  # 대상_확인(other:<i> 가 맡는다)·내용_검토(사유 보충이 맡는다)
+    return None  # 대상_확인(other:<i> 가 맡는다)·내용_검토(사유 보충이 맡는다)·결합_확인(v2_parts 가 따로 — 가린 이름 서류에 둔다)
+
+
+def _linkage_kind(name: str, linkage_passed: bool) -> str | None:
+    """결합_확인 실패 규칙 → 종류. warning 규칙(재식별)은 error 규칙이 **명시적으로 통과**했을 때만 만든다 — error 규칙이 실패·없음·passed 가
+    bool 아님이면 만들지 않는다(워크플로우 갈래: error 실패면 사유는 '서류 간 정보 결합' 하나, 모르면 추론하지 않고 사유 보충에 맡긴다)."""
+    if name == LINKAGE_RULE:
+        return "linkage"
+    if name == REIDENT_RULE and linkage_passed:
+        return "reident"
+    return None  # 모르는 결합 규칙은 만들지 않는다
 
 
 def v2_parts(
@@ -826,11 +921,14 @@ def v2_parts(
     rules: Iterable[ChainRule],
     pairs: Sequence[LinkPair],
     names: Mapping[str, str],
+    masked: Mapping[int, str] | None = None,
+    linkage_passed: bool = False,
 ) -> dict[int, DocBundle]:
     """설정 60 재료 → 보이는 서류 index → DocBundle. 규칙 하나를 나누다 실패하면 그것만 버린다(값 없는 경고).
 
     unreadable = 서류 index → 칸별·판독 불가 후보(findings 가 Extract 에서 만든다), rules = 사슬 순서의 규칙,
-    pairs = link_pairs 쌍, names = 서식 코드 → 짧은 이름.
+    pairs = link_pairs 쌍, names = 서식 코드 → 짧은 이름, masked = 가린 이름 서류 index → 그 이름 칸 키(final_flow.masked_name_fields),
+    linkage_passed = 결합_확인 error 규칙이 명시적으로 통과했는지(final_flow.read_linkage_passed — True 일 때만 재식별 재료).
     """
     visible = [doc for _, doc in visible_documents(documents)]
     if not visible:
@@ -844,12 +942,30 @@ def v2_parts(
     unmatched = any(pair.state == LINK_UNMATCHED for pair in pairs)
     fields = {doc["index"]: list(unreadable.get(doc["index"], ())) for doc in visible}
     placed: dict[int, list[RulePart]] = {}
+    rules = [rule for rule in rules if isinstance(rule, ChainRule)]
+    # 결합_확인: 재식별 재료는 error 규칙이 명시적으로 통과했고(linkage_passed) 실패 규칙 목록에도 없을 때만 · 가린 이름 서류 = masked 중 첫 보이는 서류
+    linkage_failed = any(
+        rule.node == NODE_LINKAGE and rule.status == CHECK_FAIL and _rule_name(rule.name) == LINKAGE_RULE for rule in rules
+    )
+    reident_ok = linkage_passed is True and not linkage_failed
+    hidden = masked if isinstance(masked, Mapping) else {}
+    masked_doc = next((doc["index"] for doc in visible if isinstance(hidden.get(doc["index"]), str)), None)
+    linked: dict[int, list[RulePart]] = {}
     for rule in rules:
         try:
             if rule.status != CHECK_FAIL:
                 continue
             name = _rule_name(rule.name)
             if name is None:
+                continue
+            if rule.node == NODE_LINKAGE:
+                kind = _linkage_kind(name, reident_ok)
+                if kind is None:
+                    continue
+                if masked_doc is None:
+                    linked.setdefault(first, []).append(RulePart(kind, name, "", None, fallback=True))
+                else:
+                    linked.setdefault(masked_doc, []).append(RulePart(kind, name, "", (None, hidden[masked_doc])))
                 continue
             index = by_code.get(rule.code, first) if isinstance(rule.code, str) else first
             if rule.node == NODE_REQUIRED and name.endswith(UNREADABLE_RULE_SUFFIX):
@@ -866,6 +982,7 @@ def v2_parts(
             links=links.get(doc["index"], ()),
             unreadable=tuple(fields[doc["index"]]),
             rules=tuple(placed.get(doc["index"], ())),
+            linkage=tuple(linked.get(doc["index"], ())),
         )
         for doc in visible
     }
@@ -969,7 +1086,7 @@ def bundle_parts(documents: Any, bundle_checks: Any, pairs: Iterable[LinkPair] =
             logger.warning("묶음 검증 규칙 하나를 나누지 못해 건너뜀: %s", type(exc).__name__)
     links: dict[int, list[LinkPair]] = {}
     for pair in pairs:
-        if isinstance(pair, LinkPair) and pair.state != LINK_LINKED and pair.target.index in shown:
+        if isinstance(pair, LinkPair) and pair.state != LINK_LINKED and not pair.masked and pair.target.index in shown:
             links.setdefault(pair.target.index, []).append(pair)
     return {
         index: DocBundle(checks=tuple(checks.get(index, ())), links=tuple(links.get(index, ())))
@@ -1083,6 +1200,8 @@ def link_pairs(documents: Any, findings: Any, links: Any, names: Mapping[str, st
                     target_name=_doc_name(doc, names),
                     anchor=anchor_side,
                     target=_side(doc, hits.get(target), side_name(target)),
+                    masked=state == LINK_INSUFFICIENT and pair.get("masked") is True,
+                    contains=by_doc and pair.get("contains") is True,
                 )
             )
         except Exception as exc:  # 그 쌍만
@@ -1098,11 +1217,14 @@ def link_view(pair: LinkPair, number: int) -> dict[str, Any]:
     """쌍 하나 → links[] 한 줄(LINK_KEYS 순서). number = 결과 안 순서(1부터)."""
     p = subject_particle(pair.shown)
     if pair.state == LINK_LINKED:
-        basis, missing, check = [LINK_SAME.format(label=pair.shown, p=p)], "", LINK_CHECK_LINKED
+        basis = [LINK_CONTAINS if pair.contains else LINK_SAME.format(label=pair.shown, p=p)]
+        missing, check = "", LINK_CHECK_LINKED
     elif pair.state == LINK_UNMATCHED:
-        basis, missing, check = [], LINK_DIFFERENT.format(label=pair.shown, p=p), LINK_NEXT
+        basis, check = [], LINK_NEXT
+        missing = LINK_NOT_CONTAINS if pair.contains else LINK_DIFFERENT.format(label=pair.shown, p=p)
     else:
-        basis, missing, check = [], LINK_NOTHING.format(label=pair.shown, p=p), LINK_NEXT
+        basis, check = [], LINK_NEXT
+        missing = LINK_MASKED if pair.masked else LINK_NOTHING.format(label=pair.shown, p=p)
     return {
         "id": pair.id,
         "number": f"L-{number:02d}",
@@ -1219,6 +1341,7 @@ MATERIALS: tuple[Material, ...] = (
     Material("unreadable", "unreadable", _from_unreadable),  # 설정 60 판독 불가
     Material("chain_rules", "missing", _from_chain_rules),  # 설정 60 실패 규칙(missing·format·mismatch·duplicate)
     Material("links", "mismatch", _from_links),  # L1 · L2(weaklink)
+    Material("linkage", "linkage", _from_linkage),  # v6 결합_확인(linkage · reident)
     Material("nolocation", "nolocation", _from_unlocated),  # 2
     Material("lowconf", "lowconf", _from_low_confidence),  # 3
     Material("other", "other", _from_other_kind),  # 4

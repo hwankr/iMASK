@@ -146,9 +146,9 @@ describe('result.items 와 항목 모양 — 틀리면 예외 없이 건너뛴�
     expect(out).toEqual([]);
   });
 
-  it('type — RTYPE 11개 키는 모두 받는다', () => {
+  it('type — RTYPE 14개 키는 모두 받는다', () => {
     const keys = Object.keys(RTYPE);
-    expect(keys).toEqual(['unreadable', 'cutoff', 'mismatch', 'weaklink', 'nolocation', 'failed', 'format', 'duplicate', 'missing', 'lowconf', 'other']);
+    expect(keys).toEqual(['unreadable', 'cutoff', 'mismatch', 'weaklink', 'nolocation', 'failed', 'format', 'duplicate', 'missing', 'lowconf', 'other', 'maskscope', 'linkage', 'reident']);
     const out = read(keys.map((t, i) => item({ id: 't' + i, number: `R-${10 + i}`, type: t })));
     expect(out.map((i) => i.type)).toEqual(keys);
   });

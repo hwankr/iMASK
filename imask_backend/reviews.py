@@ -646,7 +646,7 @@ def _system_lines(row: Mapping[str, Any], scope: ReviewScope) -> list[dict[str, 
             "actor": SYSTEM_ACTOR,
             "kind": "request",
             "target": ANALYSIS_TARGET,
-            "change": f"문서 {files}개 분석 요청",
+            "change": f"파일 {files}개 분석 요청",
             "reason": "",
         },
         {

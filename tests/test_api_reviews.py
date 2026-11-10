@@ -159,7 +159,7 @@ def test_get_of_done_analysis_without_row_has_the_default_block(ctx: Ctx) -> Non
         "findings": {},
         "items": {},
         "history": [
-            {"id": "S1", "at": row["created_at"], "actor": "시스템", "kind": "request", "target": "분석 건", "change": "문서 1개 분석 요청", "reason": ""},
+            {"id": "S1", "at": row["created_at"], "actor": "시스템", "kind": "request", "target": "분석 건", "change": "파일 1개 분석 요청", "reason": ""},
             {"id": "S2", "at": row["updated_at"], "actor": "시스템", "kind": "ai", "target": "분석 건", "change": "분석 완료 · 탐지 4건 · 위험등급 미평가 · 검토사항 0건", "reason": ""},
         ],
         "version": 0,

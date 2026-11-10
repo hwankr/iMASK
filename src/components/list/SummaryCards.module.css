@@ -17,12 +17,6 @@
   font-weight: var(--fw-heavy);
 }
 
-.note {
-  font-size: var(--fs-13);
-  font-weight: var(--fw-semibold);
-  color: var(--ink-3);
-}
-
 /* grid repeat(3, minmax(0,1fr)); gap 4; padding 6; radius 22; band (129) */
 .band {
   display: grid;
@@ -103,15 +97,4 @@
   font-size: var(--fs-16);
   font-weight: var(--fw-bold);
   color: var(--ink-2);
-}
-
-.hint {
-  font-size: var(--fs-12-5);
-  color: var(--ink-3);
-}
-/* 힌트는 데스크톱·태블릿만 (L.notMobile) */
-@media (max-width: 767.98px) {
-  .hint {
-    display: none;
-  }
 }

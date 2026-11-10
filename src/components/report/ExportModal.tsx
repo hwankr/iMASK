@@ -10,7 +10,7 @@ export interface ExportModalProps {
   onClose: () => void;
   /** 모달 부제(분석 이름) */
   analysisName: string;
-  /** 분석 ID 표기(DG-…) — 파일을 만들기 전 예상 파일 이름에 쓴다 */
+  /** 분석 ID 표기(IM-…) — 파일을 만들기 전 예상 파일 이름에 쓴다 */
   code: string;
   state: ExportUiState;
   onPickFormat: (format: ExportFormat) => void;

@@ -467,14 +467,14 @@ def test_colliding_storage_keys_make_the_later_item_unwritable(monkeypatch: pyte
     env.act("resolve_item", at=1, item_id="lowconf:0", note="")
     assert env.history()[-1]["target"] == "R-01 인식 확인 필요"
     block = env.read()
-    assert block is not None and "분석 완료 · 탐지 29건 · 위험등급 높음 · 검토사항 9건" == block["history"][1]["change"]
+    assert block is not None and "분석 완료 · 탐지 29건 · 위험등급 상 · 검토사항 9건" == block["history"][1]["change"]
     # 저장할 수 없는 항목은 미해결로 센다 — 해결할 수 있는 것을 모두 해결해도 R-08·R-09 가 남는다
     for t in env.scope.items:
         if t.writable and t.id != "lowconf:0":
             env.act("resolve_item", at=2, item_id=t.id, note="")
     env.act("confirm_many", at=3, finding_ids=list(env.findings))
     env.act("complete_review", at=4, note="")
-    assert env.history()[-1]["change"] == "검토 필요 → 검토 완료 (남은 항목: 미해결 검토사항 2건)"
+    assert env.history()[-1]["change"] == "검토 대기 → 검토 완료 (남은 항목: 미해결 검토사항 2건)"
 
 
 def test_items_outside_the_scope_rules_are_not_targets(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -498,21 +498,21 @@ def test_items_outside_the_scope_rules_are_not_targets(monkeypatch: pytest.Monke
 
 def test_complete_lists_open_findings_and_open_items(env: Env) -> None:
     env.act("complete_review", at=1, note="끝")
-    assert env.history()[-1] == line(1, 1, "complete", "분석 건", "검토 필요 → 검토 완료 (남은 항목: 미확인 탐지 29건, 미해결 검토사항 6건)", "끝")
+    assert env.history()[-1] == line(1, 1, "complete", "분석 건", "검토 대기 → 검토 완료 (남은 항목: 미확인 탐지 29건, 미해결 검토사항 6건)", "끝")
 
 
 def test_complete_with_only_open_items(env: Env) -> None:
     env.act("confirm_many", at=1, finding_ids=list(env.findings))
     env.act("resolve_item", at=2, item_id="R-01", note="")
     env.act("complete_review", at=3, note="")
-    assert env.history()[-1]["change"] == "검토 필요 → 검토 완료 (남은 항목: 미해결 검토사항 5건)"
+    assert env.history()[-1]["change"] == "검토 대기 → 검토 완료 (남은 항목: 미해결 검토사항 5건)"
 
 
 def test_complete_with_only_open_findings(env: Env) -> None:
     for num in env.items:
         env.act("resolve_item", at=1, item_id=num, note="")
     env.act("complete_review", at=2, note="")
-    assert env.history()[-1]["change"] == "검토 필요 → 검토 완료 (남은 항목: 미확인 탐지 29건)"
+    assert env.history()[-1]["change"] == "검토 대기 → 검토 완료 (남은 항목: 미확인 탐지 29건)"
 
 
 def test_complete_with_nothing_left(env: Env) -> None:
@@ -520,14 +520,14 @@ def test_complete_with_nothing_left(env: Env) -> None:
         env.act("resolve_item", at=1, item_id=num, note="")
     env.act("confirm_many", at=2, finding_ids=list(env.findings))
     env.act("complete_review", at=3, note="")
-    assert env.history()[-1]["change"] == "검토 필요 → 검토 완료"
+    assert env.history()[-1]["change"] == "검토 대기 → 검토 완료"
 
 
 def test_complete_of_a_result_without_items_is_unchanged() -> None:
     env = make_env(custom_result(SMALL))
     assert env.scope.items == ()
     env.act("complete_review", at=1, note="")
-    assert env.history()[-1]["change"] == "검토 필요 → 검토 완료 (남은 항목: 미확인 탐지 4건)"
+    assert env.history()[-1]["change"] == "검토 대기 → 검토 완료 (남은 항목: 미확인 탐지 4건)"
 
 
 def test_reopened_items_count_as_open_again(env: Env) -> None:
@@ -536,13 +536,13 @@ def test_reopened_items_count_as_open_again(env: Env) -> None:
     env.act("reopen_item", at=2, item_id="R-03")
     env.act("confirm_many", at=3, finding_ids=list(env.findings))
     env.act("complete_review", at=4, note="")
-    assert env.history()[-1]["change"] == "검토 필요 → 검토 완료 (남은 항목: 미해결 검토사항 1건)"
+    assert env.history()[-1]["change"] == "검토 대기 → 검토 완료 (남은 항목: 미해결 검토사항 1건)"
 
 
 def test_s2_counts_the_items(env: Env) -> None:
     block = env.read()
     assert block is not None
-    assert block["history"][1]["change"] == "분석 완료 · 탐지 29건 · 위험등급 높음 · 검토사항 6건"
+    assert block["history"][1]["change"] == "분석 완료 · 탐지 29건 · 위험등급 상 · 검토사항 6건"
     failing = make_env(bundle_result([Spec("loan_application", (1, 1), validate=("red", [rule()]))], risk=None)).read()
     assert failing is not None and failing["history"][1]["change"] == "분석 완료 · 탐지 0건 · 위험등급 미평가 · 검토사항 1건"
 
@@ -728,7 +728,7 @@ def test_get_returns_result_items_and_empty_review_items(ctx: Ctx) -> None:  # n
     assert [i["id"] for i in body["result"]["items"]] == ITEM_IDS
     assert [i["number"] for i in body["result"]["items"]] == ["R-01", "R-02", "R-03", "R-04", "R-05", "R-06"]
     assert list(body["review"]) == REVIEW_KEYS and body["review"]["items"] == {}
-    assert body["review"]["history"][1]["change"] == "분석 완료 · 탐지 29건 · 위험등급 높음 · 검토사항 6건"
+    assert body["review"]["history"][1]["change"] == "분석 완료 · 탐지 29건 · 위험등급 상 · 검토사항 6건"
     assert ctx.store.updates == [] and ctx.store.review_writes == []  # 조회는 쓰지 않는다
     ctx.no_upstage()
 
@@ -804,7 +804,7 @@ def test_http_flow_complete_locks_both_then_reopen(ctx: Ctx) -> None:  # noqa: F
     analysis_id = _done(ctx)
     assert _post(ctx, analysis_id, {"type": "resolve_item", "actor": ACTOR, "item_id": "other:5", "note": ""}).status_code == 200
     done = _post(ctx, analysis_id, {"type": "complete_review", "actor": ACTOR, "note": ""})
-    assert done.json()["analysis"]["review"]["history"][-1]["change"] == "검토 필요 → 검토 완료 (남은 항목: 미확인 탐지 29건, 미해결 검토사항 5건)"
+    assert done.json()["analysis"]["review"]["history"][-1]["change"] == "검토 대기 → 검토 완료 (남은 항목: 미확인 탐지 29건, 미해결 검토사항 5건)"
     for body in (
         {"type": "resolve_item", "actor": ACTOR, "item_id": "lowconf:0", "note": ""},
         {"type": "reopen_item", "actor": ACTOR, "item_id": "other:5"},

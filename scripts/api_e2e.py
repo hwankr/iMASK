@@ -57,7 +57,7 @@
 #    '민감한 값 마스킹') · review 의 다른 값(status done·findings·memo·memo_at·reviewer·reviewed_at·completion_note) 그대로,
 #    거절 두 가지(이 분석의 이름이 아님 — 서울 날짜 하루 다름 → 400, size 0 → 400) → 다시 열기
 #    (reviewer·completion_note 남음, reviewed_at null) → 400 두 가지(모르는 type, 501자 글).
-#    log_export 기대값도 계약대로 따로 만든다: 파일 이름 = iMASK_DG-<created_at 의 서울(UTC+9) 날짜 YYYYMMDD>-<id 의 ASCII
+#    log_export 기대값도 계약대로 따로 만든다: 파일 이름 = iMASK_IM-<created_at 의 서울(UTC+9) 날짜 YYYYMMDD>-<id 의 ASCII
 #    영숫자 앞 4자 대문자> + '_검토결과_탐지항목.csv' | '_검토결과.json'(화면 analysisCode 와 같은 꼴), 크기 표기 = 화면 fmtSize
 #    (1,048,576 미만 max(1, Math.round(b/1024))KB, 아니면 (b/1048576).toFixed(1)MB — JS 처럼 '절반은 올림', _fmt_size).
 #    크기는 그럴듯한 값(CSV 6,127 → 6KB · JSON 1,310,720 → 1.3MB — MB 소수 첫째 자리 동점)을 보낸다.
@@ -210,7 +210,7 @@ REVIEW_ACTOR = "api_e2e"  # 이 스크립트가 보내는 처리자 이름
 SYSTEM_ACTOR = "시스템"
 ANALYSIS_TARGET = "분석 건"
 UNNAMED_FINDING = "이름 없는 항목"
-RISK_LABELS = {"상": "높음", "중": "보통", "하": "낮음", "검토 필요": "검토 필요"}
+RISK_LABELS = {"상": "상", "중": "중", "하": "하", "검토 필요": "검토 필요"}
 FP_REASON = "개인정보가 아닌 번호·문구"  # 오탐 사유 목록(FP_REASONS)의 첫 값
 MSG_REVIEW_BAD_REQUEST = "요청 형식이 올바르지 않습니다."
 MSG_REVIEW_TEXT_TOO_LONG = "메모·사유는 500자 이하로 적어 주세요."
@@ -1427,14 +1427,14 @@ def _fmt_size(size: int) -> str:
 
 
 def _export_name(row: Mapping[str, Any], fmt: str, *, shift_days: int = 0) -> str | None:
-    """이 분석의 내보내기 파일 이름(화면 analysisCode 와 같은 꼴): iMASK_DG-<created_at 의 서울 날짜 YYYYMMDD>-<id 의 ASCII
+    """이 분석의 내보내기 파일 이름(화면 analysisCode 와 같은 꼴): iMASK_IM-<created_at 의 서울 날짜 YYYYMMDD>-<id 의 ASCII
     영숫자 앞 4자 대문자> + 형식별 꼬리. shift_days 는 거절 확인용(날짜만 다른 이름). created_at 을 읽지 못하면 None."""
     moment = _when(row.get("created_at"))
     if moment is None:
         return None
     day = moment.astimezone(SEOUL) + timedelta(days=shift_days)
     head = "".join(c for c in str(row.get("id")) if c.isascii() and c.isalnum())[:4].upper()
-    return f"iMASK_DG-{day:%Y%m%d}-{head}{EXPORT_SUFFIXES[fmt]}"
+    return f"iMASK_IM-{day:%Y%m%d}-{head}{EXPORT_SUFFIXES[fmt]}"
 
 
 def _review_targets(result: Any) -> list[dict[str, str]]:
@@ -1479,7 +1479,7 @@ def _review_targets(result: Any) -> list[dict[str, str]]:
 
 
 def _risk_label(result: Mapping[str, Any]) -> str:
-    """S2 의 위험등급 — overall.level(비면 summary.risk_level) 상·중·하·검토 필요 → 높음·보통·낮음·검토 필요, 그 밖 미평가."""
+    """S2 의 위험등급 — overall.level(비면 summary.risk_level) 상·중·하·검토 필요 → 상·중·하·검토 필요, 그 밖 미평가."""
     overall = result.get("overall") if isinstance(result.get("overall"), Mapping) else {}
     level = overall.get("level")
     if not (isinstance(level, str) and _js_trim(level)):
@@ -2039,7 +2039,7 @@ def _check_reviews(run: Run, analysis_id: str) -> bool:
     flow.write(
         f"complete_review(남은 미확인 {left}건 · 미해결 검토사항 {open_items}건)",
         {"type": "complete_review", "note": TEXT_COMPLETE},
-        ("complete", ANALYSIS_TARGET, f"검토 필요 → 검토 완료{rest}", TEXT_COMPLETE),
+        ("complete", ANALYSIS_TARGET, f"검토 대기 → 검토 완료{rest}", TEXT_COMPLETE),
         complete_check,
     )
     flow.refuse(
@@ -2098,7 +2098,7 @@ def _check_reviews(run: Run, analysis_id: str) -> bool:
     flow.write(
         "reopen_review(reviewer·completion_note 남음, reviewed_at null)",
         {"type": "reopen_review", "reason": TEXT_REOPEN},
-        ("reopen", ANALYSIS_TARGET, "검토 완료 → 검토 필요", TEXT_REOPEN),
+        ("reopen", ANALYSIS_TARGET, "검토 완료 → 검토 대기", TEXT_REOPEN),
         reopen_check,
     )
     flow.refuse("모르는 type → 400", {"type": "delete_everything"}, 400, MSG_REVIEW_BAD_REQUEST)

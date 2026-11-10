@@ -24,6 +24,7 @@ import {
   byRisk,
   findingNotes,
   FSTATUS,
+  linkMissingLabel,
   LSTATUS,
   riskView,
   RTYPE,
@@ -51,6 +52,9 @@ import {
   type MobileTab,
 } from './detailState';
 import { FILE_FAILED, filePageOf, guideText, liveDocMeta, pageMissingText } from './liveViewerModel';
+
+/** 위험등급 '상' 정보(데모 안내 글) — ② RISK 라벨에서 */
+const HIGH_INFO = riskView('high').label + ' 등급 정보';
 
 /** 검토 기록을 불러오지 못한 실제 분석 — 막힌 '검토 완료' 버튼의 title */
 export const REVIEW_UNAVAILABLE_TITLE = '검토 기록을 불러오지 못했습니다';
@@ -232,7 +236,7 @@ export function bannerModel(a: Analysis, x: DetailFacts): BannerModel | null {
       variant: 'partial',
       icon: 'dg-i-alert',
       title: '문서 ' + a.docs.length + '개 중 ' + x.nFailDocs + '개를 분석하지 못했습니다.',
-      text: '결과는 분석된 문서 기준이며, 이미 발견한 고위험 정보는 실패한 문서와 관계없이 그대로 표시합니다.',
+      text: '결과는 분석된 문서 기준이며, 이미 발견한 ' + HIGH_INFO + '는 실패한 문서와 관계없이 그대로 표시합니다.',
       actions: [
         { key: 'showFailedDoc', label: '실패 문서 보기', disabled: false },
         { key: 'retryFailed', label: '실패 문서 다시 분석', disabled: !!a.retrying },
@@ -587,7 +591,7 @@ export function viewerModel(a: Analysis, s: DetailUiState, x: DetailFacts, metri
   } else if (focus && focus.kind === 'item') {
     const it = a.items.find((i) => i.id === focus.id);
     tone = ITEM_TONE;
-    tagText = it ? it.id + ' · ' + RTYPE[it.type].label : '검토 필요';
+    tagText = it ? it.id + ' · ' + RTYPE[it.type].label : '검토사항';
   } else if (focus && focus.kind === 'link') {
     tagText = focus.id + ' · 연결 근거';
   }
@@ -938,6 +942,8 @@ export interface LinkModel {
   docs: LinkDocModel[];
   basis: string[];
   missing: string;
+  /** missing 줄 이름표 — 실제 분석 연결이 unmatched 면 '다른 값', 그 밖 '부족한 근거'(② linkMissingLabel) */
+  missingLabel: string;
   check: string;
   decided: boolean;
   decisionText: string;
@@ -959,6 +965,7 @@ export function linkModel(a: Analysis, l: DocLink, focus: DetailFocus | null): L
     }),
     basis: l.basis,
     missing: l.missing || '',
+    missingLabel: linkMissingLabel(l),
     check: l.check,
     decided: !!l.decision,
     decisionText: l.decision
@@ -1086,7 +1093,7 @@ export function resultsModel(a: Analysis, s: DetailUiState, x: DetailFacts): Res
       ? { ids: findings.map((f) => f.id), picked, text: '가림 ' + picked + '/' + findings.length, allOn: picked === findings.length, allOff: picked === 0 }
       : null;
 
-  const tabLabel: Record<DetailTab, string> = { findings: '탐지 항목', review: '검토 필요', links: '문서 간 연결', summary: '분석 요약' };
+  const tabLabel: Record<DetailTab, string> = { findings: '탐지 항목', review: '검토사항', links: '문서 간 연결', summary: '분석 요약' };
   const tabCount: Record<DetailTab, number | undefined> = { findings: fAll.length, review: x.openItems, links: a.links.length, summary: undefined };
   // 실제 분석은 '분석 요약'(위험도 판정 · 다음 단계 · 결과 요약 · 단계별 JSON)을 두고, 문서 간 연결은 1개 이상일 때만 그 탭(읽기 전용)
   const tabList = x.live ? (a.links.length ? LIVE_LINK_TABS : LIVE_DETAIL_TABS) : DETAIL_TABS;
@@ -1107,7 +1114,7 @@ export function resultsModel(a: Analysis, s: DetailUiState, x: DetailFacts): Res
     findings,
     shownText: items.length + '건 표시 · 확인 ' + x.reviewed + '/' + fAll.length,
     maskPick,
-    keep: !x.live && hi > 0 && issues ? '이미 발견한 고위험 정보 ' + hi + '건은 아래 판독 실패 · 누락과 관계없이 그대로 표시하고 유지합니다. 아직 읽지 못한 부분에 추가 정보가 있을 수 있습니다.' : null,
+    keep: !x.live && hi > 0 && issues ? '이미 발견한 ' + HIGH_INFO + ' ' + hi + '건은 아래 판독 실패 · 누락과 관계없이 그대로 표시하고 유지합니다. 아직 읽지 못한 부분에 추가 정보가 있을 수 있습니다.' : null,
     nOpen: x.openItems,
     nDone: a.items.length - x.openItems,
     items: a.items

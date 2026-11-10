@@ -329,6 +329,9 @@ export interface ReviewItem {
 /** 담당자의 연결 판단 */
 export type LinkDecision = Extract<LinkStatus, 'linked' | 'unlinked'>;
 
+/** 실제 분석 연결 상태(계약 result.links[].state) — 같은 값 · 다른 값 · 부족한 근거 */
+export type LinkState = 'linked' | 'unmatched' | 'insufficient';
+
 /** 연결에 묶인 문서 한쪽 */
 export interface LinkDocRef {
   docId: string;
@@ -355,8 +358,11 @@ export interface DocLink {
   decisionNote: string;
   decidedAt: string;
   decidedBy: string;
-  /** 실제 분석에서만 — 계약 id(result.links[].id, 예 'link:0:1'). 화면 id 는 표시 번호(L-01). 데모는 넣지 않는다. */
-  live?: { id: string };
+  /**
+   * 실제 분석에서만 — 계약 id(result.links[].id, 예 'link:0:1')와 연결 상태(result.links[].state — 알려진 값일 때만).
+   * 화면 id 는 표시 번호(L-01). 데모는 넣지 않는다.
+   */
+  live?: { id: string; state?: LinkState };
 }
 
 /* ---------- 검토 이력 ---------- */
@@ -381,7 +387,7 @@ export interface HistoryEntry {
 /** 분석 건 — 원본 mkA() */
 export interface Analysis {
   id: string;
-  /** 분석 ID 표기 — 'DG-20261030-0007' */
+  /** 분석 ID 표기 — 'IM-20261030-0007' */
   code: string;
   name: string;
   submittedAt: string;
@@ -454,6 +460,8 @@ export interface RawAnalysisInfo {
   startedAt: string;
   /** 마지막으로 바뀐 시각(ISO 8601 원문) */
   updatedAt: string;
+  /** 분류한 서류 수(목록 document_count · 결과 summary.document_count). 모르면 null — 목록 '문서 수' 는 '-' */
+  documentCount?: number | null;
 }
 
 /** 실제 분석에 올린 파일 */

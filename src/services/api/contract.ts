@@ -68,6 +68,7 @@ import type {
   FindingBox,
   FindingLive,
   LinkDocRef,
+  LinkState,
   RawBundleCheck,
   RawDecision,
   RawFileInfo,
@@ -657,6 +658,8 @@ const LINK_NUMBER = /^L-\d{2,}$/;
 
 /** 연결 결과 상태 */
 const LINK_STATUSES = ['confirmed', 'check'] as const;
+/** 연결 상태(result.links[].state) — 알려진 값만 live.state 로 옮긴다(missing 줄 이름표 '다른 값' · '부족한 근거') */
+const LINK_STATES: readonly string[] = ['linked', 'unmatched', 'insufficient'];
 
 /**
  * result.links[] → 문서 간 연결(서버 순서 그대로). 예외 없이 읽는다 — 모양이 틀린 연결은 건너뛴다.
@@ -669,7 +672,7 @@ const LINK_STATUSES = ['confirmed', 'check'] as const;
  *   바뀌지 않고, 원문 값이 섞인 응답이 와도 상세 연결 카드 · 보고서 · 내보내기에 원문(조각 포함)이 나가지 않는다.
  *   mask 는 부르는 쪽이 분석 하나를 읽을 때 한 번 만들어 넘긴다(없으면 여기서 findings 로 만든다).
  *   탐지 항목의 value · id · 위치는 건드리지 않는다.
- * - 판단(decision 등)은 늘 빈 값(읽기 전용).
+ * - 판단(decision 등)은 늘 빈 값(읽기 전용). state(linked · unmatched · insufficient)는 알려진 값일 때만 live.state 로(그 밖은 빼고 연결은 남긴다).
  * - 서류: { docId, page: 서류 안 쪽(범위 밖 · 정수 아님은 1쪽), fields, anchors: finding_ids(앞 MAX_LINK_FINDING_IDS 개)의 탐지 항목
  *   위치 ID(검토사항 근거와 같은 규칙) }. 탐지 항목 찾기는 Map 이라 연결 · 서류 수에 선형이다.
  */
@@ -728,7 +731,7 @@ export function toLiveLinks(links: unknown, sources: readonly DocSource[], findi
       decisionNote: '',
       decidedAt: '',
       decidedBy: '',
-      live: { id },
+      live: LINK_STATES.includes(l.state as LinkState) ? { id, state: l.state as LinkState } : { id },
     });
   }
   return out;

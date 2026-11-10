@@ -39,9 +39,9 @@ export interface RiskView {
 }
 
 export const RISK = {
-  high: { key: 'high', label: '높음', rank: 3, fg: 'var(--hi)', bg: 'var(--hi-bg)', line: 'var(--hi-line)', solid: 'var(--hi-solid)', tag: 'var(--hi-tag)', soft: 'var(--hi-soft)', focus: 'var(--hi-focus)', halo: 'var(--hi-halo)', glyph: 'dg-r3' },
-  medium: { key: 'medium', label: '보통', rank: 2, fg: 'var(--md)', bg: 'var(--md-bg)', line: 'var(--md-line)', solid: 'var(--md-solid)', tag: 'var(--md-tag)', soft: 'var(--md-soft)', focus: 'var(--md-focus)', halo: 'var(--md-halo)', glyph: 'dg-r2' },
-  low: { key: 'low', label: '낮음', rank: 1, fg: 'var(--lo)', bg: 'var(--lo-bg)', line: 'var(--lo-line)', solid: 'var(--lo-solid)', tag: 'var(--lo-tag)', soft: 'var(--lo-soft)', focus: 'var(--lo-focus)', halo: 'var(--lo-halo)', glyph: 'dg-r1' },
+  high: { key: 'high', label: '상', rank: 3, fg: 'var(--hi)', bg: 'var(--hi-bg)', line: 'var(--hi-line)', solid: 'var(--hi-solid)', tag: 'var(--hi-tag)', soft: 'var(--hi-soft)', focus: 'var(--hi-focus)', halo: 'var(--hi-halo)', glyph: 'dg-r3' },
+  medium: { key: 'medium', label: '중', rank: 2, fg: 'var(--md)', bg: 'var(--md-bg)', line: 'var(--md-line)', solid: 'var(--md-solid)', tag: 'var(--md-tag)', soft: 'var(--md-soft)', focus: 'var(--md-focus)', halo: 'var(--md-halo)', glyph: 'dg-r2' },
+  low: { key: 'low', label: '하', rank: 1, fg: 'var(--lo)', bg: 'var(--lo-bg)', line: 'var(--lo-line)', solid: 'var(--lo-solid)', tag: 'var(--lo-tag)', soft: 'var(--lo-soft)', focus: 'var(--lo-focus)', halo: 'var(--lo-halo)', glyph: 'dg-r1' },
   unrated: { key: 'unrated', label: '미평가', rank: 0, fg: 'var(--na)', bg: 'var(--na-bg)', line: 'var(--na-line)', solid: 'var(--na-solid)', tag: 'var(--na-tag)', soft: 'var(--na-soft)', focus: 'var(--na-focus)', halo: 'var(--na-halo)', glyph: 'dg-r0' },
 } as const satisfies Record<string, RiskView>;
 
@@ -100,7 +100,7 @@ export interface ReviewStatusView {
 
 export const RSTATUS = {
   none: { label: '미검토', fg: 'var(--ink-2)', bg: 'var(--fill)', line: 'transparent', icon: 'dg-i-circle-dashed' },
-  needed: { label: '검토 필요', fg: 'var(--on-solid)', bg: 'var(--ink)', line: 'transparent', icon: 'dg-i-flag' },
+  needed: { label: '검토 대기', fg: 'var(--on-solid)', bg: 'var(--ink)', line: 'transparent', icon: 'dg-i-flag' },
   done: { label: '검토 완료', fg: 'var(--accent-ink)', bg: 'var(--accent-soft-2)', line: 'transparent', icon: 'dg-i-check-badge' },
 } as const satisfies Record<string, ReviewStatusView>;
 
@@ -214,6 +214,14 @@ export const DOC_TYPE_NAMES: Record<string, string> = {
   IRP_신규신청서: 'IRP 신규신청서',
   other: '기타',
 };
+
+/**
+ * 문서 간 연결의 missing 줄 이름표 — 실제 분석 연결 상태가 unmatched(값이 다름)면 '다른 값', 그 밖(insufficient · 데모 연결)은 '부족한 근거'.
+ * 연결 카드 · 연결 판단 창이 같이 쓴다.
+ */
+export function linkMissingLabel(link: { readonly live?: { readonly state?: string } }): string {
+  return link.live?.state === 'unmatched' ? '다른 값' : '부족한 근거';
+}
 
 /** 묶음 검증 판정(실제 분석 — 최종 흐름 워크플로우의 묶음_검증 verdict) → 라벨 */
 export const BUNDLE_VERDICTS = {

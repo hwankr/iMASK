@@ -103,7 +103,7 @@ describe('모달 화면 모델 — 원본 modalVM', () => {
     expect(p.any).toBe(true);
     const c = completeModel(a, p);
     const high = p.openF.filter((x) => x.risk === 'high').length;
-    expect(c.lines[0]).toBe('미확인 탐지 항목 ' + p.openF.length + '건' + (high ? ' (위험등급 높음 ' + high + '건 포함)' : ''));
+    expect(c.lines[0]).toBe('미확인 탐지 항목 ' + p.openF.length + '건' + (high ? ' (위험등급 상 ' + high + '건 포함)' : ''));
     if (p.openI.length) expect(c.lines).toContain('해결되지 않은 검토사항 ' + p.openI.length + '건');
     if (p.openL.length) expect(c.lines).toContain('확인이 필요한 문서 간 연결 ' + p.openL.length + '건');
     const expected = [
@@ -208,7 +208,7 @@ describe('저장 — 서비스 호출과 토스트 문구(원본 그대로)', ()
     expect(a.review).toBe('done');
     expect(a.risk).toBe(riskBefore);
 
-    expect(await run({ type: 'reopen', note: '추가 서류', error: '' })).toEqual({ text: '검토를 다시 열었습니다 · 검토 상태가 ‘검토 필요’로 바뀌었습니다.' });
+    expect(await run({ type: 'reopen', note: '추가 서류', error: '' })).toEqual({ text: '검토를 다시 열었습니다 · 검토 상태가 ‘검토 대기’로 바뀌었습니다.' });
     expect((await get(svc, 'A1')).review).toBe('needed');
   });
 });

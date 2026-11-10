@@ -58,7 +58,7 @@ describe('② 표시 규칙 — 분석 위험도 표(ANALYSIS_RISK)', () => {
     expect(riskView('review')).toBe(RISK.unrated);
   });
 
-  it("review — '검토 필요', 주의(warn) 토큰, 순위는 높음보다 앞", () => {
+  it("review — '검토 필요', 주의(warn) 토큰, 순위는 상보다 앞", () => {
     const v = analysisRiskView('review');
     expect(v).toEqual({ key: 'review', label: '검토 필요', rank: RISK.high.rank + 1, fg: 'var(--warn)', bg: 'var(--warn-bg)', glyph: 'dg-i-alert' });
   });
@@ -180,7 +180,7 @@ describe('목록 — 표 · 카드 · 정렬 · 필터 · 요약 카드', () => 
     at('medium', 'medium', '2026-11-02 09:00'),
   ];
 
-  it('위험도순: 검토 필요(최근 먼저) → 높음 → 보통 → 낮음 → 미평가 · 최근 접수순은 그대로', () => {
+  it('위험도순: 검토 필요(최근 먼저) → 상 → 중 → 하 → 미평가 · 최근 접수순은 그대로', () => {
     expect(sortAnalyses(all, 'risk').map((a) => a.id)).toEqual(['review-new', 'review-old', 'high', 'medium', 'low', 'unrated']);
     expect(sortAnalyses(all, 'recent').map((a) => a.id)).toEqual(['unrated', 'low', 'high', 'review-new', 'medium', 'review-old']);
     expect(listModel(all, F({ sort: 'risk' })).rows.map((r) => [r.id, r.risk])[0]).toEqual(['review-new', 'review']);
@@ -205,7 +205,7 @@ describe('목록 — 표 · 카드 · 정렬 · 필터 · 요약 카드', () => 
     }
   });
 
-  it("필터 · 요약 카드의 뜻은 그대로 — 선택지 넷, 검토 필요는 '고위험' · '미평가' 어디에도 세지 않는다", () => {
+  it("필터 · 요약 카드의 뜻은 그대로 — 데모 선택지 넷, 검토 필요는 '상 등급' · '미평가' 어디에도 세지 않는다", () => {
     const [risk] = dropdownModels(all);
     expect(risk.options.map((o) => [o.value, o.label, o.count])).toEqual([
       ['all', '전체', 6],
@@ -217,10 +217,25 @@ describe('목록 — 표 · 카드 · 정렬 · 필터 · 요약 카드', () => 
     const m = listModel(all, F());
     expect(m.high).toBe(1);
     expect(m.cards.find((c) => c.id === 'high')?.n).toBe(1);
-    expect(m.resultSub.startsWith('이 중 고위험 1건')).toBe(true);
+    expect(m.resultSub.startsWith('이 중 상 등급 1건')).toBe(true);
     expect(all.filter((a) => matchesFilters(a, F({ risk: 'unrated' }))).map((a) => a.id)).toEqual(['unrated']);
     expect(all.filter((a) => matchesFilters(a, F({ risk: 'high' }))).map((a) => a.id)).toEqual(['high']);
+    // 위험등급 '검토 필요'(risk=review) — 실제 분석 목록(live)만 URL 로 받고 그 분석만 고른다. 선택지도 live 만 '전체' 바로 다음에.
+    // 데모(live 아님)는 모르는 값(risk=zzz)과 똑같이 '전체'
+    expect(parseFilters(new URLSearchParams('risk=review'), { live: true }).risk).toBe('review');
     expect(parseFilters(new URLSearchParams('risk=review')).risk).toBe('all');
+    expect(parseFilters(new URLSearchParams('risk=review'))).toEqual(parseFilters(new URLSearchParams('risk=zzz')));
+    expect(parseFilters(new URLSearchParams('risk=zzz'), { live: true }).risk).toBe('all');
+    expect(all.filter((a) => matchesFilters(a, F({ risk: 'review' }))).map((a) => a.id)).toEqual(['review-old', 'review-new']);
+    const [liveRisk] = dropdownModels(all, true);
+    expect(liveRisk.options.map((o) => [o.value, o.label, o.count])).toEqual([
+      ['all', '전체', 6],
+      ['review', '검토 필요', 2],
+      ['high', RISK.high.label, 1],
+      ['medium', RISK.medium.label, 1],
+      ['low', RISK.low.label, 1],
+      ['unrated', RISK.unrated.label, 1],
+    ]);
   });
 });
 

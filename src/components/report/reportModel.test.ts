@@ -17,7 +17,7 @@ describe('보고서 화면 모델 — 원본 reportVM', () => {
   it('report 상태(A1, demoProgressA1): 머리 · 요약 숫자 · 분포', async () => {
     const a = await analysis('A1', 'report');
     const v = reportView(a);
-    expect(v.code).toBe('DG-20261030-0007');
+    expect(v.code).toBe('IM-20261030-0007');
     expect(v.name).toBe('대출상담 서류 묶음');
     expect(v.risk).toBe('high');
     expect(v.review).toBe('done');
@@ -30,7 +30,7 @@ describe('보고서 화면 모델 — 원본 reportVM', () => {
     const low = f.filter((x) => x.risk === 'low').length;
     const reviewed = f.filter((x) => x.status !== 'open').length;
     expect(v.cards.map((c) => c.label)).toEqual(['탐지 항목', '담당자 확인', '남은 검토사항', '문서 간 연결']);
-    expect(v.cards[0]).toMatchObject({ num: f.length, unit: '건', after: '', sub: `높음 ${high} · 보통 ${medium} · 낮음 ${low}` });
+    expect(v.cards[0]).toMatchObject({ num: f.length, unit: '건', after: '', sub: `상 ${high} · 중 ${medium} · 하 ${low}` });
     expect(v.cards[1]).toMatchObject({ num: reviewed, unit: '', after: '/ ' + f.length });
     const openI = a.items.filter((i) => !i.resolved).length;
     expect(v.cards[2]).toMatchObject({ num: openI, warn: openI > 0, sub: `전체 ${a.items.length}건 중 해결 ${a.items.length - openI}건` });
@@ -135,7 +135,7 @@ describe('보고서 화면 모델 — 원본 reportVM', () => {
     } finally {
       [risk.high.label, risk.medium.label, risk.low.label, fstatus.false_positive.label, fstatus.reclassified.label] = saved;
     }
-    expect(reportView(a).cards[0].sub).toMatch(/^높음 \d+ · 보통 \d+ · 낮음 \d+$/);
+    expect(reportView(a).cards[0].sub).toMatch(/^상 \d+ · 중 \d+ · 하 \d+$/);
   });
 
   it('검토가 끝나지 않은 분석(A4) — 미완료 안내 · 완료 전 문구 · 분석 한계', async () => {

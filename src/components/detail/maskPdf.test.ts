@@ -238,7 +238,7 @@ describe('maskSourceOf — 버튼을 열어 둘 원본인지', () => {
 
 describe('파일 이름 · 문구', () => {
   it("'iMASK_<분석 번호>_마스킹.pdf'", () => {
-    expect(maskPdfName('DG-20261105-AB12')).toBe('iMASK_DG-20261105-AB12_마스킹.pdf');
+    expect(maskPdfName('IM-20261105-AB12')).toBe('iMASK_IM-20261105-AB12_마스킹.pdf');
   });
 
   it('파일 이름에 쓸 수 없는 글자 · 제어 문자는 _ , 비면 대신 글자', () => {

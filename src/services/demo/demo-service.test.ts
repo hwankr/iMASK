@@ -39,20 +39,20 @@ describe('1. list() — 샘플 6건과 미리 해 둔 검토 동작', () => {
     const list = await svc.list();
     const summary = list.map((a) => [a.id, a.code, a.status, a.risk, a.review, a.docs.length, a.findings.length, a.items.length, a.links.length]);
     expect(summary).toEqual([
-      ['A1', 'DG-20261030-0007', 'done', 'high', 'needed', 3, 23, 5, 3],
-      ['A2', 'DG-20261029-0003', 'done', 'medium', 'none', 2, 6, 0, 1],
-      ['A3', 'DG-20261031-0002', 'running', 'unrated', 'none', 3, 0, 0, 0],
-      ['A4', 'DG-20261030-0002', 'partial', 'high', 'needed', 3, 7, 2, 1],
-      ['A5', 'DG-20261028-0011', 'done', 'low', 'done', 1, 4, 0, 0],
-      ['A6', 'DG-20261030-0011', 'failed', 'unrated', 'needed', 1, 0, 1, 0],
+      ['A1', 'IM-20261030-0007', 'done', 'high', 'needed', 3, 23, 5, 3],
+      ['A2', 'IM-20261029-0003', 'done', 'medium', 'none', 2, 6, 0, 1],
+      ['A3', 'IM-20261031-0002', 'running', 'unrated', 'none', 3, 0, 0, 0],
+      ['A4', 'IM-20261030-0002', 'partial', 'high', 'needed', 3, 7, 2, 1],
+      ['A5', 'IM-20261028-0011', 'done', 'low', 'done', 1, 4, 0, 0],
+      ['A6', 'IM-20261030-0011', 'failed', 'unrated', 'needed', 1, 0, 1, 0],
     ]);
     expect(list.map((a) => a.name)).toEqual(['대출상담 서류 묶음', '소득증빙 확인', '신규 접수 서류', '거래내역 스캔본', '마스킹된 상담 서류', '손상된 문서 파일']);
     // 첫 이력(분석 요청 · 최초 AI 결과)
     expect(list[0].history.slice(0, 2)).toEqual([
       { id: 'S1', at: '2026-10-30 14:22', actor: CONFIG.user.name, kind: 'request', target: '분석 건', change: '문서 3개 분석 요청', reason: '' },
-      { id: 'S2', at: '2026-10-30 14:31', actor: '시스템', kind: 'ai', target: '분석 건', change: '분석 완료 · 탐지 23건 · 위험등급 높음 · 검토사항 5건', reason: '' },
+      { id: 'S2', at: '2026-10-30 14:31', actor: '시스템', kind: 'ai', target: '분석 건', change: '분석 완료 · 탐지 23건 · 위험등급 상 · 검토사항 5건', reason: '' },
     ]);
-    expect(list[3].history[1].change).toBe('분석 일부 실패 · 문서 1개 실패 · 탐지 7건 · 위험등급 높음 · 검토사항 2건');
+    expect(list[3].history[1].change).toBe('분석 일부 실패 · 문서 1개 실패 · 탐지 7건 · 위험등급 상 · 검토사항 2건');
     expect(list[5].history[1].change).toBe('분석 실패 · 파일을 열 수 없음 · 위험등급 미평가');
     expect(list[2].history.map((h) => h.kind)).toEqual(['request']); // 분석 중 — AI 결과 없음
   });
@@ -221,13 +221,13 @@ describe('5. pending · 검토 완료 · 다시 열기', () => {
     await svc.completeReview('A1', '나머지는 원본 확인 후 보완');
     let a = await must('A1');
     expect(a).toMatchObject({ review: 'done', reviewer: CONFIG.user.name, reviewedAt: '2026-11-01 10:00', completionNote: '나머지는 원본 확인 후 보완', risk: 'high' });
-    expect(lastLog(a)).toMatchObject({ kind: 'complete', target: '분석 건', change: '검토 필요 → 검토 완료 (남은 항목: 미확인 탐지 20건, 미해결 검토사항 5건, 확인 필요 연결 2건)', reason: '나머지는 원본 확인 후 보완' });
+    expect(lastLog(a)).toMatchObject({ kind: 'complete', target: '분석 건', change: '검토 대기 → 검토 완료 (남은 항목: 미확인 탐지 20건, 미해결 검토사항 5건, 확인 필요 연결 2건)', reason: '나머지는 원본 확인 후 보완' });
     expect(finding(a, 'F-02').status).toBe('open'); // 최초 탐지 결과는 그대로
 
     await svc.reopenReview('A1', '추가 서류 접수');
     a = await must('A1');
     expect(a).toMatchObject({ review: 'needed', reviewedAt: '' });
-    expect(lastLog(a)).toMatchObject({ kind: 'reopen', change: '검토 완료 → 검토 필요', reason: '추가 서류 접수' });
+    expect(lastLog(a)).toMatchObject({ kind: 'reopen', change: '검토 완료 → 검토 대기', reason: '추가 서류 접수' });
   });
 
   it('남은 항목이 없으면 문구에 붙이지 않는다', async () => {
@@ -259,14 +259,14 @@ describe('6. buildExport', () => {
   it('CSV: BOM · CRLF · 열 이름 · 파일 이름 · 마스킹된 값만', async () => {
     const file = await svc.buildExport('A1', 'csv');
     expect(file.format).toBe('csv');
-    expect(file.name).toBe(`${CONFIG.brandName}_DG-20261030-0007_검토결과_탐지항목.csv`);
+    expect(file.name).toBe(`${CONFIG.brandName}_IM-20261030-0007_검토결과_탐지항목.csv`);
     expect(file.mime).toBe('text/csv;charset=utf-8');
     expect(file.text.startsWith('﻿')).toBe(true);
     expect(file.text.endsWith('\r\n')).toBe(true);
     const rows = file.text.slice(1).split('\r\n');
     expect(rows[0]).toBe('항목ID,정보종류,세부항목,표시값_마스킹,정보주체,문서,페이지,원문위치,노출상태,위험등급,판단근거,적용규칙,확인상태,담당자메모,최초AI_정보종류,최초AI_정보주체,최초AI_노출상태');
     expect(rows).toHaveLength(1 + 23 + 1); // 머리 + 23행 + 끝 빈 줄
-    expect(rows[1]).toBe('F-01,고유식별정보,주민등록번호,920314-2******,신청인,개인 여신거래 신청서,1,확인됨,전체 노출,높음,주민등록번호 13자리가 마스킹 없이 기재되어 있습니다.,PII-ID-001,확인함,원본 보관 전 마스킹 사본으로 교체 필요,고유식별정보,신청인,전체 노출');
+    expect(rows[1]).toBe('F-01,고유식별정보,주민등록번호,920314-2******,신청인,개인 여신거래 신청서,1,확인됨,전체 노출,상,주민등록번호 13자리가 마스킹 없이 기재되어 있습니다.,PII-ID-001,확인함,원본 보관 전 마스킹 사본으로 교체 필요,고유식별정보,신청인,전체 노출');
     expect(rows[23]).toContain('F-23,고유식별정보,주민등록번호로 보이는 문자열,920314-2******,신청인,급여계좌 거래내역서,2,위치 확인 필요,');
     expect(file.size).toBe(new TextEncoder().encode(file.text).length);
     expect(file.preview).toBe(rows.slice(0, 6).join('\n'));
@@ -280,18 +280,18 @@ describe('6. buildExport', () => {
     // 쉼표 · 따옴표 · 줄바꿈이 든 값은 따옴표로 감싼다
     await svc.saveFindingMemo('A1', 'F-02', '메모, "인용"\n둘째 줄');
     const f2 = await svc.buildExport('A1', 'csv', '브랜드');
-    expect(f2.name).toBe('브랜드_DG-20261030-0007_검토결과_탐지항목.csv');
+    expect(f2.name).toBe('브랜드_IM-20261030-0007_검토결과_탐지항목.csv');
     expect(f2.text).toContain(',"메모, ""인용""\n둘째 줄",');
   });
 
   it('JSON: 최상위 키 · 파일 이름 · 마스킹된 값만', async () => {
     const file = await svc.buildExport('A1', 'json');
-    expect(file.name).toBe(`${CONFIG.brandName}_DG-20261030-0007_검토결과.json`);
+    expect(file.name).toBe(`${CONFIG.brandName}_IM-20261030-0007_검토결과.json`);
     expect(file.mime).toBe('application/json');
     const obj = JSON.parse(file.text);
     expect(Object.keys(obj)).toEqual(['보고서', '분석', '대상문서', '주요위험사유', '탐지항목', '검토사항', '문서간연결', '권장조치', '검토메모', '검토이력']);
     expect(obj.보고서).toEqual({ 서비스: CONFIG.brandName, 생성시각: '2026.11.01 10:00', 데모데이터: true, 마스킹: '민감한 값은 마스킹된 표시값만 포함' });
-    expect(obj.분석).toEqual({ 분석ID: 'DG-20261030-0007', 분석명: '대출상담 서류 묶음', 접수일시: '2026.10.30 14:22', 분석상태: '완료', 위험등급: '높음', 검토상태: '검토 필요', 검토자: '', 검토완료시각: '' });
+    expect(obj.분석).toEqual({ 분석ID: 'IM-20261030-0007', 분석명: '대출상담 서류 묶음', 접수일시: '2026.10.30 14:22', 분석상태: '완료', 위험등급: '상', 검토상태: '검토 대기', 검토자: '', 검토완료시각: '' });
     expect(obj.대상문서[0]).toEqual({ 문서: '개인 여신거래 신청서', 파일명: '개인여신거래신청서_20261029.pdf', 형식: 'PDF', 페이지: 2, 처리상태: '완료', 오류: '' });
     expect(obj.탐지항목).toHaveLength(23);
     expect(obj.검토사항[3]).toEqual({ ID: 'R-04', 유형: '연결 근거 부족', 내용: '연결 근거가 부족한 문서', 상태: '미해결', 처리내용: '' });
@@ -331,7 +331,7 @@ describe('7. 분석 요청', () => {
     // 분석 건은 곧바로 '대기'로 생긴다(목록 맨 앞)
     const queued = (await svc.list())[0];
     expect(queued).toMatchObject({ name: '김서연 대출상담 서류 (샘플)', status: 'queued', risk: 'unrated', review: 'none', demoQueued: false });
-    expect(queued.code).toMatch(/^DG-20261101-\d{4}$/);
+    expect(queued.code).toMatch(/^IM-20261101-\d{4}$/);
     expect(queued.docs.map((d) => d.status)).toEqual(['queued', 'queued', 'queued']);
     expect(id).toBeUndefined();
 
@@ -355,7 +355,7 @@ describe('7. 분석 요청', () => {
     expect(a).toMatchObject({ status: 'done', risk: 'high', review: 'needed', analyzedAt: '2026-11-01 10:00' });
     expect(a.docs.map((d) => d.status)).toEqual(['done', 'done', 'done']);
     expect([a.findings.length, a.items.length, a.links.length]).toEqual([23, 5, 3]);
-    expect(lastLog(a)).toMatchObject({ actor: '시스템', kind: 'ai', change: '분석 완료 · 탐지 23건 · 위험등급 높음 · 검토사항 5건' });
+    expect(lastLog(a)).toMatchObject({ actor: '시스템', kind: 'ai', change: '분석 완료 · 탐지 23건 · 위험등급 상 · 검토사항 5건' });
     expect(events.filter((e) => e !== undefined)).toEqual([{ type: 'done', id: queued.id, name: '김서연 대출상담 서류 (샘플)', items: 5, findings: 23 }]);
     expect(events.filter((e) => e === undefined).length).toBeGreaterThan(3); // 단계마다 변경 알림
   });
@@ -461,7 +461,7 @@ describe('9. DemoControls.prepare(state)', () => {
     expect(a.memo).toBe('주민등록번호 · 계좌번호가 전체 노출된 서류는 마스킹 사본으로 교체를 요청함.\n거래내역서 2쪽은 원본 재스캔 후 다시 확인 예정.');
     const p = await svc.pending('A1');
     expect([p.openF.length, p.openI.map((i) => i.id), p.openL.length]).toEqual([0, ['R-01', 'R-02'], 0]);
-    expect(lastLog(a)).toMatchObject({ at: '2026-10-30 16:40', kind: 'complete', change: '검토 필요 → 검토 완료 (남은 항목: 미해결 검토사항 2건)' });
+    expect(lastLog(a)).toMatchObject({ at: '2026-10-30 16:40', kind: 'complete', change: '검토 대기 → 검토 완료 (남은 항목: 미해결 검토사항 2건)' });
     expect([link(a, 'L-02').decision, link(a, 'L-03').decision]).toEqual(['linked', 'unlinked']);
     // 다른 상태로 가면 reset 되어 A1 은 다시 검토 필요
     await svc.prepare('detail');
@@ -504,13 +504,13 @@ describe('9. DemoControls.prepare(state)', () => {
     const id = await p;
     expect(id).toBe('A115');
     const a = await must(id);
-    expect([a.id, a.code, a.submittedAt]).toEqual(['A115', 'DG-20261101-0115', '2026-11-01 11:12']);
+    expect([a.id, a.code, a.submittedAt]).toEqual(['A115', 'IM-20261101-0115', '2026-11-01 11:12']);
     expect(a.history.map((h) => h.id)).toEqual(['H116']);
 
     const csv = await svc.buildExport(id, 'csv');
-    expect(csv.name).toBe('iMASK_DG-20261101-0115_검토결과_탐지항목.csv');
+    expect(csv.name).toBe('iMASK_IM-20261101-0115_검토결과_탐지항목.csv');
     const json = await svc.buildExport(id, 'json');
-    expect((JSON.parse(json.text) as { 분석: { 분석ID: string } }).분석.분석ID).toBe('DG-20261101-0115');
+    expect((JSON.parse(json.text) as { 분석: { 분석ID: string } }).분석.분석ID).toBe('IM-20261101-0115');
   });
 });
 

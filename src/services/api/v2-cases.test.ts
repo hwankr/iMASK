@@ -238,16 +238,16 @@ const fileUnits = (a: Analysis, format: 'csv' | 'json') => (format === 'csv' ? c
 
 /** 케이스마다 기대 모양(tests/test_v2_fixture_sync.py SHAPES 와 같은 값) */
 const WANT: Record<V2Case, { risk: string; badge: string; kinds: ReviewItemType[]; bundle: string; linkRow: string | null; next: string; docs: string[] }> = {
-  A: { risk: 'high', badge: '높음', kinds: ['lowconf', 'weaklink', 'lowconf'], bundle: '통과', linkRow: '연결 2 · 확인 필요 1', next: '권장 조치', docs: ['자동이체 신청서', 'FATCA/CRS 본인확인서', '휴면예금 지급신청서', '상속예금 위임장'] },
-  E: { risk: 'medium', badge: '보통', kinds: [], bundle: '통과', linkRow: null, next: '권장 조치', docs: ['FATCA/CRS 본인확인서'] },
-  L: { risk: 'review', badge: '검토 필요', kinds: ['format', 'lowconf'], bundle: '실패 · 실패 1', linkRow: null, next: '검토 안내', docs: ['소비자피해보상금 지급신청서'] },
-  M: { risk: 'review', badge: '검토 필요', kinds: ['format', 'lowconf'], bundle: '실패 · 실패 1', linkRow: null, next: '검토 안내', docs: ['외국인 세대구성원 확인서'] },
-  N: { risk: 'review', badge: '검토 필요', kinds: ['lowconf', 'mismatch'], bundle: '실패 · 실패 1', linkRow: null, next: '검토 안내', docs: ['지급보증거래 신청서'] },
-  P: { risk: 'review', badge: '검토 필요', kinds: ['unreadable', 'missing'], bundle: '실패 · 실패 2', linkRow: null, next: '검토 안내', docs: ['소비자피해보상금 지급신청서'] },
-  R: { risk: 'review', badge: '검토 필요', kinds: ['other'], bundle: '실패 · 실패 1', linkRow: null, next: '검토 안내', docs: ['기타'] },
-  S: { risk: 'review', badge: '검토 필요', kinds: ['missing', 'missing'], bundle: '실패 · 실패 2', linkRow: null, next: '검토 안내', docs: ['자동이체 신청서'] },
-  T: { risk: 'review', badge: '검토 필요', kinds: ['duplicate', 'lowconf'], bundle: '실패 · 실패 1', linkRow: null, next: '검토 안내', docs: ['소비자피해보상금 지급신청서', '소비자피해보상금 지급신청서 2'] },
-  U: { risk: 'review', badge: '검토 필요', kinds: ['mismatch', 'lowconf', 'mismatch'], bundle: '실패 · 실패 3', linkRow: '연결 0 · 확인 필요 2', next: '검토 안내', docs: ['지급보증거래 신청서', '외국인 세대구성원 확인서', '소비자피해보상금 지급신청서'] },
+  A: { risk: 'high', badge: '상', kinds: ['lowconf', 'weaklink', 'lowconf'], bundle: '통과', linkRow: '연결 2 · 확인 필요 1', next: '권장 조치', docs: ['자동이체 신청서', 'FATCA/CRS 본인확인서', '휴면예금 지급신청서', '상속예금 위임장'] },
+  E: { risk: 'medium', badge: '중', kinds: [], bundle: '통과', linkRow: null, next: '권장 조치', docs: ['FATCA/CRS 본인확인서'] },
+  L: { risk: 'review', badge: '검토 필요', kinds: ['format', 'lowconf'], bundle: '실패 1건', linkRow: null, next: '검토 안내', docs: ['소비자피해보상금 지급신청서'] },
+  M: { risk: 'review', badge: '검토 필요', kinds: ['format', 'lowconf'], bundle: '실패 1건', linkRow: null, next: '검토 안내', docs: ['외국인 세대구성원 확인서'] },
+  N: { risk: 'review', badge: '검토 필요', kinds: ['lowconf', 'mismatch'], bundle: '실패 1건', linkRow: null, next: '검토 안내', docs: ['지급보증거래 신청서'] },
+  P: { risk: 'review', badge: '검토 필요', kinds: ['unreadable', 'missing'], bundle: '실패 2건', linkRow: null, next: '검토 안내', docs: ['소비자피해보상금 지급신청서'] },
+  R: { risk: 'review', badge: '검토 필요', kinds: ['other'], bundle: '실패 1건', linkRow: null, next: '검토 안내', docs: ['기타'] },
+  S: { risk: 'review', badge: '검토 필요', kinds: ['missing', 'missing'], bundle: '실패 2건', linkRow: null, next: '검토 안내', docs: ['자동이체 신청서'] },
+  T: { risk: 'review', badge: '검토 필요', kinds: ['duplicate', 'lowconf'], bundle: '실패 1건', linkRow: null, next: '검토 안내', docs: ['소비자피해보상금 지급신청서', '소비자피해보상금 지급신청서 2'] },
+  U: { risk: 'review', badge: '검토 필요', kinds: ['mismatch', 'lowconf', 'mismatch'], bundle: '실패 3건', linkRow: '연결 0 · 확인 필요 2', next: '검토 안내', docs: ['지급보증거래 신청서', '외국인 세대구성원 확인서', '소비자피해보상금 지급신청서'] },
 };
 
 describe('판정 8키 읽기(readDecision)', () => {
@@ -435,7 +435,7 @@ describe('탐지 항목 — 등급 · 표 칸', () => {
     expect(plan?.patch).toMatchObject({ focus: { kind: 'finding', id: f.id }, docId: f.docId, page: f.page });
     expect(plan?.viewer).toBe(f.anchors[0]);
     expect(focusAnchors(a, { kind: 'finding', id: f.id })).toEqual(f.anchors);
-    // 처음 상태 — 미확인 '높음' 첫 항목을 저절로 고른다(옛 분석은 미평가라 고르지 않았다)
+    // 처음 상태 — 미확인 '상' 첫 항목을 저절로 고른다(옛 분석은 미평가라 고르지 않았다)
     const first = stateOf(a).focus;
     expect(first?.kind).toBe('finding');
     expect(a.findings.find((x) => x.id === first?.id)?.risk).toBe('high');
@@ -505,7 +505,7 @@ describe('탐지 항목 — 등급 · 표 칸', () => {
     expect(v.findings.map((x) => x.id)).toEqual(a.findings.map((x) => x.id));
     expect(v.findings.find((x) => x.id === f.id)?.masked).toBe(f.masked);
     const json = JSON.parse(file(a, 'json').text);
-    expect(json.탐지항목.find((x: Obj) => x.항목ID === f.id)).toMatchObject({ 세부항목: f.label, 표시값_마스킹: f.masked, 판단근거: '', 위험등급: '높음' });
+    expect(json.탐지항목.find((x: Obj) => x.항목ID === f.id)).toMatchObject({ 세부항목: f.label, 표시값_마스킹: f.masked, 판단근거: '', 위험등급: '상' });
     for (const format of ['csv', 'json'] as const) expect(file(a, format).text).not.toContain(f.live?.id ?? '');
   });
 });
@@ -634,7 +634,7 @@ describe('새 검토 종류 · 항목 모양', () => {
     expect(v.notices.map((n) => n.title)).toContain('R-01 · 판독 불가');
   });
 
-  it("'유지' 안내는 실제 분석에 없다 — 높음 + 판독 불가가 있어도(P), 설명 글을 새로 넣지 않는다", () => {
+  it("'유지' 안내는 실제 분석에 없다 — 상 + 판독 불가가 있어도(P), 설명 글을 새로 넣지 않는다", () => {
     const p = live('P');
     expect(p.findings.some((f) => f.risk === 'high')).toBe(true);
     expect(p.items.some((i) => i.type === 'unreadable')).toBe(true);
@@ -731,7 +731,7 @@ describe('빈 서식 · 대상 외 · 같은 서식 두 건', () => {
     // 추출 단계가 없는 대상 외 — '읽지 못함' 이 아니라 0개
     expect(summaryRows(v2Case('R'), { createdAt: '', updatedAt: '', jobId: '' }).find((r) => r.key === 'extracted')?.value).toBe('0개');
     expect(rowsOf(summaryHtml(a)).find(([k]) => k === 'extracted')?.[2]).toBe('0개');
-    expect(finalFlowRows(a.raw?.bundleCheck, a.links)).toEqual([{ key: 'bundle', label: '묶음 검증', value: '실패 · 실패 1' }]);
+    expect(finalFlowRows(a.raw?.bundleCheck, a.links)).toEqual([{ key: 'bundle', label: '묶음 검증', value: '실패 1건' }]);
     expect(reportView(reportSafeAnalysis(a)).remaining.map((x) => x.type)).toEqual(['기타 서류']);
     expect(file(a, 'csv').text.split('\r\n').length).toBe(2);
   });

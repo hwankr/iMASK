@@ -1,19 +1,22 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { notFound } from 'next/navigation';
 import { DemoBadge } from '@/components/layout/DemoBadge';
+import { devPagesEnabled } from '@/dev/devPages';
 import { LISTED_STATES, STATE_GROUPS } from '@/dev/states';
 import styles from './states.module.css';
 
-export const metadata: Metadata = {
-  title: '개발용 · 상태 목록',
-  robots: { index: false, follow: false },
-};
+// 운영 빌드(개발용 경로가 닫힘)에서는 개발용 제목을 내보내지 않는다 — 404 화면과 같은 제목
+export const metadata: Metadata = devPagesEnabled()
+  ? { title: '개발용 · 상태 목록', robots: { index: false, follow: false } }
+  : { title: '페이지를 찾을 수 없습니다' };
 
 /**
  * /dev/states — 상태 23개(휴대폰 전용 제외)를 그룹별로 보여 준다. 항목마다 상태 제목과 그 상태가 여는 화면 경로.
  * `<main>` 은 AppShell 이 그리므로 최상위는 `<div>` 다.
  */
 export default function DevStatesPage() {
+  if (!devPagesEnabled()) notFound();
   return (
     <div className={styles.page}>
       <header className={styles.head}>

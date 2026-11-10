@@ -68,9 +68,9 @@ describe('원문 뷰어 모델', () => {
     expect(on.map((x) => x.anchor)).toEqual(['d1p1-phone']);
     expect(on[0].tag).toBe(true);
     expect(on[0].vars.pc).toBe(RISK.medium.solid);
-    expect(v.tag).toEqual({ text: 'F-03 · 연락처·이메일 · 보통', bg: RISK.medium.tag });
+    expect(v.tag).toEqual({ text: 'F-03 · 연락처·이메일 · 중', bg: RISK.medium.tag });
     expect(hls.filter((x) => x.tag)).toHaveLength(1);
-    expect(on[0].aria).toBe('F-03 연락처·이메일 보통 — 탐지 항목 보기');
+    expect(on[0].aria).toBe('F-03 연락처·이메일 중 — 탐지 항목 보기');
   });
 
   it('오탐 항목은 fp, 마스킹 미리보기는 마스킹 값(오탐은 원래 값)', async () => {
@@ -100,7 +100,7 @@ describe('원문 뷰어 모델', () => {
     const baseHls = allSegs(base).filter((x): x is Extract<SegmentModel, { kind: 'hl' }> => x.kind === 'hl');
     const rrn = hls.find((x) => x.anchor === 'd1p1-rrn')!;
     const rrnMasked = baseHls.find((x) => x.anchor === 'd1p1-rrn')!.shown;
-    expect(rrn).toMatchObject({ findingId: 'F-01', pressed: false, aria: 'F-01 고유식별정보 높음 — 가리기' });
+    expect(rrn).toMatchObject({ findingId: 'F-01', pressed: false, aria: 'F-01 고유식별정보 상 — 가리기' });
     // 보이게 고름 — 원래 값 그대로(가림 글자 없음), 마스킹 값과 다르다
     expect(rrn.shown).toBe(rrn.text);
     expect(rrn.shown).not.toContain('*');
@@ -120,7 +120,7 @@ describe('원문 뷰어 모델', () => {
     expect(off.maskPicking).toBe(false);
     const offHls = allSegs(off).filter((x): x is Extract<SegmentModel, { kind: 'hl' }> => x.kind === 'hl');
     expect(offHls.every((x) => x.shown === x.text && !('pressed' in x))).toBe(true);
-    expect(offHls.find((x) => x.anchor === 'd1p1-rrn')!.aria).toBe('F-01 고유식별정보 높음 — 탐지 항목 보기');
+    expect(offHls.find((x) => x.anchor === 'd1p1-rrn')!.aria).toBe('F-01 고유식별정보 상 — 탐지 항목 보기');
   });
 
   it('검토사항 근거는 표시(mark) — 판독 불가 블록 테두리 · 주황 이름표', async () => {
@@ -180,12 +180,12 @@ describe('원문 뷰어 모델', () => {
 });
 
 describe('머리글 · 띠 · 문서 목록 · 휴대폰 탭', () => {
-  it('A1 — 진행, 문서 목록 건수 · 높음', async () => {
+  it('A1 — 진행, 문서 목록 건수 · 상', async () => {
     const a = await analysis('A1');
     const s = stateOf(a);
     const x = detailFacts(a, s);
     const h = headerModel(a, x);
-    expect(h).toMatchObject({ docCount: 3, pageTotalText: '5페이지', date: '2026.10.30 14:22', code: 'DG-20261030-0007', hasProgress: true, showComplete: true, noReport: false });
+    expect(h).toMatchObject({ docCount: 3, pageTotalText: '5페이지', date: '2026.10.30 14:22', code: 'IM-20261030-0007', hasProgress: true, showComplete: true, noReport: false });
     expect(h.progress.total).toBe(23);
     expect(bannerModel(a, x)).toBeNull();
     const docs = docModels(a, x);
@@ -240,14 +240,14 @@ describe('결과 패널 모델', () => {
     const rs = resultsModel(a, s, x);
     expect(rs.tabs.map((t) => [t.label, t.count])).toEqual([
       ['탐지 항목', 23],
-      ['검토 필요', 5],
+      ['검토사항', 5],
       ['문서 간 연결', 3],
     ]);
     expect(rs.chips[0]).toEqual({ value: 'all', label: '전체', count: 23 });
     // 필터 칩: 키 · 순서는 원본 그대로, 상태 · 위험등급 라벨은 ② 표시 규칙에서 가져온다(문구는 그대로)
     expect(rs.chips.map((c) => c.value)).toEqual(['all', 'open', 'high', 'medium', 'low']);
     expect(rs.chips.slice(1).map((c) => c.label)).toEqual([FSTATUS.open.label, RISK.high.label, RISK.medium.label, RISK.low.label]);
-    expect(rs.chips.map((c) => c.label)).toEqual(['전체', '미확인', '높음', '보통', '낮음']);
+    expect(rs.chips.map((c) => c.label)).toEqual(['전체', '미확인', '상', '중', '하']);
     expect(rs.chips.map((c) => c.count)).toEqual([23, 20, 3, 11, 9]);
     expect(rs.findings[0].risk.key).toBe('high');
     expect(rs.shownText).toMatch(/^23건 표시 · 확인 \d+\/23$/);
@@ -275,7 +275,7 @@ describe('결과 패널 모델', () => {
     const a = await analysis('A4');
     const s = stateOf(a, { tab: 'review' });
     const rs = resultsModel(a, s, detailFacts(a, s));
-    expect(rs.keep).toMatch(/^이미 발견한 고위험 정보 \d+건은/);
+    expect(rs.keep).toMatch(/^이미 발견한 상 등급 정보 \d+건은/);
     expect(rs.items[0]).toMatchObject({ id: 'S-01', canRetry: true, retryLabel: '다시 분석' });
     expect(rs.nOpen).toBe(2);
   });

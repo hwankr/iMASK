@@ -5,7 +5,7 @@ import { listReturnHref, useRememberedListQuery } from '@/components/list/listRe
 import { AnalysisStatusLabel, Button, IconButton, ReviewStatusPill, RiskBadge, cx } from '@/components/ui';
 import { DELETE_LABEL } from '@/components/modals/analysisActionModel';
 import { reportHref as reportHrefFor } from '@/lib/routes';
-import { useRouteBase } from '@/services/react';
+import { useRouteBase, useServiceMode } from '@/services/react';
 import type { DetailActions } from './detailActions';
 import type { HeaderModel } from './detailModel';
 import styles from './DetailHeader.module.css';
@@ -30,7 +30,7 @@ export function DetailHeader({ model: m, analysisId, mobile, actions, onDelete }
   const base = useRouteBase();
   const reportHref = reportHrefFor(base, analysisId);
   // 목록으로 = 프로토타입 goList: 그 기준 경로에서 마지막으로 본 목록의 검색·필터·정렬을 그대로 둔다
-  const listHref = listReturnHref(base, useRememberedListQuery(base));
+  const listHref = listReturnHref(base, useRememberedListQuery(base), useServiceMode() === 'api');
   const pct = { '--pct': m.progress.pct + '%' } as CSSProperties;
   return (
     <div className={styles.head}>

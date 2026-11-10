@@ -13,7 +13,7 @@
      실패를 빈 pending 으로 보지 않는다(남은 항목을 모른 채 완료하지 않게).
    ========================================================================== */
 
-import { CATS, EXPOSURES, FP_REASONS, RTYPE, SUBJECTS, analysisRiskView, byRisk, riskView, type Exposure, type FpReason, type InfoCategory, type InfoSubject } from '@/display/rules';
+import { CATS, EXPOSURES, FP_REASONS, RISK, RSTATUS, RTYPE, SUBJECTS, linkMissingLabel, analysisRiskView, byRisk, riskView, type Exposure, type FpReason, type InfoCategory, type InfoSubject } from '@/display/rules';
 import type { ModalWidth } from '@/components/ui';
 import type { AnalysisService, Pending } from '@/services/analysis-service';
 import { isReportTarget } from '@/services/report-safe';
@@ -138,7 +138,7 @@ function editField<K extends EditKey>(key: K, title: string, opts: readonly Edit
 export function completeModel(a: Analysis, p: Pending): CompleteModel {
   const lines: string[] = [];
   const openHigh = p.openF.filter((x) => x.risk === 'high').length;
-  if (p.openF.length) lines.push('미확인 탐지 항목 ' + p.openF.length + '건' + (openHigh ? ' (위험등급 높음 ' + openHigh + '건 포함)' : ''));
+  if (p.openF.length) lines.push('미확인 탐지 항목 ' + p.openF.length + '건' + (openHigh ? ' (위험등급 ' + RISK.high.label + ' ' + openHigh + '건 포함)' : ''));
   if (p.openI.length) lines.push('해결되지 않은 검토사항 ' + p.openI.length + '건');
   if (p.openL.length) lines.push('확인이 필요한 문서 간 연결 ' + p.openL.length + '건');
   const items: PendingLine[] = [
@@ -254,7 +254,7 @@ export function reviewModalModel(a: Analysis, m: DetailModal, pending: Pending |
         ...base,
         title: yes ? '같은 사람 · 같은 건으로 판단' : '연결 아님으로 판단',
         sub: '판단 근거는 검토 이력과 보고서에 남습니다.',
-        target: { risk: null, title: l.title, id: l.id, value: null, meta: '부족한 근거: ' + (l.missing || '없음') },
+        target: { risk: null, title: l.title, id: l.id, value: null, meta: linkMissingLabel(l) + ': ' + (l.missing || '없음') },
         note: note('판단 근거', '(필수)', yes ? '예: 고객 통화로 본인 급여계좌임을 확인함' : '예: 이름 외 근거가 없어 연결하지 않음'),
         info: yes
           ? '연결 맞음으로 판단하면 관련 검토사항도 해결로 표시됩니다.'
@@ -283,7 +283,7 @@ export function reviewModalModel(a: Analysis, m: DetailModal, pending: Pending |
       return {
         ...base,
         title: '검토 다시 열기',
-        sub: '검토 상태가 ‘검토 필요’로 바뀝니다. 지금까지의 기록은 그대로 남습니다.',
+        sub: '검토 상태가 ‘' + RSTATUS.needed.label + '’로 바뀝니다. 지금까지의 기록은 그대로 남습니다.',
         note: note('다시 여는 이유', '(필수)', '예: 고객이 추가 서류를 제출해 다시 확인 필요'),
         buttons: [CANCEL, btn('검토 다시 열기', 'submit', 'primary')],
       };
@@ -381,7 +381,7 @@ export async function applyReviewModal(svc: AnalysisService, a: Analysis, m: Det
       return { text: '검토를 완료했습니다 · 목록의 검토 상태와 요약 숫자에 반영했습니다.', openReport: hasReport(a) };
     case 'reopen':
       await svc.reopenReview(a.id, note);
-      return { text: '검토를 다시 열었습니다 · 검토 상태가 ‘검토 필요’로 바뀌었습니다.' };
+      return { text: '검토를 다시 열었습니다 · 검토 상태가 ‘' + RSTATUS.needed.label + '’로 바뀌었습니다.' };
     default: {
       const unknown: never = m;
       void unknown;

@@ -56,7 +56,7 @@ describe('실제 분석 보고서 모델', () => {
     expect(v.cards[2]).toMatchObject({ label: '남은 검토사항', num: 0, unit: '건', after: '', sub: '전체 0건 중 해결 0건', warn: false });
     const n = (k: string) => a.findings.filter((f) => f.risk === k).length;
     expect(n('unrated')).toBeGreaterThan(0);
-    expect(v.cards[0].sub).toBe(`높음 ${n('high')} · 보통 ${n('medium')} · 낮음 ${n('low')} · ${RISK.unrated.label} ${n('unrated')}`);
+    expect(v.cards[0].sub).toBe(`상 ${n('high')} · 중 ${n('medium')} · 하 ${n('low')} · ${RISK.unrated.label} ${n('unrated')}`);
     expect(v.cards[0].num).toBe(a.findings.length);
   });
 
@@ -68,7 +68,7 @@ describe('실제 분석 보고서 모델', () => {
       }
     });
     const rv = reportView(reportSafeAnalysis(rated));
-    expect(rv.cards[0].sub).toBe(`높음 0 · 보통 0 · 낮음 ${rated.findings.length}`);
+    expect(rv.cards[0].sub).toBe(`상 0 · 중 0 · 하 ${rated.findings.length}`);
     expect(rv.catUnratedCol).toBe(false);
     expect(heads(renderReport(rv))).not.toContain(RISK.unrated.label);
   });
@@ -91,8 +91,8 @@ describe('실제 분석 보고서 모델', () => {
     expect(v.remaining).toEqual([]);
     expect(text(html)).toContain('남아 있는 검토사항이 없습니다.');
     const h = heads(html);
-    expect(h.slice(0, 7)).toEqual(['문서', '형식·페이지', '처리 상태', '탐지', '높음', '담당자 확인', '남은 검토사항']);
-    expect(h.slice(7, 15)).toEqual(['정보 종류', '건수', '높음', '보통', '낮음', '미평가', '확인', '오탐']);
+    expect(h.slice(0, 7)).toEqual(['문서', '형식·페이지', '처리 상태', '탐지', '상', '담당자 확인', '남은 검토사항']);
+    expect(h.slice(7, 15)).toEqual(['정보 종류', '건수', '상', '중', '하', '미평가', '확인', '오탐']);
     expect(v.catUnratedCol).toBe(true);
     expect(v.cats.reduce((s, c) => s + c.unrated, 0)).toBe(a.findings.filter((f) => f.risk === 'unrated').length);
   });
@@ -245,7 +245,7 @@ interface Before {
 }
 const BEFORE: Before = JSON.parse(readFileSync(new URL('./fixtures/demo-report-before.json', import.meta.url), 'utf8'));
 
-describe('데모 보고서 — 바꾸기 전(main e99c75a)과 같다', () => {
+describe('데모 보고서 — 바꾸기 전(main e99c75a) + web-polish T2 표시 말과 같다', () => {
   const CASES: [string, string, 'report' | undefined][] = [
     ['A1', 'A1', undefined],
     ['A1-report', 'A1', 'report'],

@@ -84,3 +84,24 @@ describe("헤더 주 메뉴 활성 — activeNav", () => {
     expect(activeNav('/demo/settings', null)).toBe('analyses');
   });
 });
+
+describe("위험등급 'review'(검토 필요) — 받는 쪽 모드의 규칙", () => {
+  it('실제 분석(live)은 기억한 risk=review 를 그대로 싣는다(상세 뒤로 · 새 분석 취소 · 헤더)', () => {
+    expect(listReturnHref('', 'risk=review&sort=risk', true)).toBe('/?risk=review&sort=risk');
+    expect(listNavHref('', 'risk=review&review=needed', true)).toBe('/?risk=review');
+    expect(reviewNeededHref('', 'risk=review&sort=risk', true)).toBe('/?review=needed&sort=risk');
+    expect(listHomeHref('', 'risk=review&sort=risk', true)).toBe('/?sort=risk');
+  });
+
+  it('데모(/demo · 데모 빌드의 루트)는 모르는 값(risk=zzz)과 똑같이 버린다', () => {
+    for (const [base, root] of [['/demo', '/demo'], ['', '/']] as const) {
+      expect(listReturnHref(base, 'risk=review&sort=risk')).toBe(root + '?sort=risk');
+      expect(listReturnHref(base, 'risk=review&sort=risk')).toBe(listReturnHref(base, 'risk=zzz&sort=risk'));
+      expect(listNavHref(base, 'risk=review')).toBe(root);
+      expect(listReturnHref(base, 'risk=review', false)).toBe(root);
+    }
+    // 실제 분석 기준이어도 다른 위험등급 값 · 모르는 값의 규칙은 같다
+    expect(listReturnHref('', 'risk=high', true)).toBe(listReturnHref('', 'risk=high'));
+    expect(listReturnHref('', 'risk=zzz', true)).toBe('/');
+  });
+});

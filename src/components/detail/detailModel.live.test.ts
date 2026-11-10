@@ -66,7 +66,7 @@ describe('실제 분석 상세 — 고정 자료 → toAnalysis → 화면 모�
     expect(x.locked).toBe(false);
   });
 
-  it('처음 상태 — 고위험 미확인 항목(D1-02)을 골라 대출신청서 1쪽(파일 1쪽)', () => {
+  it('처음 상태 — 상 등급 미확인 항목(D1-02)을 골라 대출신청서 1쪽(파일 1쪽)', () => {
     const s = stateOf(a);
     expect(s.focus).toEqual({ kind: 'finding', id: 'D1-02' });
     expect(s.docId).toBe('doc-0');
@@ -75,7 +75,7 @@ describe('실제 분석 상세 — 고정 자료 → toAnalysis → 화면 모�
     expect(v.blocks).toEqual([]);
     expect(v.live?.filePage).toBe(1);
     expect(v.pageLabel).toBe('1 / 1');
-    expect(v.tag.text).toBe('D1-02 · 고유식별정보 · 높음');
+    expect(v.tag.text).toBe('D1-02 · 고유식별정보 · 상');
   });
 
   it('파일 기준 쪽 = pageStart + (뷰어 쪽 − 1) — 서류마다', () => {
@@ -125,7 +125,7 @@ describe('실제 분석 상세 — 고정 자료 → toAnalysis → 화면 모�
     expect(rrn.vars.soft).toBe(RISK.high.soft);
     expect(rrn.vars.solid).toBe(RISK.high.solid);
     expect(name.aria).toBe('D1-01 이름 미평가 — 탐지 항목 보기');
-    expect(rrn.aria).toBe('D1-02 고유식별정보 높음 — 탐지 항목 보기');
+    expect(rrn.aria).toBe('D1-02 고유식별정보 상 — 탐지 항목 보기');
   });
 
   it('고른 항목 — 그 상자들만 on, 이름표는 첫 상자에만, 고른 색은 그 항목 위험 색', () => {
@@ -154,7 +154,7 @@ describe('실제 분석 상세 — 고정 자료 → toAnalysis → 화면 모�
     const boxes = v.live!.boxes;
     expect(boxes.filter((x) => !x.masked).map((x) => x.anchor)).toEqual(['D1-05#1', 'D1-05#2', 'D1-05#3', 'D1-05#4', 'D1-05#5', 'D1-05#6']);
     expect(boxes.every((x) => x.pressed === x.masked)).toBe(true);
-    expect(boxes.find((x) => x.anchor === 'D1-02#1')!.aria).toBe('D1-02 고유식별정보 높음 — 가리기');
+    expect(boxes.find((x) => x.anchor === 'D1-02#1')!.aria).toBe('D1-02 고유식별정보 상 — 가리기');
     expect(v.notices.find((n) => n.title === '마스킹 미리보기')?.text).toBe(MASK_NOTICE_TEXT);
     // 실제 분석 서류의 공지에는 '가린 PDF 내려받기' 버튼
     expect(v.notices.find((n) => n.title === '마스킹 미리보기')?.action).toBe('maskPdf');
@@ -162,7 +162,7 @@ describe('실제 분석 상세 — 고정 자료 → toAnalysis → 화면 모�
     const off = viewer(a, { docId: 'doc-0', page: 1, focus: null, mask: false, maskPick: { 'D1-01': true } });
     expect(off.maskPicking).toBe(false);
     expect(off.live!.boxes.some((x) => x.masked || 'pressed' in x)).toBe(false);
-    expect(off.live!.boxes.find((x) => x.anchor === 'D1-02#1')!.aria).toBe('D1-02 고유식별정보 높음 — 탐지 항목 보기');
+    expect(off.live!.boxes.find((x) => x.anchor === 'D1-02#1')!.aria).toBe('D1-02 고유식별정보 상 — 탐지 항목 보기');
   });
 
   it('마스킹 미리보기 — 결과 패널: 보이는 행 기준 가림 수와 모두 가림 · 모두 해제, 행마다 가림 여부', () => {
@@ -233,7 +233,7 @@ describe('실제 분석 상세 — 고정 자료 → toAnalysis → 화면 모�
     expect(docs.map((d) => d.nFind)).toEqual([9, 2, 2, 3, 3, 0]);
   });
 
-  it('머리글 — 위험등급 높음(분석 위험도) · 문서 6개 · 6페이지 · 검토 필요, 검토 완료 버튼 켜짐', () => {
+  it('머리글 — 위험등급 상(분석 위험도) · 문서 6개 · 6페이지 · 검토 필요, 검토 완료 버튼 켜짐', () => {
     const h = headerModel(a, detailFacts(a, stateOf(a)));
     expect(h.risk).toBe('high');
     expect(h.docCount).toBe(6);
@@ -251,12 +251,12 @@ describe('실제 분석 상세 — 고정 자료 → toAnalysis → 화면 모�
     expect(bannerModel(a, detailFacts(a, stateOf(a)))).toBeNull();
   });
 
-  it("결과 패널 — 탭은 탐지 항목 · 검토 필요 · 분석 요약(옛 결과는 검토사항 0개), 검토 메모 버튼 켜짐, 등급은 받은 값(미평가 17 · 높음 2)", () => {
+  it("결과 패널 — 탭은 탐지 항목 · 검토 필요 · 분석 요약(옛 결과는 검토사항 0개), 검토 메모 버튼 켜짐, 등급은 받은 값(미평가 17 · 상 2)", () => {
     const s = stateOf(a);
     const rs = resultsModel(a, s, detailFacts(a, s));
     expect(rs.tabs.map((t) => [t.value, t.label, t.count])).toEqual([
       ['findings', '탐지 항목', 19],
-      ['review', '검토 필요', 0],
+      ['review', '검토사항', 0],
       ['summary', '분석 요약', undefined],
     ]);
     expect(rs.items).toEqual([]);

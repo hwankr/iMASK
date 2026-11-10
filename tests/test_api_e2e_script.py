@@ -70,10 +70,10 @@ REVIEW_WRITES = 18  # 검토 동작 13 + 검토사항 해결·다시 열기·다
 REVIEW_POSTS = 33  # 보내는 review-actions POST 수
 REVIEW_OK_POSTS = 19  # 그중 200(쓰기 18 + changed false 1)
 # 내보내기 기록(log_export) 기대값 — 계약대로 손으로 적은 값(ANALYSIS_ID 의 영숫자 앞 4자 '0000', CREATED_AT 06:41 UTC = 서울 11-03)
-EXPORT_CODE = "DG-20261103-0000"
+EXPORT_CODE = "IM-20261103-0000"
 EXPORT_CSV = f"iMASK_{EXPORT_CODE}_검토결과_탐지항목.csv"
 EXPORT_JSON = f"iMASK_{EXPORT_CODE}_검토결과.json"
-EXPORT_WRONG = "iMASK_DG-20261104-0000_검토결과_탐지항목.csv"  # 하루 다른 날짜(이 분석의 이름이 아님)
+EXPORT_WRONG = "iMASK_IM-20261104-0000_검토결과_탐지항목.csv"  # 하루 다른 날짜(이 분석의 이름이 아님)
 EXPORT_POSTS = (27, 28, 29, 30)  # log_export POST 순번(CSV · JSON · 이름 아님 400 · size 0 400) — 잠김 409 넷 뒤, 다시 열기 앞
 MSG_NOT_FOUND = "분석 건을 찾을 수 없습니다."
 REMOVED = "정리: 이번 실행이 만든 분석을 지웠습니다(DELETE 204 · 다시 읽어 404)"  # 끝 정리 — 204 뒤 다시 읽어 없음 확인
@@ -1218,12 +1218,12 @@ def test_fmt_size_agrees_with_backend_on_a_sweep(script: Any) -> None:
 @pytest.mark.parametrize(
     ("analysis_id", "created_at", "code"),
     [
-        (ANALYSIS_ID, CREATED_AT, "DG-20261103-0000"),  # 소수 초 5자리
-        ("7b944f1e-1234-4abc-8def-0123456789ab", "2026-11-04T15:00:00+00:00", "DG-20261105-7B94"),  # 서울 자정(다음 날)
-        ("7b944f1e-1234-4abc-8def-0123456789ab", "2026-11-04T14:59:59.999999+00:00", "DG-20261104-7B94"),  # 자정 바로 앞
-        ("7b944f1e-1234-4abc-8def-0123456789ab", "2026-11-04T15:00:00Z", "DG-20261105-7B94"),  # Z
-        ("7b944f1e-1234-4abc-8def-0123456789ab", "2026-12-31T15:00:00.123456+00:00", "DG-20270101-7B94"),  # 해 넘김
-        ("ab-c1-2345-6789", "2026-11-04T05:06:07.123456+00:00", "DG-20261104-ABC1"),  # 하이픈 건너뜀
+        (ANALYSIS_ID, CREATED_AT, "IM-20261103-0000"),  # 소수 초 5자리
+        ("7b944f1e-1234-4abc-8def-0123456789ab", "2026-11-04T15:00:00+00:00", "IM-20261105-7B94"),  # 서울 자정(다음 날)
+        ("7b944f1e-1234-4abc-8def-0123456789ab", "2026-11-04T14:59:59.999999+00:00", "IM-20261104-7B94"),  # 자정 바로 앞
+        ("7b944f1e-1234-4abc-8def-0123456789ab", "2026-11-04T15:00:00Z", "IM-20261105-7B94"),  # Z
+        ("7b944f1e-1234-4abc-8def-0123456789ab", "2026-12-31T15:00:00.123456+00:00", "IM-20270101-7B94"),  # 해 넘김
+        ("ab-c1-2345-6789", "2026-11-04T05:06:07.123456+00:00", "IM-20261104-ABC1"),  # 하이픈 건너뜀
     ],
     ids=["fraction5", "seoul_midnight", "before_midnight", "zulu", "new_year", "hyphens"],
 )
@@ -2497,7 +2497,7 @@ def test_item_actions_store_the_contract_values(script: Any, capsys: Any) -> Non
             "id": "H15",
             "kind": "complete",
             "target": "분석 건",
-            "change": "검토 필요 → 검토 완료 (남은 항목: 미확인 탐지 26건, 미해결 검토사항 5건)",
+            "change": "검토 대기 → 검토 완료 (남은 항목: 미확인 탐지 26건, 미해결 검토사항 5건)",
             "reason": "api_e2e 검토 완료",
         },
     ]
@@ -2597,7 +2597,7 @@ STATE_409 = "검토사항 상태가 바뀌었습니다. 새로 고친 뒤 다시
         (_answer(19, 409, STATE_409), "(기대 404 검토사항을 찾을 수 없습니다.)"),
         (_answer(20, 200), "HTTP 200"),
         (_answer(21, 400, "메모·사유에 쓸 수 없는 문자가 있습니다."), "(기대 400 메모·사유는 500자 이하로 적어 주세요.)"),
-        (_after_post(22, _last_line("change", "검토 필요 → 검토 완료 (남은 항목: 미확인 탐지 26건)")), "새 이력 change: 계약과 다름"),
+        (_after_post(22, _last_line("change", "검토 대기 → 검토 완료 (남은 항목: 미확인 탐지 26건)")), "새 이력 change: 계약과 다름"),
         (_answer(25, 409, STATE_409), "(기대 409 검토를 완료한 분석은 바꿀 수 없습니다.)"),
         (_answer(26, 200), "HTTP 200"),
         (_after_post(31, _review_row(items={})), "review items 가 바뀜"),

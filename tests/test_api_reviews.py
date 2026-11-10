@@ -137,7 +137,7 @@ def test_post_returns_the_same_analysis_shape_as_get(ctx: Ctx) -> None:
     assert review["findings"][first]["status"] == "confirmed"
     assert [h["id"] for h in review["history"]] == ["S1", "S2", "H1"]
     # 검토사항 6건(review-items §5.5 — lowconf 4·nolocation 1·other 1, tests/test_items.py 가 내용을 본다)
-    assert review["history"][1]["change"] == "분석 완료 · 탐지 29건 · 위험등급 높음 · 검토사항 6건"
+    assert review["history"][1]["change"] == "분석 완료 · 탐지 29건 · 위험등급 상 · 검토사항 6건"
     assert review["history"][2]["target"] == "D1-01 이름" and review["history"][2]["change"] == "미확인 → 확인함"
     # 다시 조회해도 같은 값(새로 고침·다른 브라우저)
     got = ctx.get(analysis_id)

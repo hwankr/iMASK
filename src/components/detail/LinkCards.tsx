@@ -78,7 +78,7 @@ export function LinkCards({ links, locked, intro = true, onPickDoc, actions }: L
                 <Icon name="dg-i-alert" size={15} strokeWidth={2.2} />
               </span>
               <span>
-                <strong>부족한 근거</strong> · {l.missing}
+                <strong>{l.missingLabel}</strong> · {l.missing}
               </span>
             </div>
           ) : null}

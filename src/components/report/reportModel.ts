@@ -30,6 +30,7 @@ import {
 } from '@/display/rules';
 import { CONFIG } from '@/config/app';
 import { fmtDT } from '@/lib/format';
+import { nextStageTitle } from '@/components/live/liveModel';
 import { isLiveAnalysis } from '@/services/report-safe';
 import type { Analysis, Finding } from '@/services/types';
 
@@ -257,6 +258,8 @@ export interface ReportView {
   findings: FindingLine[];
   remaining: RemainingLine[];
   recs: string[];
+  /** 권장 조치 구역 제목 — 실제 분석은 상세 '분석 요약'과 같은 규칙(nextStageTitle: 검토_안내 → '검토 안내', 권장_조치 → '권장 조치', 그 밖 '다음 단계'), 데모는 '권장 조치' */
+  recsTitle: string;
   /** 권장 조치가 없을 때 */
   noRecsText: string;
   /** 꼬리말 문장들 */
@@ -430,6 +433,7 @@ export function reportView(a: Analysis): ReportView {
       })),
     remaining: openI.map((i) => ({ id: i.id, type: RTYPE[i.type].label, title: i.title, where: docT(i.docId) + ' ' + i.page + '쪽', next: i.next })),
     recs: a.recs.slice(),
+    recsTitle: live ? nextStageTitle(a.raw?.overall?.nextStage) : '권장 조치',
     noRecsText: live ? '-' : '분석이 끝나면 권장 조치가 표시됩니다.',
     footer: live
       ? [FOOTER_MASKED]

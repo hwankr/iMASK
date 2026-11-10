@@ -142,6 +142,8 @@ export interface AnalysisListItemOut {
   documents: ListDocumentOut[];
   risk_level: string | null;
   review: string;
+  /** 분류한 서류 수(result.summary.document_count — bool 아닌 정수 ≥ 0, 그 밖 null). 옛 백엔드는 키가 없다 */
+  document_count?: number | null;
 }
 
 /** GET /analyses 응답 — 바깥 값이라 모양을 믿지 않는다(mapping.ts 가 검사) */

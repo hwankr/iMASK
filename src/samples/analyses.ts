@@ -25,12 +25,12 @@ export function summaryText(a: Analysis): string {
 }
 export function rawSamples(): Analysis[] {
   const list = [
-    mkA({ id: 'A1', code: 'DG-20261030-0007', name: '대출상담 서류 묶음', submittedAt: '2026-10-30 14:22', analyzedAt: '2026-10-30 14:31', status: 'done', risk: 'high', review: 'needed', docs: loanDocs(), ...loanResults() }),
-    mkA({ id: 'A2', code: 'DG-20261029-0003', name: '소득증빙 확인', submittedAt: '2026-10-29 10:48', analyzedAt: '2026-10-29 10:52', status: 'done', risk: 'medium', review: 'none', ...incomeSet() }),
-    mkA({ id: 'A3', code: 'DG-20261031-0002', name: '신규 접수 서류', submittedAt: '2026-10-31 14:56', analyzedAt: '', status: 'running', risk: 'unrated', review: 'none', ...newSet() }),
-    mkA({ id: 'A4', code: 'DG-20261030-0002', name: '거래내역 스캔본', submittedAt: '2026-10-30 09:15', analyzedAt: '2026-10-30 09:24', status: 'partial', risk: 'high', review: 'needed', ...scanSet() }),
-    mkA({ id: 'A5', code: 'DG-20261028-0011', name: '마스킹된 상담 서류', submittedAt: '2026-10-28 16:40', analyzedAt: '2026-10-28 16:44', status: 'done', risk: 'low', review: 'none', ...maskedSet() }),
-    mkA({ id: 'A6', code: 'DG-20261030-0011', name: '손상된 문서 파일', submittedAt: '2026-10-30 18:02', analyzedAt: '2026-10-30 18:03', status: 'failed', risk: 'unrated', review: 'needed', ...brokenSet() }),
+    mkA({ id: 'A1', code: 'IM-20261030-0007', name: '대출상담 서류 묶음', submittedAt: '2026-10-30 14:22', analyzedAt: '2026-10-30 14:31', status: 'done', risk: 'high', review: 'needed', docs: loanDocs(), ...loanResults() }),
+    mkA({ id: 'A2', code: 'IM-20261029-0003', name: '소득증빙 확인', submittedAt: '2026-10-29 10:48', analyzedAt: '2026-10-29 10:52', status: 'done', risk: 'medium', review: 'none', ...incomeSet() }),
+    mkA({ id: 'A3', code: 'IM-20261031-0002', name: '신규 접수 서류', submittedAt: '2026-10-31 14:56', analyzedAt: '', status: 'running', risk: 'unrated', review: 'none', ...newSet() }),
+    mkA({ id: 'A4', code: 'IM-20261030-0002', name: '거래내역 스캔본', submittedAt: '2026-10-30 09:15', analyzedAt: '2026-10-30 09:24', status: 'partial', risk: 'high', review: 'needed', ...scanSet() }),
+    mkA({ id: 'A5', code: 'IM-20261028-0011', name: '마스킹된 상담 서류', submittedAt: '2026-10-28 16:40', analyzedAt: '2026-10-28 16:44', status: 'done', risk: 'low', review: 'none', ...maskedSet() }),
+    mkA({ id: 'A6', code: 'IM-20261030-0011', name: '손상된 문서 파일', submittedAt: '2026-10-30 18:02', analyzedAt: '2026-10-30 18:03', status: 'failed', risk: 'unrated', review: 'needed', ...brokenSet() }),
   ];
   let n = 0;
   list.forEach((a) => {

@@ -1,4 +1,8 @@
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+
+/** 없는 주소 화면(app/not-found.tsx)과 같은 제목 */
+export const metadata: Metadata = { title: '페이지를 찾을 수 없습니다' };
 
 /**
  * /demo 아래의 없는 주소(예: /demo/x/y) — 요청 때 이 경로에서 notFound() 를 불러 404 를 낸다.

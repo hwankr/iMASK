@@ -132,13 +132,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.keep {
-  margin: 0;
-  font-size: var(--fs-14);
-  line-height: var(--lh-160);
-  color: var(--ink-2);
-}
-
 /* 휴대폰 — 2열, 3번째 카드는 새 줄의 첫 카드라 선·왼쪽 여백 없음(원본 first = i===0 || (mob && i===2)) */
 @media (max-width: 767.98px) {
   .cards {

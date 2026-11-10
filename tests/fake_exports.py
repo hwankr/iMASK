@@ -14,7 +14,7 @@ from fake_reviews import ACTOR, SMALL, custom_result
 
 ANALYSIS_ID = "7b944f1e-1234-4abc-8def-0123456789ab"
 CREATED_AT = "2026-11-04T15:00:00+00:00"  # 서울 2026-11-05 00:00
-CODE = "DG-20261105-7B94"
+CODE = "IM-20261105-7B94"
 CSV_NAME = f"iMASK_{CODE}_검토결과_탐지항목.csv"
 JSON_NAME = f"iMASK_{CODE}_검토결과.json"
 OTHER_ID = "3c1d2e4f-aaaa-4bbb-8ccc-dddddddddddd"

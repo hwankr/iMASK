@@ -51,7 +51,7 @@ describe('보고서 표 — 표 이름과 머리 라벨', () => {
       risk.low.label = '검증 하';
       fstatus.false_positive.label = '검증 오탐';
       const h = heads(render(v));
-      // 03 문서 표의 높음 열 + 04 정보 종류 표의 높음·보통·낮음·오탐 열
+      // 03 문서 표의 상 열 + 04 정보 종류 표의 상·중·하·오탐 열
       expect(h.filter((x) => x === '검증 상')).toHaveLength(2);
       expect(h).toEqual(expect.arrayContaining(['검증 중', '검증 하', '검증 오탐']));
       // 원래 ② 라벨이 표 머리에 남아 있지 않다

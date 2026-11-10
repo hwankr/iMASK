@@ -19,9 +19,9 @@ describe('시각 · 분석 번호', () => {
     expect(seoulDateTime('잘못된 값')).toBe('');
   });
 
-  it("분석 번호 = 'DG-' + 서울 날짜 + id 앞 4자 대문자", () => {
-    expect(analysisCode('ab12cd34-0000', '2026-11-02T15:30:00Z')).toBe('DG-20261103-AB12');
-    expect(analysisCode('ab12cd34-0000', '')).toBe('DG-AB12');
+  it("분석 번호 = 'IM-' + 서울 날짜 + id 앞 4자 대문자", () => {
+    expect(analysisCode('ab12cd34-0000', '2026-11-02T15:30:00Z')).toBe('IM-20261103-AB12');
+    expect(analysisCode('ab12cd34-0000', '')).toBe('IM-AB12');
   });
 });
 
@@ -57,7 +57,7 @@ describe('toAnalysis', () => {
   it('대기 — 기본값, 분석 시각 없음, raw 빈 값', () => {
     const a = toAnalysis(analysisOut());
     expect(a.id).toBe('ab12cd34-0000-4000-8000-000000000000');
-    expect(a.code).toBe('DG-20261102-AB12');
+    expect(a.code).toBe('IM-20261102-AB12');
     expect(a.name).toBe('합성 묶음');
     expect(a.submittedAt).toBe('2026-11-02 14:10');
     expect(a.analyzedAt).toBe('');
@@ -88,6 +88,7 @@ describe('toAnalysis', () => {
       createdAt: '2026-11-02T05:10:00.123456+00:00',
       updatedAt: '2026-11-02T05:10:34.900000+00:00',
       startedAt: '',
+      documentCount: null,
     });
   });
 

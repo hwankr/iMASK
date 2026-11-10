@@ -238,8 +238,8 @@ def _raw(size: str = "6127", name: str = CSV_NAME, *, extra: str = "") -> bytes:
         _raw(name=CSV_NAME + "\\ud800"),
         _raw(name=" " + CSV_NAME),
         _raw(name=JSON_NAME),
-        _raw(name="iMASK_DG-20261105-7b94_검토결과_탐지항목.csv"),
-        _raw(name="iMASK_DG-２０２６1105-7B94_검토결과_탐지항목.csv"),
+        _raw(name="iMASK_IM-20261105-7b94_검토결과_탐지항목.csv"),
+        _raw(name="iMASK_IM-２０２６1105-7B94_검토결과_탐지항목.csv"),
         _raw(name="../" + CSV_NAME),
         b'{"type":"log_export","actor":"a","format":"csv","size":6127,"state":"handed","file_name":' + b"[" * 30_000 + b"]" * 30_000 + b"}",
         b'{"type":"log_export","actor":"a","format":"csv","size":6127,"state":"handed","file_name":' + b'{"a":' * 10_000 + b"1" + b"}" * 10_000 + b"}",
@@ -266,7 +266,7 @@ def test_deep_nesting_over_the_limit_is_413_never_500(done: Ctx) -> None:
 
 def test_error_order(done: Ctx) -> None:
     missing = "00000000-0000-4000-8000-000000000000"
-    wrong_name = "iMASK_DG-20261104-7B94_검토결과_탐지항목.csv"  # UTC 날짜 — 이 분석의 이름이 아니다
+    wrong_name = "iMASK_IM-20261104-7B94_검토결과_탐지항목.csv"  # UTC 날짜 — 이 분석의 이름이 아니다
     # 413 → 400 모양
     assert post(done, b"x" * (MAX_BODY_BYTES + 1), analysis_id=missing).status_code == 413
     # 400 모양 → 400 처리자: 처리자도 틀리고 모양도 틀리면 형식
@@ -308,12 +308,12 @@ def test_unreviewable_is_409(ctx: Ctx, status: str, result: Any) -> None:  # noq
 
 def test_names_of_other_analyses_are_400(done: Ctx) -> None:
     put_analysis(done.store, analysis_id=OTHER_ID, created_at="2026-11-04T14:59:59.999999Z")
-    other_name = "iMASK_DG-20261104-3C1D_검토결과_탐지항목.csv"
+    other_name = "iMASK_IM-20261104-3C1D_검토결과_탐지항목.csv"
     for name in (
         other_name,  # 다른 분석의 이름
-        "iMASK_DG-20261104-7B94_검토결과_탐지항목.csv",  # 날짜만 다름(UTC 날짜)
-        "iMASK_DG-20261106-7B94_검토결과_탐지항목.csv",
-        "iMASK_DG-20261105-7B95_검토결과_탐지항목.csv",  # id 4자만 다름
+        "iMASK_IM-20261104-7B94_검토결과_탐지항목.csv",  # 날짜만 다름(UTC 날짜)
+        "iMASK_IM-20261106-7B94_검토결과_탐지항목.csv",
+        "iMASK_IM-20261105-7B95_검토결과_탐지항목.csv",  # id 4자만 다름
     ):
         assert detail(post(done, export_body(file_name=name))) == (400, {"detail": MSG_FORMAT}), name
     assert detail(post(done, export_body(), analysis_id=OTHER_ID)) == (400, {"detail": MSG_FORMAT})
@@ -335,7 +335,7 @@ def test_out_of_range_time_zones_have_no_name_and_write_nothing(ctx: Ctx, zone: 
     # V-T1-1 m1: 파이썬이 보정해 읽던 날짜(예: +00:60 → +01:00 → 서울 11-04)의 이름도, 다음 날 이름도 400
     put_analysis(ctx.store, created_at="2026-11-04T15:00:00" + zone)
     for day in ("20261104", "20261105"):
-        response = post(ctx, export_body(file_name=f"iMASK_DG-{day}-7B94_검토결과_탐지항목.csv"))
+        response = post(ctx, export_body(file_name=f"iMASK_IM-{day}-7B94_검토결과_탐지항목.csv"))
         assert detail(response) == (400, {"detail": MSG_FORMAT}), (zone, day)
     assert ctx.store.review_writes == [] and ctx.store.reviews == {}
 
@@ -346,7 +346,7 @@ def test_out_of_range_time_zones_have_no_name_and_write_nothing(ctx: Ctx, zone: 
 )
 def test_in_range_time_zones_still_work(ctx: Ctx, created_at: str, day: str) -> None:  # noqa: F811
     put_analysis(ctx.store, created_at=created_at)
-    response = post(ctx, export_body(file_name=f"iMASK_DG-{day}-7B94_검토결과_탐지항목.csv"))
+    response = post(ctx, export_body(file_name=f"iMASK_IM-{day}-7B94_검토결과_탐지항목.csv"))
     assert response.status_code == 200 and response.json()["changed"] is True
 
 
@@ -434,3 +434,41 @@ def test_other_nine_actions_still_work_alongside(done: Ctx) -> None:
         assert response.status_code == 200 and response.json()["changed"] is True, (kind, response.text)
     history = done.get(ANALYSIS_ID).json()["review"]["history"]
     assert [h["kind"] for h in history] == ["request", "ai", "confirm", "export", "confirm", "complete", "export", "reopen", "memo"]
+
+
+# --- 분석 번호 머리글자 DG- → IM-(web-polish T2) ---------------------------------------------------------------------
+
+
+def test_new_export_records_accept_only_the_im_prefix(done: Ctx) -> None:
+    from imask_backend.exports import FILE_NAME_RE, LEGACY_FILE_NAME_RE
+
+    legacy = CSV_NAME.replace("iMASK_IM-", "iMASK_DG-", 1)
+    assert CSV_NAME.startswith("iMASK_IM-") and FILE_NAME_RE.fullmatch(CSV_NAME) and LEGACY_FILE_NAME_RE.fullmatch(legacy)
+    assert not FILE_NAME_RE.fullmatch(legacy)
+    response = post(done, export_body(file_name=legacy))
+    assert detail(response) == (400, {"detail": MSG_FORMAT})
+    assert ANALYSIS_ID not in done.store.reviews  # 쓰지 않았다
+    assert post(done, export_body()).status_code == 200
+
+
+def test_stored_legacy_export_line_is_read_back_unchanged(done: Ctx) -> None:
+    legacy = JSON_NAME.replace("iMASK_IM-", "iMASK_DG-", 1)
+    old_line = {
+        "id": "H1",
+        "at": "2026-11-05T01:00:00+00:00",
+        "actor": ACTOR,
+        "kind": "export",
+        "target": legacy,
+        "change": "JSON · 22KB · 저장 완료",
+        "reason": "민감한 값 마스킹",
+    }
+    reopen = {**old_line, "id": "H2", "kind": "reopen", "target": "분석 건", "change": "검토 완료 → 검토 필요", "reason": "옛 글"}
+    done.store.put_review(ANALYSIS_ID, history=[old_line, reopen], version=2)
+    history = done.get(ANALYSIS_ID).json()["review"]["history"]
+    assert [h["id"] for h in history] == ["S1", "S2", "H1", "H2"]
+    assert history[2] == old_line  # 옛 이름 그대로(읽을 때 고쳐 쓰지 않는다)
+    assert history[3]["change"] == "검토 완료 → 검토 필요"  # 저장된 옛 검토 상태 글도 그대로
+    # 그 뒤 새 기록은 IM- 이름으로 이어진다
+    response = post(done, export_body())
+    assert response.status_code == 200
+    assert [h["target"] for h in response.json()["analysis"]["review"]["history"] if h["kind"] == "export"] == [legacy, CSV_NAME]

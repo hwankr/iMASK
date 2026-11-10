@@ -81,10 +81,10 @@ describe('buildExport — 보고서 대상', () => {
     vi.setSystemTime(new Date('2026-11-04T15:00:30Z')); // 서울 2026-11-05 00:00
     const { service, gets, posts } = setup();
     const csv = await service.buildExport(ID, 'csv', '다른브랜드');
-    expect(csv.name).toBe('iMASK_DG-20261102-AB12_검토결과_탐지항목.csv');
+    expect(csv.name).toBe('iMASK_IM-20261102-AB12_검토결과_탐지항목.csv');
     expect(csv.name.startsWith(CONFIG.brandName + '_')).toBe(true);
     const jsonFile = await service.buildExport(ID, 'json', '다른브랜드');
-    expect(jsonFile.name).toBe('iMASK_DG-20261102-AB12_검토결과.json');
+    expect(jsonFile.name).toBe('iMASK_IM-20261102-AB12_검토결과.json');
     const obj = JSON.parse(jsonFile.text);
     expect(obj.보고서).toMatchObject({ 서비스: 'iMASK', 생성시각: '2026.11.05 00:00', 데모데이터: false });
     expect(obj.검토사항).toEqual([]); // 옛 결과(items 없음) — 검토사항 0개, 키는 데모 자리
@@ -162,7 +162,7 @@ describe('buildExport — 아주 긴 원문 값(V-T2-1 V1 회귀)', () => {
 });
 
 describe('logExport — log_export 본문 · 알림 · 오류', () => {
-  const FILE: ExportFile = { format: 'csv', name: 'iMASK_DG-20261102-AB12_검토결과_탐지항목.csv', mime: 'text/csv;charset=utf-8', text: 'x', size: 6127, preview: '' };
+  const FILE: ExportFile = { format: 'csv', name: 'iMASK_IM-20261102-AB12_검토결과_탐지항목.csv', mime: 'text/csv;charset=utf-8', text: 'x', size: 6127, preview: '' };
 
   it('본문은 정확히 6키 — type · actor · format · size · state · file_name, 보내기 전 조회 없음 · 성공하면 알림 한 번', async () => {
     const { service, seen, gets, posts, notified } = setup();
@@ -174,8 +174,8 @@ describe('logExport — log_export 본문 · 알림 · 오류', () => {
     expect(Object.keys(body).sort()).toEqual(['actor', 'file_name', 'format', 'size', 'state', 'type']);
     expect(body).toEqual({ type: 'log_export', actor: CONFIG.user.name, format: 'csv', size: 6127, state: 'handed', file_name: FILE.name });
     expect(notified).toHaveBeenCalledTimes(1);
-    await service.logExport(ID, { ...FILE, format: 'json', name: 'iMASK_DG-20261102-AB12_검토결과.json', size: 22021 }, 'saved');
-    expect(posts()[1].body).toEqual({ type: 'log_export', actor: CONFIG.user.name, format: 'json', size: 22021, state: 'saved', file_name: 'iMASK_DG-20261102-AB12_검토결과.json' });
+    await service.logExport(ID, { ...FILE, format: 'json', name: 'iMASK_IM-20261102-AB12_검토결과.json', size: 22021 }, 'saved');
+    expect(posts()[1].body).toEqual({ type: 'log_export', actor: CONFIG.user.name, format: 'json', size: 22021, state: 'saved', file_name: 'iMASK_IM-20261102-AB12_검토결과.json' });
     expect(notified).toHaveBeenCalledTimes(2);
   });
 

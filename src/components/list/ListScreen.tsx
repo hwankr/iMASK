@@ -167,7 +167,7 @@ function ListView({ filters, setFilters }: { filters: ListFilters; setFilters: S
             }}
           />
           <section aria-label="분석 목록" className={styles.listSection}>
-            <ListToolbar all={shown} filters={filters} setFilters={setFilters} mobile={mobile} />
+            <ListToolbar all={shown} filters={filters} setFilters={setFilters} mobile={mobile} live={live} />
             <ResultBar model={m} onReset={resetFilters} />
             {mobile ? (
               <AnalysisCardList model={m} replay={replay} onShowError={showError} onReset={resetFilters} />

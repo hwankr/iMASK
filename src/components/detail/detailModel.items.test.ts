@@ -42,7 +42,7 @@ describe('검토 필요 탭 — 실제 분석', () => {
     const rs = results(a);
     expect(rs.tabs.map((t) => [t.value, t.label, t.count, t.tone])).toEqual([
       ['findings', '탐지 항목', 19, 'default'],
-      ['review', '검토 필요', 8, 'warn'],
+      ['review', '검토사항', 8, 'warn'],
       ['summary', '분석 요약', undefined, 'default'],
     ]);
     const resolved = liveAnalysis({ items: { 'lowconf:0': { resolved: true }, 'other:5': { resolved: true } } });
@@ -219,7 +219,7 @@ describe('검토 완료 모달 · 남은 항목으로 가기 — 미해결 검�
     const a = liveAnalysis({ items: { 'lowconf:0': { resolved: true } } });
     const c = completeModel(a, pendingOf(a));
     expect(c.any).toBe(true);
-    expect(c.lines).toEqual(['미확인 탐지 항목 19건 (위험등급 높음 2건 포함)', '해결되지 않은 검토사항 7건']);
+    expect(c.lines).toEqual(['미확인 탐지 항목 19건 (위험등급 상 2건 포함)', '해결되지 않은 검토사항 7건']);
     expect(c.items).toHaveLength(5);
     expect(c.items[0]).toEqual({ id: 'R-02', label: '필수 항목 없음 · 신청인 성명이 없습니다', go: { kind: 'item', id: 'R-02' } });
     expect(c.items.every((i) => i.go.kind === 'item')).toBe(true);

@@ -15,7 +15,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { LiveReportNotice } from '@/components/live/LiveReportNotice';
-import { Button, Icon, Skeleton, VisuallyHidden } from '@/components/ui';
+import { Button, Skeleton, VisuallyHidden } from '@/components/ui';
 import type { ExportFormat } from '@/display/rules';
 import { downloadFile } from '@/lib/download';
 import { fmtDT, nowStr } from '@/lib/format';
@@ -159,10 +159,6 @@ function ReportBody({ analysis: a, initial }: { analysis: Analysis; initial?: Re
             상세 검토로 돌아가기
           </Button>
           <div className={styles.barRight}>
-            <span className={styles.maskNote}>
-              <Icon name="dg-i-eye-off" size={15} />
-              민감한 값은 마스킹된 형태로 내보냅니다
-            </span>
             <Button
               variant="primary"
               size="lg"

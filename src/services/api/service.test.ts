@@ -208,7 +208,7 @@ describe('get', () => {
   it('GET → 매핑(알림 없음)', async () => {
     const { service, notified } = setup(() => json(200, analysisOut({ status: 'done', result: doneResult(), started_at: '2026-11-02T05:10:01Z' })));
     const a = await service.get(ID);
-    expect(a).toMatchObject({ id: ID, status: 'done', risk: 'high', code: 'DG-20261102-AB12' });
+    expect(a).toMatchObject({ id: ID, status: 'done', risk: 'high', code: 'IM-20261102-AB12' });
     expect(a?.raw?.startedAt).toBe('2026-11-02T05:10:01Z');
     expect(notified).not.toHaveBeenCalled();
   });

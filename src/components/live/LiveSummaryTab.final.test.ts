@@ -109,8 +109,10 @@ describe('finalFlowRows — 묶음 검증 · 문서 간 연결 줄(값이 있을
   it('판정 라벨 + 실패 규칙 수', () => {
     expect(finalFlowRows({ verdict: 'green', failed: 0 }, [])).toEqual([{ key: 'bundle', label: '묶음 검증', value: '통과' }]);
     expect(finalFlowRows({ verdict: 'yellow', failed: 0 }, [])[0].value).toBe('주의');
-    expect(finalFlowRows({ verdict: 'red', failed: 2 }, [])[0].value).toBe('실패 · 실패 2');
-    expect(finalFlowRows({ verdict: '', failed: 1 }, [])[0].value).toBe('실패 1');
+    expect(finalFlowRows({ verdict: 'red', failed: 2 }, [])[0].value).toBe('실패 2건');
+    expect(finalFlowRows({ verdict: '', failed: 1 }, [])[0].value).toBe('실패 1건'); // 판정 라벨을 모르면 '실패 n건'
+    expect(finalFlowRows({ verdict: 'yellow', failed: 1 }, [])[0].value).toBe('주의 1건');
+    expect(finalFlowRows({ verdict: '', failed: 0 }, [])).toEqual([]);
   });
 
   it('연결 수 · 확인 필요 수', () => {
@@ -138,7 +140,7 @@ describe('LiveSummaryTab 마크업', () => {
     ]);
     expect(unescape(m)).toContain(`>${d.reason as string}</p>`);
     expect(rows.slice(2).map(([k]) => k)).toEqual(['docs', 'extracted', 'final', 'other', 'bundle', 'links', 'took', 'job']);
-    expect(rows.find(([k]) => k === 'bundle')?.[2]).toBe('실패 · 실패 1');
+    expect(rows.find(([k]) => k === 'bundle')?.[2]).toBe('실패 1건');
     expect(rows.find(([k]) => k === 'links')?.[2]).toBe('연결 1 · 확인 필요 2');
     // 판정 본문(overall.text)은 표가 대신한다 · 머리는 배지 '검토 필요'(같은 등급 글은 숨김)
     expect(m).not.toContain('판단됩니다');
@@ -183,8 +185,8 @@ describe('LiveSummaryTab 마크업', () => {
     ]);
     // 개수는 보이지 않는다(항목 종류를 세어 표의 행을 따로 세는 탐지 항목 탭의 수와 달라 보인다) — 이름은 낭독기용
     expect(m).not.toContain('개 항목');
-    expect(m).toContain('aria-label="보통 등급 항목"');
-    expect(m).toContain('aria-label="낮음 등급 항목"');
+    expect(m).toContain('aria-label="중 등급 항목"');
+    expect(m).toContain('aria-label="하 등급 항목"');
     expect(m).toContain('체크카드 가입신청서</p>');
     expect(m).toContain('성명 한글</li>');
     expect(m).not.toContain('체크카드_가입신청서');

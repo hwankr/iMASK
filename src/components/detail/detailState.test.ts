@@ -31,7 +31,7 @@ async function analysis(id: string): Promise<Analysis> {
 }
 
 describe('처음 상태 — 원본 openDetail · detailState', () => {
-  it('실제 화면 이동이면 미확인 항목 중 위험이 가장 높은 것이 높음일 때 그 항목을 고르고 그 위치로 스크롤한다', async () => {
+  it('실제 화면 이동이면 미확인 항목 중 위험이 가장 높은 것이 상일 때 그 항목을 고르고 그 위치로 스크롤한다', async () => {
     const a = await analysis('A1');
     const expected = a.findings.filter((f) => f.status === 'open').sort(byRisk)[0];
     expect(expected.risk).toBe('high');
@@ -55,7 +55,7 @@ describe('처음 상태 — 원본 openDetail · detailState', () => {
     expect(plan.card).toBeUndefined();
   });
 
-  it('미확인 고위험이 없으면 고르지 않는다(A5 — 모두 확인함)', async () => {
+  it('미확인 상 등급이 없으면 고르지 않는다(A5 — 모두 확인함)', async () => {
     const a = await analysis('A5');
     expect(autoFocus(a)).toBeNull();
   });

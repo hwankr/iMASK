@@ -132,6 +132,27 @@
   font-size: var(--fs-14);
   color: var(--ink-2);
 }
+/* 분석 중 — 떠나도 계속된다는 한 줄(왼쪽) + '목록으로'(오른쪽). 좁은 폭에서는 버튼이 아래로 */
+.runLeave {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-8) var(--space-16);
+}
+.runLeaveText {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-14);
+  line-height: var(--lh-155);
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.runLeaveButton.runLeaveButton {
+  flex: none;
+  min-height: var(--touch-min);
+}
 .soft {
   margin: 0;
   display: flex;
@@ -270,6 +291,10 @@
   }
   .card {
     padding: var(--space-16);
+  }
+  .runLeave {
+    flex-direction: column;
+    align-items: flex-start;
   }
   .back::after {
     content: '';

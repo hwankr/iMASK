@@ -1,22 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { doneResult } from '@/services/api/testing';
 import {
+  LIVE_MAX_FILES,
   LIVE_MAX_FILE_BYTES,
   MSG_BAD_TYPE,
   MSG_EMPTY_FILE,
-  MSG_ONE_FILE_ONLY,
-  MSG_PICK_FILE,
   MSG_TOO_LARGE,
+  MSG_TOO_MANY,
   MSG_TYPE_MISMATCH,
+  addLiveFiles,
   analysisNameFor,
-  checkLiveFiles,
   docTypeName,
   durationText,
   elapsedText,
   fileLine,
   isPolling,
   judgeLevelText,
+  liveFileProblem,
   nextStageTitle,
+  pickErrorLines,
   progressSteps,
   riskText,
   stageLabel,
@@ -27,33 +29,117 @@ import {
   upstageStatusText,
 } from './liveModel';
 
-const pdf = (name = '묶음.pdf', size = 1000, type = 'application/pdf') => ({ name, size, type });
+const pdf = (name = '묶음.pdf', size = 1000, type = 'application/pdf', lastModified = 1) => ({ name, size, type, lastModified });
+const none = { type: 0, mismatch: 0, empty: 0, size: 0, limit: 0 };
 
 describe('파일 검사', () => {
-  it('PDF·PNG·JPEG 하나, 20MB 이하면 통과', () => {
-    expect(checkLiveFiles([pdf()])).toEqual({ ok: true });
-    expect(checkLiveFiles([pdf('스캔.PNG', 10, 'image/png')])).toEqual({ ok: true });
-    expect(checkLiveFiles([pdf('사진.jpeg', 10, 'image/jpeg')])).toEqual({ ok: true });
-    expect(checkLiveFiles([pdf('사진.jpg', 10, '')])).toEqual({ ok: true }); // 브라우저가 형식을 비워 둔 경우
-    expect(checkLiveFiles([pdf('a.pdf', LIVE_MAX_FILE_BYTES)])).toEqual({ ok: true });
+  it('PDF·PNG·JPEG, 20MB 이하면 통과', () => {
+    expect(liveFileProblem(pdf())).toBeNull();
+    expect(liveFileProblem(pdf('스캔.PNG', 10, 'image/png'))).toBeNull();
+    expect(liveFileProblem(pdf('사진.jpeg', 10, 'image/jpeg'))).toBeNull();
+    expect(liveFileProblem(pdf('사진.jpg', 10, ''))).toBeNull(); // 브라우저가 형식을 비워 둔 경우
+    expect(liveFileProblem(pdf('a.pdf', LIVE_MAX_FILE_BYTES))).toBeNull();
   });
 
-  it('개수 · 확장자 · 형식 · 크기 위반은 한국어 오류', () => {
-    expect(checkLiveFiles([])).toEqual({ ok: false, error: MSG_PICK_FILE });
-    expect(checkLiveFiles([pdf(), pdf('b.pdf')])).toEqual({ ok: false, error: MSG_ONE_FILE_ONLY });
-    expect(checkLiveFiles([pdf('메모.txt', 10, 'text/plain')])).toEqual({ ok: false, error: MSG_BAD_TYPE });
-    expect(checkLiveFiles([pdf('확장자없음', 10, 'application/pdf')])).toEqual({ ok: false, error: MSG_BAD_TYPE });
-    expect(checkLiveFiles([pdf('가짜.pdf', 10, 'image/png')])).toEqual({ ok: false, error: MSG_TYPE_MISMATCH });
-    expect(checkLiveFiles([pdf('빈.pdf', 0)])).toEqual({ ok: false, error: MSG_EMPTY_FILE });
-    expect(checkLiveFiles([pdf('큰.pdf', LIVE_MAX_FILE_BYTES + 1)])).toEqual({ ok: false, error: MSG_TOO_LARGE });
+  it('확장자 · 형식 · 빈 파일 · 크기 위반은 이유', () => {
+    expect(liveFileProblem(pdf('메모.txt', 10, 'text/plain'))).toBe('type');
+    expect(liveFileProblem(pdf('확장자없음', 10, 'application/pdf'))).toBe('type');
+    expect(liveFileProblem(pdf('가짜.pdf', 10, 'image/png'))).toBe('mismatch');
+    expect(liveFileProblem(pdf('빈.pdf', 0))).toBe('empty');
+    expect(liveFileProblem(pdf('큰.pdf', LIVE_MAX_FILE_BYTES + 1))).toBe('size');
     expect(MSG_TOO_LARGE).toBe('파일은 20MB 이하여야 합니다.');
   });
 
-  it('파일 줄 · 분석명(비면 파일 이름, 60자)', () => {
+  it('파일 줄', () => {
     expect(fileLine({ name: '묶음.pdf', size: 322053 })).toBe('묶음.pdf · 315KB');
-    expect(analysisNameFor('  합성 묶음 ', 'a.pdf')).toBe('합성 묶음');
-    expect(analysisNameFor('   ', 'iMASK_smoke_bundle.pdf')).toBe('iMASK_smoke_bundle.pdf');
-    expect(analysisNameFor('', 'ㄱ'.repeat(70) + '.pdf')).toHaveLength(60);
+  });
+});
+
+describe('파일 담기 — 누적 · 건너뜀 · 한도', () => {
+  it('한도는 설정의 maxFiles(10), 한도 문구', () => {
+    expect(LIVE_MAX_FILES).toBe(10);
+    expect(MSG_TOO_MANY).toBe('파일은 한 번에 10개까지 올릴 수 있습니다.');
+  });
+
+  it('고른 순서대로 지금 목록 뒤에 더한다', () => {
+    const a = pdf('a.pdf');
+    const b = pdf('b.pdf');
+    const c = pdf('c.pdf');
+    const first = addLiveFiles([], [a, b]);
+    expect(first).toEqual({ files: [a, b], added: [a, b], rejected: none, picked: 2 });
+    const second = addLiveFiles(first.files, [c]);
+    expect(second.files).toEqual([a, b, c]);
+    expect(second.added).toEqual([c]);
+  });
+
+  it('이름 · 크기 · lastModified 가 모두 같으면 조용히 건너뛴다(같은 고르기 안 포함) — 하나라도 다르면 담는다', () => {
+    const a = pdf('a.pdf', 100, 'application/pdf', 5);
+    const r = addLiveFiles([a], [pdf('a.pdf', 100, 'application/pdf', 5), pdf('b.pdf'), pdf('b.pdf')]);
+    expect(r.files.map((f) => f.name)).toEqual(['a.pdf', 'b.pdf']);
+    expect(r.rejected).toEqual(none);
+    expect(pickErrorLines(r)).toEqual([]);
+    const differ = addLiveFiles([a], [pdf('a.pdf', 101, 'application/pdf', 5), pdf('a.pdf', 100, 'application/pdf', 6), pdf('A.pdf', 100, 'application/pdf', 5)]);
+    expect(differ.added).toHaveLength(3);
+  });
+
+  it('한도에 닿으면 담지 않고 한도로 센다 — 검사 실패 · 겹침이 먼저', () => {
+    const nine = Array.from({ length: 9 }, (_, i) => pdf(`f${i}.pdf`));
+    const r = addLiveFiles(nine, [pdf('x.pdf'), pdf('y.pdf'), pdf('메모.txt', 1, 'text/plain'), pdf('f0.pdf'), pdf('z.pdf')]);
+    expect(r.files).toHaveLength(10);
+    expect(r.added.map((f) => f.name)).toEqual(['x.pdf']);
+    expect(r.rejected).toEqual({ ...none, type: 1, limit: 2 });
+    expect(addLiveFiles([], Array.from({ length: 11 }, (_, i) => pdf(`g${i}.pdf`))).rejected.limit).toBe(1);
+    expect(addLiveFiles([pdf('a.pdf')], [pdf('b.pdf')], 1).rejected.limit).toBe(1);
+  });
+
+  it('오류 줄 — 이유마다 한 줄, 고정 순서. 1개를 골랐으면 이유 문구만, 2개 이상이면 개수와 함께', () => {
+    expect(pickErrorLines(addLiveFiles([], [pdf('메모.txt', 1, 'text/plain')]))).toEqual([MSG_BAD_TYPE]);
+    expect(pickErrorLines(addLiveFiles([], [pdf('빈.pdf', 0)]))).toEqual([MSG_EMPTY_FILE]);
+    const mixed = addLiveFiles(
+      Array.from({ length: 8 }, (_, i) => pdf(`f${i}.pdf`)),
+      [
+        pdf('큰.pdf', LIVE_MAX_FILE_BYTES + 1),
+        pdf('a.pdf'),
+        pdf('메모.txt', 1, 'text/plain'),
+        pdf('가짜.pdf', 1, 'image/png'),
+        pdf('b.pdf'),
+        pdf('빈.pdf', 0),
+        pdf('c.pdf'),
+        pdf('d.hwp', 1, ''),
+        pdf('e.pdf'),
+      ],
+    );
+    expect(mixed.added.map((f) => f.name)).toEqual(['a.pdf', 'b.pdf']);
+    expect(pickErrorLines(mixed)).toEqual([
+      `2개를 담지 못했습니다. ${MSG_BAD_TYPE}`,
+      `1개를 담지 못했습니다. ${MSG_TYPE_MISMATCH}`,
+      `1개를 담지 못했습니다. ${MSG_EMPTY_FILE}`,
+      `1개를 담지 못했습니다. ${MSG_TOO_LARGE}`,
+      `2개를 담지 못했습니다. ${MSG_TOO_MANY}`,
+    ]);
+    expect(pickErrorLines(addLiveFiles([pdf('a.pdf')], [pdf('b.pdf')], 1))).toEqual([MSG_TOO_MANY]);
+  });
+});
+
+describe('분석명 — 파일마다 분석 1건', () => {
+  it('비면 파일 이름, 하나면 입력한 이름, 여러 개면 "입력 · 파일 이름"', () => {
+    expect(analysisNameFor('  합성 묶음 ', 'a.pdf', false)).toBe('합성 묶음');
+    expect(analysisNameFor('   ', ' iMASK_smoke_bundle.pdf ', false)).toBe('iMASK_smoke_bundle.pdf');
+    expect(analysisNameFor('', 'a.pdf', true)).toBe('a.pdf');
+    expect(analysisNameFor(' 합성 묶음 ', ' a.pdf ', true)).toBe('합성 묶음 · a.pdf');
+  });
+
+  it('60자(UTF-16 단위)까지 — 자른 끝이 짝 없는 high surrogate 면 하나 더 뺀다', () => {
+    expect(analysisNameFor('', 'ㄱ'.repeat(70) + '.pdf', false)).toHaveLength(60);
+    expect(analysisNameFor('ㄴ'.repeat(60), 'a.pdf', false)).toBe('ㄴ'.repeat(60));
+    expect(analysisNameFor('ㄴ'.repeat(55), 'abcdef.pdf', true)).toBe('ㄴ'.repeat(55) + ' · ab');
+    // 59자 + 이모지(서로게이트 쌍) — 60자에서 자르면 high 만 남으므로 59자
+    const emoji = '\u{1F600}';
+    expect(analysisNameFor('', 'ㄷ'.repeat(59) + emoji + '.pdf', false)).toBe('ㄷ'.repeat(59));
+    expect(analysisNameFor('ㄹ'.repeat(57), emoji + '.pdf', true)).toBe('ㄹ'.repeat(57) + ' · ');
+    expect(analysisNameFor('', 'ㄷ'.repeat(58) + emoji + '.pdf', false)).toBe('ㄷ'.repeat(58) + emoji);
+    // 자르지 않을 때는 그대로(60자 이하)
+    expect(analysisNameFor('', 'ㄷ'.repeat(58) + emoji, false)).toBe('ㄷ'.repeat(58) + emoji);
   });
 });
 

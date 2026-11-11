@@ -4,7 +4,8 @@
    상세 — 실제 분석 모드(/analyses/[id], 실제 모드 빌드 · 주소 기준 모드 'api')
    - useAnalysis(id) 로만 데이터를 받는다. 대기·분석 중인 동안 3초마다 refresh()(앞 요청이 끝난 뒤 다음,
      탭이 숨겨지면 쉬고 다시 보이면 바로 한 번). 조회할 때마다 백엔드가 Upstage 상태를 한 번 확인한다.
-   - 대기·분석 중: 흐르는 막대 + 안내 + Upstage 상태(+ 확인 실패 문구). 경과는 마지막으로 시작한 시각(started_at — 다시 분석이면
+   - 대기·분석 중: 흐르는 막대 + 안내 + Upstage 상태(+ 확인 실패 문구). 분석 중(running)일 때만 그 아래에 '화면을 떠나도 분석은
+     계속됩니다.' 한 줄과 '목록으로'(목록 첫 화면 — 목록이 진행 중 행을 스스로 확인해 완료를 보인다). 경과는 마지막으로 시작한 시각(started_at — 다시 분석이면
      그 요청 때, 없으면 요청 시각)부터. 실패: 오류 문구 그대로 + '다시 분석'(같은 원본으로 다시 — 요청 중 버튼 막힘, 시작하면
      서비스 알림으로 다시 불러와 진행 화면 · 주기 조회로 바뀐다) · '새 분석'.
      완료 + 공통 계약 결과(raw.detailReady): 데모와 같은 상세 검토 화면(DetailView — 문서 목록 · 원본 파일 원문과 위치 상자 ·
@@ -153,6 +154,15 @@ function LiveView({ a, refreshError, onDelete }: { a: Analysis; refreshError: st
             <p className={styles.runSub}>
               Upstage 상태: <strong>{upstageStatusText(raw?.upstageStatus ?? '')}</strong>
             </p>
+            {/* 분석 중일 때만(대기는 시작 전이라 사실이 아닐 수 있다) — 목록이 진행 중 행을 스스로 확인해 완료를 보인다 */}
+            {a.status === 'running' ? (
+              <div className={styles.runLeave}>
+                <p className={styles.runLeaveText}>화면을 떠나도 분석은 계속됩니다.</p>
+                <Button variant="secondary" size="lg" href={listHref(base)} className={styles.runLeaveButton}>
+                  목록으로
+                </Button>
+              </div>
+            ) : null}
             {raw?.pollError ? (
               <p className={styles.soft}>
                 <Icon name="dg-i-info" size={15} /> 이번 확인은 실패했습니다: {raw.pollError} 분석은 계속되며 다음 확인에서 다시 봅니다.

@@ -180,24 +180,103 @@
   border-color: var(--err);
   background: var(--err-bg);
 }
-.fileName {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-10);
-  min-width: 0;
-  color: var(--accent);
+/* 파일을 담으면 — 위에 목록, 아래 오른쪽에 '파일 추가' */
+.fileBoxFull {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-12);
 }
-.fileText {
+.fileBoxFull .pick {
+  align-self: flex-end;
+}
+
+/* ---------- 담긴 파일 목록 ---------- */
+.fileList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
   display: flex;
   flex-direction: column;
   min-width: 0;
-  color: var(--ink);
+}
+.fileRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-10);
+  min-width: 0;
+  padding: var(--space-10) 0;
+  border-top: 1px solid var(--line);
+}
+.fileRow:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.fileIcon {
+  flex: none;
+  display: inline-flex;
+  align-self: flex-start;
+  margin-top: var(--space-2);
+  color: var(--accent);
+}
+.fileInfo {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+/* 긴 이름은 줄을 바꾼다(가로로 넘치지 않게) */
+.fileRowName {
   font-size: var(--fs-15);
+  font-weight: var(--fw-bold);
+  color: var(--ink);
   overflow-wrap: anywhere;
 }
-.fileSize {
+.fileMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-10);
+  min-width: 0;
   font-size: var(--fs-13);
   color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.rowWaiting {
+  font-weight: var(--fw-semibold);
+}
+.rowSending {
+  display: inline-flex;
+  color: var(--run);
+}
+.rowStarted {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-weight: var(--fw-bold);
+  color: var(--accent-ink);
+}
+.rowFailed {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-8);
+  min-width: 0;
+  font-weight: var(--fw-semibold);
+  color: var(--err);
+  overflow-wrap: anywhere;
+}
+.rowLink {
+  position: relative;
+  color: var(--accent-ink);
+  font-weight: var(--fw-bold);
+  text-decoration: underline;
+  text-underline-offset: var(--space-3);
+}
+/* 빼기 — 공통 아이콘 버튼(36 · muted). 요청 중에는 흐리게 */
+.remove.remove:disabled {
+  color: var(--ink-3);
+  opacity: .4;
 }
 .filePlaceholder {
   font-size: var(--fs-15);
@@ -228,6 +307,12 @@
 }
 .fileInput:disabled {
   cursor: not-allowed;
+}
+/* 못 담은 이유 — 이유마다 한 줄 */
+.fileHelpLines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 .fileHelp {
   font-size: var(--fs-13);
@@ -334,7 +419,8 @@
     flex: 2 1 0;
     min-width: 0;
   }
-  .back::after {
+  .back::after,
+  .rowLink::after {
     content: '';
     position: absolute;
     top: 50%;

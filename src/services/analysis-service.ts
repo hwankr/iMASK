@@ -130,7 +130,10 @@ export interface AnalysisService {
   pending(id: string): Promise<Pending>;
   /** 샘플 문서 3개를 업로드 파일 형태로 준다(데모 전용 기능). 실제 분석에서는 빈 목록 */
   sampleFiles(): Promise<UploadFile[]>;
-  /** 분석을 요청하고 분석 ID를 돌려준다. 실제: POST /api/py/analyses → Supabase 서명 업로드 → POST /api/py/analyses/{id}/start → ID 반환, 이후 GET 조회로 진행 확인 */
+  /**
+   * 분석을 요청하고 분석 ID를 돌려준다. 실제: 파일 1개 = 분석 1건 — POST /api/py/analyses → Supabase 서명 업로드 →
+   * POST /api/py/analyses/{id}/start → ID 반환, 이후 GET 조회로 진행 확인. 실제 분석 새 화면은 파일마다 한 번씩 차례로 부른다.
+   */
   requestAnalysis(input: RequestAnalysisInput): Promise<string>;
   /**
    * 실패한 문서(docId 없으면 전부)를 다시 분석한다. 데모에서는 같은 이유로 다시 실패한다.

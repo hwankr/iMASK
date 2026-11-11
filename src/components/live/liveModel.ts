@@ -1,6 +1,8 @@
 /* ==========================================================================
    실제 분석 화면 모델 — 순수 함수만(React·서비스 없음). 테스트 대상.
-   - 파일 검사(개수 1 · PDF·PNG·JPEG · 20MB 이하), 분석명, 진행 단계, 폴링 여부,
+   - 파일 담기(한 번에 LIVE_MAX_FILES 개까지 · 파일마다 PDF·PNG·JPEG · 20MB 이하 — 고른 순서대로 하나씩: 형식·크기 검사 →
+     이미 담긴 파일(이름·크기·lastModified 가 모두 같음)은 조용히 건너뜀 → 한도), 못 담은 이유별 오류 줄,
+     분석명(파일마다 분석 1건 — 여러 개면 '입력한 이름 · 파일 이름'), 진행 단계, 폴링 여부,
      경과·걸린 시간 문구(시작 시각 = startedAt, 없으면 createdAt — timingStart)
    - 결과 요약 줄(result.summary), 단계별 결과 목록(result.stages), 서류 종류·위험도·단계 라벨
    - 최종 흐름 워크플로우 · 설정 60: 위험도 판정 칸(raw.decision — 판단 근거 · 값이 있는 줄 · 등급별 항목), 결과 요약에 더하는 묶음 검증 · 문서 간 연결 줄(값이 있을 때만)
@@ -15,8 +17,8 @@ import type { DocLink, RawBundleCheck, RawDecision } from '@/services/types';
 
 /* ---------- 파일 검사 ---------- */
 
-/** 실제 분석은 묶음 PDF(또는 이미지) 하나를 받는다 */
-export const LIVE_MAX_FILES = 1;
+/** 한 번에 담을 수 있는 파일 수 — 파일(묶음 PDF 또는 이미지) 하나가 분석 1건이다 */
+export const LIVE_MAX_FILES: number = CONFIG.upload.maxFiles;
 export const LIVE_MAX_FILE_MB: number = CONFIG.upload.maxFileMB;
 export const LIVE_MAX_FILE_BYTES = LIVE_MAX_FILE_MB * 1024 * 1024;
 /** 분석명 최대 글자 수(백엔드와 같다) */
@@ -34,11 +36,11 @@ const TYPES_BY_EXT: Record<string, readonly string[]> = {
 export const LIVE_ACCEPT = '.pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg';
 
 export const MSG_PICK_FILE = '분석할 파일을 골라 주세요.';
-export const MSG_ONE_FILE_ONLY = '실제 분석에는 파일 1개만 올릴 수 있습니다.';
 export const MSG_BAD_TYPE = 'PDF·PNG·JPEG 파일만 올릴 수 있습니다.';
 export const MSG_TYPE_MISMATCH = '파일 형식과 확장자가 맞지 않습니다.';
 export const MSG_EMPTY_FILE = '빈 파일은 올릴 수 없습니다.';
 export const MSG_TOO_LARGE = `파일은 ${LIVE_MAX_FILE_MB}MB 이하여야 합니다.`;
+export const MSG_TOO_MANY = `파일은 한 번에 ${LIVE_MAX_FILES}개까지 올릴 수 있습니다.`;
 
 /** 브라우저 File 에서 쓰는 값 */
 export interface PickedLiveFile {
@@ -46,9 +48,20 @@ export interface PickedLiveFile {
   size: number;
   /** 브라우저가 붙인 형식(비어 있을 수 있다) */
   type: string;
+  /** 마지막으로 바뀐 시각(밀리초) — 같은 파일을 다시 골랐는지 가를 때 */
+  lastModified: number;
 }
 
-export type FileCheck = { ok: true } | { ok: false; error: string };
+/** 담지 못한 이유 — 오류 줄은 이 순서로(형식 → 형식 불일치 → 빈 파일 → 크기 → 한도) */
+export type PickReason = 'type' | 'mismatch' | 'empty' | 'size' | 'limit';
+export const PICK_REASONS: readonly PickReason[] = ['type', 'mismatch', 'empty', 'size', 'limit'];
+const PICK_REASON_MSG: Record<PickReason, string> = {
+  type: MSG_BAD_TYPE,
+  mismatch: MSG_TYPE_MISMATCH,
+  empty: MSG_EMPTY_FILE,
+  size: MSG_TOO_LARGE,
+  limit: MSG_TOO_MANY,
+};
 
 /** 파일 이름의 확장자(소문자, 점 없이). 없으면 '' */
 export function fileExt(name: string): string {
@@ -56,17 +69,67 @@ export function fileExt(name: string): string {
   return m ? m[1].toLowerCase() : '';
 }
 
-/** 고른 파일 검사 — 개수 · 확장자 · 형식 · 크기 */
-export function checkLiveFiles(files: readonly PickedLiveFile[]): FileCheck {
-  if (files.length === 0) return { ok: false, error: MSG_PICK_FILE };
-  if (files.length > LIVE_MAX_FILES) return { ok: false, error: MSG_ONE_FILE_ONLY };
-  const f = files[0];
+/** 파일 하나 검사 — 확장자 · 형식 · 빈 파일 · 크기. 통과하면 null */
+export function liveFileProblem(f: Pick<PickedLiveFile, 'name' | 'size' | 'type'>): Exclude<PickReason, 'limit'> | null {
   const types = TYPES_BY_EXT[fileExt(f.name)];
-  if (!types) return { ok: false, error: MSG_BAD_TYPE };
-  if (f.type && !types.includes(f.type.toLowerCase())) return { ok: false, error: MSG_TYPE_MISMATCH };
-  if (!(f.size > 0)) return { ok: false, error: MSG_EMPTY_FILE };
-  if (f.size > LIVE_MAX_FILE_BYTES) return { ok: false, error: MSG_TOO_LARGE };
-  return { ok: true };
+  if (!types) return 'type';
+  if (f.type && !types.includes(f.type.toLowerCase())) return 'mismatch';
+  if (!(f.size > 0)) return 'empty';
+  if (f.size > LIVE_MAX_FILE_BYTES) return 'size';
+  return null;
+}
+
+/** 같은 파일인지 — 이름 · 크기 · lastModified 가 모두 같으면 */
+export function sameLiveFile(a: Pick<PickedLiveFile, 'name' | 'size' | 'lastModified'>, b: Pick<PickedLiveFile, 'name' | 'size' | 'lastModified'>): boolean {
+  return a.name === b.name && a.size === b.size && a.lastModified === b.lastModified;
+}
+
+/** 파일 담기 결과 */
+export interface AddLiveFilesResult<T> {
+  /** 새 목록(지금 목록 + 담은 파일, 고른 순서대로) */
+  files: T[];
+  /** 이번에 담은 파일 */
+  added: T[];
+  /** 이유별 못 담은 수(이미 담긴 파일은 세지 않는다) */
+  rejected: Record<PickReason, number>;
+  /** 이번에 고른 수 */
+  picked: number;
+}
+
+/**
+ * 고른 파일을 지금 목록 뒤에 더한다(누적) — 고른 순서대로 하나씩:
+ * ① 형식 · 크기 검사에 걸리면 담지 않고 그 이유로 센다 ② 이미 담긴 파일(같은 고르기 안에서 앞에 담은 것 포함)과 같으면
+ * 조용히 건너뛴다 ③ 목록이 한도에 닿았으면 담지 않고 '한도'로 센다.
+ */
+export function addLiveFiles<T extends PickedLiveFile>(current: readonly T[], picked: readonly T[], max: number = LIVE_MAX_FILES): AddLiveFilesResult<T> {
+  const files = [...current];
+  const added: T[] = [];
+  const rejected: Record<PickReason, number> = { type: 0, mismatch: 0, empty: 0, size: 0, limit: 0 };
+  for (const f of picked) {
+    const problem = liveFileProblem(f);
+    if (problem) {
+      rejected[problem] += 1;
+      continue;
+    }
+    if (files.some((g) => sameLiveFile(g, f))) continue;
+    if (files.length >= max) {
+      rejected.limit += 1;
+      continue;
+    }
+    files.push(f);
+    added.push(f);
+  }
+  return { files, added, rejected, picked: picked.length };
+}
+
+/**
+ * 못 담은 파일의 오류 줄 — 이유마다 한 줄(PICK_REASONS 순서). 이번에 고른 파일이 1개면 이유 문구만,
+ * 2개 이상이면 '{c}개를 담지 못했습니다. {이유 문구}'.
+ */
+export function pickErrorLines(result: Pick<AddLiveFilesResult<unknown>, 'rejected' | 'picked'>): string[] {
+  return PICK_REASONS.filter((r) => result.rejected[r] > 0).map((r) =>
+    result.picked === 1 ? PICK_REASON_MSG[r] : `${result.rejected[r]}개를 담지 못했습니다. ${PICK_REASON_MSG[r]}`,
+  );
 }
 
 /** 고른 파일 한 줄 — '묶음.pdf · 315KB' */
@@ -74,10 +137,19 @@ export function fileLine(f: Pick<PickedLiveFile, 'name' | 'size'>): string {
   return `${f.name} · ${fmtSize(f.size)}`;
 }
 
-/** 보낼 분석명 — 앞뒤 공백을 떼고, 비면 파일 이름(60자까지) */
-export function analysisNameFor(name: string, fileName: string): string {
+/**
+ * 보낼 분석명(파일 하나 = 분석 1건) — n = 입력한 분석명 앞뒤 공백 뗀 것, f = 파일 이름 앞뒤 공백 뗀 것.
+ * n 이 비면 f, n 이 있고 multi(분석 시작을 누른 때 목록의 행이 2개 이상)가 아니면 n, multi 면 'n · f'.
+ * 결과는 LIVE_NAME_MAX(60, UTF-16 단위)까지 — 자른 끝이 짝 없는 high surrogate 면 하나 더 뺀다(자르기가 짝 없는 서로게이트를 만들지 않게).
+ */
+export function analysisNameFor(name: string, fileName: string, multi: boolean): string {
   const n = name.trim();
-  return (n || fileName.trim()).slice(0, LIVE_NAME_MAX);
+  const f = fileName.trim();
+  const full = !n ? f : multi ? `${n} · ${f}` : n;
+  if (full.length <= LIVE_NAME_MAX) return full;
+  const cut = full.slice(0, LIVE_NAME_MAX);
+  const last = cut.charCodeAt(cut.length - 1);
+  return last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut;
 }
 
 /* ---------- 요청 진행 단계 ---------- */
